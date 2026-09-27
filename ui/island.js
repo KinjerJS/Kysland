@@ -535,6 +535,10 @@
   function claudeRow(S) {
     const state = claudeState(S);
     if (state === 'off' || state === 'absent') return '';
+    if (state === 'rate-limited') {
+      const at = S.data.claude.retryAt ? ` (nouvel essai à ${dayjs(S.data.claude.retryAt).format('HH:mm')})` : '';
+      return `<div class="n-claude muted"><i class="icon icon-sparkle"></i><span>Claude : trop de requêtes pour l'instant${at}</span></div>`;
+    }
     if (state !== 'ok') {
       return `<div class="n-claude muted"><i class="icon icon-sparkle"></i><span>Claude : ouvre Claude Code pour actualiser l'utilisation</span></div>`;
     }

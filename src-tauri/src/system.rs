@@ -148,10 +148,26 @@ fn claude_account() -> Option<String> {
     })
 }
 
+// Derniers chiffres connus et prochain appel autorisé : conservés d'un rechargement à l'autre,
+// pour réafficher tout de suite à la réactivation et ne pas dépasser la limite de requêtes
+// de l'API (cocher / décocher l'option ne relance pas d'appel immédiat).
+fn claude_cache_file() -> std::path::PathBuf { config::config_dir().join(".claude-usage.json") }
+
+static CLAUDE_CACHE: std::sync::Mutex<Option<Value>> = std::sync::Mutex::new(None);
+static CLAUDE_NEXT: std::sync::Mutex<Option<(Instant, u64)>> = std::sync::Mutex::new(None); // (prochain appel, attente en cas de refus)
+
 pub fn claude(epoch: u64, secs: f64) {
-    let mut pause_until = Instant::now();
-    hub::every(epoch, Duration::from_secs_f64(secs.max(30.0)), move || {
-        if Instant::now() < pause_until { return; }
+    let interval = Duration::from_secs_f64(secs.max(60.0));
+    // Derniers chiffres : en mémoire, sinon ceux enregistrés sur le disque (redémarrage de Kysland).
+    let cached = CLAUDE_CACHE.lock().unwrap().clone().or_else(|| {
+        let v = std::fs::read_to_string(claude_cache_file()).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok())?;
+        *CLAUDE_CACHE.lock().unwrap() = Some(v.clone());
+        Some(v)
+    });
+    if let Some(c) = cached { hub::publish("claude", c); }
+    hub::every(epoch, Duration::from_secs(5), move || {
+        let now = Instant::now();
+        if CLAUDE_NEXT.lock().unwrap().is_some_and(|(next, _)| now < next) { return; }
         let oauth = std::fs::read_to_string(claude_credentials()).ok()
             .and_then(|t| serde_json::from_str::<Value>(&t).ok())
             .map(|v| v["claudeAiOauth"].clone());
@@ -169,10 +185,22 @@ pub fn claude(epoch: u64, secs: f64) {
             .call();
         let mut res = match res {
             Ok(r) => r,
-            Err(ureq::Error::StatusCode(401)) => return hub::publish("claude", json!({ "ok": false, "reason": "expired" })),
-            Err(ureq::Error::StatusCode(429)) => { pause_until = Instant::now() + Duration::from_secs(300); return; }
-            Err(_) => return, // hors ligne : on garde les dernières valeurs
+            Err(ureq::Error::StatusCode(401)) => {
+                *CLAUDE_NEXT.lock().unwrap() = Some((now + interval, 0));
+                return hub::publish("claude", json!({ "ok": false, "reason": "expired" }));
+            }
+            Err(ureq::Error::StatusCode(429)) => {
+                // Trop de requêtes : attente croissante (2, 4, 8 puis 15 min), derniers chiffres gardés.
+                let wait = CLAUDE_NEXT.lock().unwrap().map(|(_, w)| w).filter(|w| *w > 0).map(|w| (w * 2).min(900)).unwrap_or(120);
+                *CLAUDE_NEXT.lock().unwrap() = Some((now + Duration::from_secs(wait), wait));
+                if CLAUDE_CACHE.lock().unwrap().is_none() {
+                    hub::publish("claude", json!({ "ok": false, "reason": "rate-limited", "retryAt": util::now_ms() + wait as i64 * 1000 }));
+                }
+                return;
+            }
+            Err(_) => { *CLAUDE_NEXT.lock().unwrap() = Some((now + Duration::from_secs(30), 0)); return; } // hors ligne
         };
+        *CLAUDE_NEXT.lock().unwrap() = Some((now + interval, 0));
         let Ok(u) = res.body_mut().read_json::<Value>() else { return };
         let window = |w: &Value| if w.is_object() {
             json!({
@@ -180,10 +208,13 @@ pub fn claude(epoch: u64, secs: f64) {
                 "resetsAt": w["resets_at"].as_str().and_then(parse_iso_ms),
             })
         } else { Value::Null };
-        hub::publish("claude", json!({
+        let data = json!({
             "ok": true, "plan": oauth["subscriptionType"], "account": claude_account(),
             "session": window(&u["five_hour"]), "week": window(&u["seven_day"]),
-        }));
+        });
+        *CLAUDE_CACHE.lock().unwrap() = Some(data.clone());
+        let _ = std::fs::write(claude_cache_file(), data.to_string());
+        hub::publish("claude", data);
     });
 }
 
