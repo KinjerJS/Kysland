@@ -1,8 +1,9 @@
 {
   "name": "kysland",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Dynamic Island for Windows (Tauri)",
   "scripts": {
+    "tauri": "tauri",
     "dev": "tauri dev",
     "build": "tauri build",
     "check": "node scripts/check.js",
