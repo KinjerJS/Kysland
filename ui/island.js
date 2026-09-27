@@ -339,15 +339,16 @@
     const md = activeMedia(m);
     const now = dayjs();
     return {
-      key: `compact|${md ? `${md.key}|${!!md.thumb}` : 'idle'}|${m.island.unread > 0}`,
+      key: `compact|${md ? 'media' : 'idle'}|${m.island.unread > 0}`,
       size: 'compact',
-      html: `<div class="n-compact${md ? ' with-media' : ''}">${md ? cover(md, 'sm') : ''}`
+      html: `<div class="n-compact${md ? ' with-media' : ''}">${md ? `<span class="n-slot">${trackInfo(md, 'sm', false)}</span>` : ''}`
         + '<span class="n-time" data-morph="time"></span><span class="n-date" data-morph="date"></span>'
         + `${md ? eq(md.playing) : ''}${m.island.unread > 0 ? '<span class="n-dot"></span>' : ''}</div>`,
       update(el) {
         el.querySelector('.n-time').textContent = now.format(m.conf['time-format']);
         el.querySelector('.n-date').textContent = now.format(m.conf['date-format']);
         el.querySelector('.eq')?.classList.toggle('paused', !md?.playing);
+        if (md) updateTrack(el, md, 'sm', false);
       },
     };
   }
@@ -358,15 +359,14 @@
     const md = S.data.media?.has ? S.data.media : null;
     const now = dayjs();
     return {
-      key: `expanded|${md ? `${md.key}|${!!md.thumb}` : 'none'}|${claudeState(S)}`,
+      key: `expanded|${md ? 'media' : 'none'}|${claudeState(S)}`,
       size: 'expanded',
       html: `<div class="n-expanded">
         <div class="n-head"><span class="n-date-long" data-morph="date"></span><div class="n-head-right">
           <button class="n-bell" title="Notifications">${icon('bell')}<span class="n-badge"></span></button>
           <span class="n-time-big" data-morph="time"></span></div></div>
         ${md ? `<div class="n-media">
-          ${cover(md, 'lg')}
-          <div class="n-meta"><div class="n-title" data-morph="title">${esc(md.title)}</div><div class="n-artist" data-morph="artist">${esc(md.artist || appName(md.app))}</div></div>
+          <div class="n-slot">${trackInfo(md, 'lg', true)}</div>
           ${eq(md.playing)}
         </div>
         <div class="n-progress"><span class="n-pos"></span><div class="n-track"><div class="n-fill"></div></div><span class="n-dur"></span></div>
@@ -415,6 +415,7 @@
         badge.hidden = !S.unread;
         const cur = d.media;
         if (cur?.has && el.querySelector('.n-media')) {
+          updateTrack(el, cur, 'lg', true);
           const pos = mediaPosition(cur);
           el.querySelector('.n-pos').textContent = fmtDuration(pos);
           el.querySelector('.n-dur').textContent = cur.duration ? fmtDuration(cur.duration) : '';
@@ -456,11 +457,48 @@
 
   function trackView(md) {
     return {
-      key: `transient|track|${md.key}|${!!md.thumb}`,
+      key: 'transient|track',
       size: 'wide',
-      html: `<div class="n-wide track">${cover(md, 'md')}<div class="n-meta"><div class="n-title" data-morph="title">${esc(md.title)}</div>`
-        + `<div class="n-artist" data-morph="artist">${esc(md.artist || appName(md.app))}</div></div>${eq(true)}</div>`,
+      html: `<div class="n-wide track"><div class="n-slot">${trackInfo(md, 'md', true)}</div>${eq(true)}</div>`,
+      update(el) { updateTrack(el, md, 'md', true); },
     };
+  }
+
+  // --- Changement de morceau : le bloc pochette + titre glisse ------------------------------
+  // L'ancien part vers la gauche, le nouveau arrive de la droite ; le reste de la vue ne bouge pas.
+  function trackInfo(md, size, withMeta) {
+    const meta = withMeta
+      ? `<div class="n-meta"><div class="n-title" data-morph="title">${esc(md.title)}</div>`
+        + `<div class="n-artist" data-morph="artist">${esc(md.artist || appName(md.app))}</div></div>`
+      : '';
+    return `<div class="n-info" data-track="${esc(md.key)}" data-thumb="${md.thumb ? 1 : 0}">${cover(md, size)}${meta}</div>`;
+  }
+
+  function updateTrack(el, md, size, withMeta) {
+    const slot = el.querySelector('.n-slot');
+    const cur = slot?.querySelector('.n-info:not(.leaving)');
+    if (!slot || !cur) return;
+    if (cur.dataset.track !== md.key) return slideTrack(slot, cur, trackInfo(md, size, withMeta));
+    // Même morceau, pochette arrivée entre-temps : remplacée sur place, sans glissement.
+    if (md.thumb && cur.dataset.thumb === '0') {
+      cur.querySelector('.n-cover').outerHTML = cover(md, size);
+      cur.dataset.thumb = '1';
+    }
+  }
+
+  function slideTrack(slot, old, html) {
+    slot.insertAdjacentHTML('beforeend', html);
+    const next = slot.lastElementChild;
+    old.classList.add('leaving');
+    old.querySelectorAll('[data-morph]').forEach((e) => e.removeAttribute('data-morph')); // un seul élément partagé
+    old.animate(
+      [{ transform: 'translateX(0)', opacity: 1, filter: 'blur(0)' }, { transform: 'translateX(-48px)', opacity: 0, filter: 'blur(3px)' }],
+      { duration: 280, easing: 'cubic-bezier(.5, 0, .75, 0)', fill: 'forwards' },
+    ).finished.then(() => old.remove()).catch(() => old.remove());
+    next.animate(
+      [{ transform: 'translateX(48px)', opacity: 0, filter: 'blur(3px)' }, { transform: 'translateX(0)', opacity: 1, filter: 'blur(0)' }],
+      { duration: 460, delay: 90, easing: 'cubic-bezier(.3, 1.25, .5, 1)', fill: 'backwards' },
+    );
   }
 
   function batteryView(b) {

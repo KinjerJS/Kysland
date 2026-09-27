@@ -99,6 +99,21 @@ body.pos-bottom .notch-view { top: auto; bottom: 0; transform-origin: bottom cen
 .n-cover.lg { width: 60px; height: 60px; border-radius: 14px; box-shadow: 0 6px 18px rgba(0, 0, 0, .4); }
 .n-cover.lg .icon { font-size: 24px; }
 
+/* Bloc pochette + titre : ancien et nouveau morceau superposés le temps du glissement,
+   rognés aux bords de l'encoche (la zone de rognage déborde sur les marges intérieures). */
+.n-slot {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  margin: -8px -22px;
+  padding: 8px 22px;
+}
+.n-compact .n-slot, .n-wide .n-slot { flex: none; margin: -6px -10px; padding: 6px 10px; }
+.n-wide .n-slot { flex: 1; }
+.n-info { grid-area: 1 / 1; display: flex; align-items: center; gap: 14px; min-width: 0; }
+.n-wide .n-info { gap: 12px; }
+
 /* Égaliseur */
 .eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; flex: none; }
 .eq i { width: 3px; height: 30%; border-radius: 2px; background: var(--tint); animation: eq-bounce .8s ease-in-out infinite alternate; }
