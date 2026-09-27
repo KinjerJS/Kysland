@@ -386,6 +386,7 @@ fn action(window: WebviewWindow, name: String, arg: Value, extra: Value) {
         "notification-center" => win32::press_keys(&[win32::VK_LWIN, 0x4E]),
         "notif-remove" => if let Some(id) = arg.as_u64() { notifs::remove(vec![id as u32]) },
         "notif-clear" => notifs::clear_all(),
+        "claude-refresh" => system::claude_refresh(),
         "notif-open" => notifs::open(arg["aumid"].as_str(), arg["launch"].as_str()),
         "menu" => show_menu(&app, Some(window.label().to_owned())),
         _ => {}

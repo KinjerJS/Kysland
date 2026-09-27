@@ -155,19 +155,38 @@ fn claude_cache_file() -> std::path::PathBuf { config::config_dir().join(".claud
 
 static CLAUDE_CACHE: std::sync::Mutex<Option<Value>> = std::sync::Mutex::new(None);
 static CLAUDE_NEXT: std::sync::Mutex<Option<(Instant, u64)>> = std::sync::Mutex::new(None); // (prochain appel, attente en cas de refus)
+static CLAUDE_LAST_TRY: std::sync::Mutex<Option<Instant>> = std::sync::Mutex::new(None);
+static CLAUDE_FORCE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Bouton "actualiser" de l'encoche : appel immédiat, sauf si le dernier date de moins de 20 s.
+pub fn claude_refresh() { CLAUDE_FORCE.store(true, std::sync::atomic::Ordering::SeqCst); }
+
+fn republish_cache() {
+    let cached = CLAUDE_CACHE.lock().unwrap().clone();
+    if let Some(c) = cached { hub::publish("claude", c); }
+}
 
 pub fn claude(epoch: u64, secs: f64) {
     let interval = Duration::from_secs_f64(secs.max(60.0));
     // Derniers chiffres : en mémoire, sinon ceux enregistrés sur le disque (redémarrage de Kysland).
-    let cached = CLAUDE_CACHE.lock().unwrap().clone().or_else(|| {
+    // Verrou relâché avant de lire le fichier : le reprendre dans la même instruction bloquerait.
+    let in_memory = CLAUDE_CACHE.lock().unwrap().clone();
+    let cached = in_memory.or_else(|| {
         let v = std::fs::read_to_string(claude_cache_file()).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok())?;
         *CLAUDE_CACHE.lock().unwrap() = Some(v.clone());
         Some(v)
     });
     if let Some(c) = cached { hub::publish("claude", c); }
-    hub::every(epoch, Duration::from_secs(5), move || {
+    hub::every(epoch, Duration::from_secs(1), move || {
         let now = Instant::now();
-        if CLAUDE_NEXT.lock().unwrap().is_some_and(|(next, _)| now < next) { return; }
+        let forced = CLAUDE_FORCE.swap(false, std::sync::atomic::Ordering::SeqCst);
+        if forced {
+            // Appel récent : on réaffiche simplement les derniers chiffres.
+            if CLAUDE_LAST_TRY.lock().unwrap().is_some_and(|t| now.duration_since(t) < Duration::from_secs(20)) { return republish_cache(); }
+        } else if CLAUDE_NEXT.lock().unwrap().is_some_and(|(next, _)| now < next) {
+            return;
+        }
+        *CLAUDE_LAST_TRY.lock().unwrap() = Some(now);
         let oauth = std::fs::read_to_string(claude_credentials()).ok()
             .and_then(|t| serde_json::from_str::<Value>(&t).ok())
             .map(|v| v["claudeAiOauth"].clone());
@@ -193,12 +212,15 @@ pub fn claude(epoch: u64, secs: f64) {
                 // Trop de requêtes : attente croissante (2, 4, 8 puis 15 min), derniers chiffres gardés.
                 let wait = CLAUDE_NEXT.lock().unwrap().map(|(_, w)| w).filter(|w| *w > 0).map(|w| (w * 2).min(900)).unwrap_or(120);
                 *CLAUDE_NEXT.lock().unwrap() = Some((now + Duration::from_secs(wait), wait));
-                if CLAUDE_CACHE.lock().unwrap().is_none() {
+                let has_cache = CLAUDE_CACHE.lock().unwrap().is_some();
+                if !has_cache {
                     hub::publish("claude", json!({ "ok": false, "reason": "rate-limited", "retryAt": util::now_ms() + wait as i64 * 1000 }));
+                } else {
+                    republish_cache(); // arrête l'animation du bouton, chiffres inchangés
                 }
                 return;
             }
-            Err(_) => { *CLAUDE_NEXT.lock().unwrap() = Some((now + Duration::from_secs(30), 0)); return; } // hors ligne
+            Err(_) => { *CLAUDE_NEXT.lock().unwrap() = Some((now + Duration::from_secs(30), 0)); return republish_cache(); } // hors ligne
         };
         *CLAUDE_NEXT.lock().unwrap() = Some((now + interval, 0));
         let Ok(u) = res.body_mut().read_json::<Value>() else { return };
@@ -209,7 +231,7 @@ pub fn claude(epoch: u64, secs: f64) {
             })
         } else { Value::Null };
         let data = json!({
-            "ok": true, "plan": oauth["subscriptionType"], "account": claude_account(),
+            "ok": true, "plan": oauth["subscriptionType"], "account": claude_account(), "fetchedAt": util::now_ms(),
             "session": window(&u["five_hour"]), "week": window(&u["seven_day"]),
         });
         *CLAUDE_CACHE.lock().unwrap() = Some(data.clone());

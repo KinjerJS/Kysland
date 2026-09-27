@@ -226,6 +226,7 @@
     onData(m, topic, data) {
       const S = m.island;
       if (!S) return;
+      if (topic === 'claude') stopClaudeSpin(S);
       if (topic === 'notification') {
         if (m.conf.notifications === false) return;
         S.unread++;
@@ -385,6 +386,15 @@
       </div>`,
       mount(el) {
         el.querySelector('.n-bell').onclick = () => openHistory(m);
+        el.querySelectorAll('.n-claude-refresh').forEach((b) => {
+          b.onclick = () => {
+            S.claudeSpinAt = Date.now();
+            b.classList.add('spinning');
+            clearTimeout(S.claudeSpinTimer);
+            S.claudeSpinTimer = setTimeout(() => stopClaudeSpin(S), 8000);
+            api.action('claude-refresh');
+          };
+        });
         el.querySelectorAll('[data-media]').forEach((b) => {
           b.onclick = () => api.action('media', b.dataset.media);
         });
@@ -537,7 +547,7 @@
     if (state === 'off' || state === 'absent') return '';
     if (state === 'rate-limited') {
       const at = S.data.claude.retryAt ? ` (nouvel essai à ${dayjs(S.data.claude.retryAt).format('HH:mm')})` : '';
-      return `<div class="n-claude muted"><i class="icon icon-sparkle"></i><span>Claude : trop de requêtes pour l'instant${at}</span></div>`;
+      return `<div class="n-claude muted"><i class="icon icon-sparkle"></i><span>Claude : trop de requêtes pour l'instant${at}</span><button class="n-claude-refresh" title="Actualiser"><i class="icon icon-refresh-cw"></i></button></div>`;
     }
     if (state !== 'ok') {
       return `<div class="n-claude muted"><i class="icon icon-sparkle"></i><span>Claude : ouvre Claude Code pour actualiser l'utilisation</span></div>`;
@@ -550,13 +560,23 @@
     const plan = c.plan ? ` ${c.plan.charAt(0).toUpperCase()}${c.plan.slice(1)}` : '';
     return `<div class="n-claude">
         <div class="n-claude-head"><i class="icon icon-sparkle"></i><span class="n-claude-plan">Claude${esc(plan)}</span>
-          <span class="n-claude-account">${esc(c.account || '')}</span></div>
+          <span class="n-claude-account">${esc(c.account || '')}</span><span class="n-claude-age"></span><button class="n-claude-refresh" title="Actualiser"><i class="icon icon-refresh-cw"></i></button></div>
         <div class="n-claude-gauges">${gauge('session', 'Session')}${gauge('week', 'Semaine')}</div>
       </div>`;
   }
 
+  function stopClaudeSpin(S) {
+    const wait = Math.max(0, 600 - (Date.now() - (S.claudeSpinAt || 0)));
+    clearTimeout(S.claudeSpinTimer);
+    S.claudeSpinTimer = setTimeout(() => {
+      S.notch.current?.querySelectorAll('.n-claude-refresh.spinning').forEach((b) => b.classList.remove('spinning'));
+    }, wait);
+  }
+
   function updateClaude(el, c) {
     if (!c?.ok) return;
+    const age = el.querySelector('.n-claude-age');
+    if (age) age.textContent = c.fetchedAt ? `· ${ago(c.fetchedAt)}` : '';
     for (const key of ['session', 'week']) {
       const g = el.querySelector(`[data-claude="${key}"]`);
       const w = c[key];

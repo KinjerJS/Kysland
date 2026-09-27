@@ -294,6 +294,13 @@ body.pos-bottom .notch[data-size=card] { border-radius: 24px 24px 0 0; }
 .n-claude-plan { font-weight: 650; }
 .n-claude-account { margin-left: auto; color: var(--notch-dim); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .n-claude-gauges { display: flex; gap: 16px; }
+.n-claude-age { color: var(--notch-dim); font-size: 11px; white-space: nowrap; }
+.n-claude-refresh { flex: none; margin-left: 2px; color: var(--notch-dim); display: grid; place-items: center; }
+.n-claude.muted .n-claude-refresh { margin-left: auto; }
+.n-claude-refresh:hover { color: var(--notch-fg); }
+.n-claude-refresh .icon { font-size: 12px; color: inherit; }
+.n-claude-refresh.spinning .icon { animation: claude-spin .8s linear infinite; }
+@keyframes claude-spin { to { rotate: 360deg; } }
 .n-claude-gauge { flex: 1; min-width: 0; --level: var(--claude); }
 .n-claude-gauge.warning { --level: var(--yellow); }
 .n-claude-gauge.critical { --level: var(--red); }
