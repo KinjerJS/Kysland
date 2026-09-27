@@ -212,6 +212,7 @@ fn start_pollers(_app: &AppHandle, cfg: &Value) {
             _ => {}
         }
     }
+    hub::retain(&need.keys().copied().collect::<Vec<_>>());
     for (topic, secs) in need {
         match topic {
             "cpu" => system::cpu(epoch, secs),

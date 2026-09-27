@@ -28,6 +28,12 @@ pub fn event(topic: &str, data: Value) { emit("data", json!({ "topic": topic, "d
 
 pub fn last(topic: &str) -> Option<Value> { LAST.lock().unwrap().as_ref()?.get(topic).cloned() }
 
+/// Oublie les données des sujets qui ne sont plus sondés (option désactivée), pour qu'une
+/// fenêtre rechargée ne réaffiche pas de vieilles valeurs.
+pub fn retain(topics: &[&str]) {
+    if let Some(map) = LAST.lock().unwrap().as_mut() { map.retain(|k, _| topics.contains(&k.as_str())); }
+}
+
 pub fn snapshot() -> Value {
     let map: Map<String, Value> = LAST.lock().unwrap().as_ref().map(|m| m.clone().into_iter().collect()).unwrap_or_default();
     Value::Object(map)

@@ -1,6 +1,6 @@
 [package]
 name = "kysland"
-version = "0.1.1"
+version = "0.1.2"
 description = "Dynamic Island pour Windows"
 authors = ["Kinjer"]
 license = "MIT"

@@ -184,7 +184,7 @@
       const S = (m.island = {
         notch: new Notch(), expanded: false, transient: null, transientTimer: 0,
         data: { ...state.data }, pausedAt: 0, tint: null, tintKey: null, workspace: null, dragging: false,
-        queue: [], notif: null, notifTimer: 0, unread: 0, page: 'main', history: null,
+        queue: [], notif: null, notifTimer: 0, claudeOn: m.conf.claude === true, unread: 0, page: 'main', history: null,
       });
       const notch = S.notch.el;
       let enterT = 0, leaveT = 0;
@@ -244,7 +244,7 @@
         if (t.media && data.has && data.playing && prev?.has && prev.key !== data.key) pushTransient(m, trackView(data), 3200);
       } else if (topic === 'battery' && prev && t.battery && data.present && prev.plugged !== data.plugged) {
         pushTransient(m, batteryView(data), 2600);
-      } else if (topic === 'claude' && prev?.ok && data.ok && data.session && prev.session) {
+      } else if (topic === 'claude' && S.claudeOn && prev?.ok && data.ok && data.session && prev.session) {
         const was = prev.session.percent, now = data.session.percent;
         if (was < 100 && now >= 100) pushTransient(m, claudeAlertView(data, true), 5000);
         else if (was < 80 && now >= 80) pushTransient(m, claudeAlertView(data, false), 4000);
@@ -522,7 +522,7 @@
 
   // --- Utilisation Claude -----------------------------------------------------------------
   // 'off' : option désactivée / pas de données ; 'ok' : jauges ; sinon message (jeton expiré...).
-  const claudeState = (S) => (!S.data.claude ? 'off' : S.data.claude.ok ? 'ok' : S.data.claude.reason);
+  const claudeState = (S) => (!S.claudeOn || !S.data.claude ? 'off' : S.data.claude.ok ? 'ok' : S.data.claude.reason);
   const claudeLevel = (p) => (p >= 90 ? 'critical' : p >= 75 ? 'warning' : '');
 
   function claudeReset(ts, short) {
