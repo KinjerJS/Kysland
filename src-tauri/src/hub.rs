@@ -11,7 +11,6 @@ static LAST: Mutex<Option<HashMap<String, Value>>> = Mutex::new(None);
 static GENERATION: AtomicU64 = AtomicU64::new(0);
 
 pub fn init(app: AppHandle) { let _ = APP.set(app); }
-pub fn app() -> &'static AppHandle { APP.get().expect("hub non initialisé") }
 
 pub fn emit(channel: &str, payload: Value) {
     if let Some(app) = APP.get() { let _ = app.emit(channel, payload); }

@@ -311,6 +311,39 @@ body.pos-bottom .notch[data-size=card] { border-radius: 24px 24px 0 0; }
 .n-claude-reset { font-size: 10.5px; color: var(--notch-dim); }
 .n-claude-alert .icon { color: var(--claude); }
 
+/* Date cliquable → calendrier */
+.n-date, .n-date-long { cursor: pointer; transition: color .15s; }
+.n-date:hover, .n-date-long:hover { color: var(--notch-fg); }
+
+/* Calendrier */
+.n-calendar-view { gap: 8px; }
+.n-cal-today, .n-cal-prev, .n-cal-next { color: var(--notch-dim); }
+.n-cal-today:hover, .n-cal-prev:hover, .n-cal-next:hover { color: var(--notch-fg); }
+.n-cal-today .icon, .n-cal-prev .icon, .n-cal-next .icon { font-size: 17px; }
+.n-cal-today.hidden { visibility: hidden; }
+.n-cal-slot { display: grid; overflow: hidden; margin: 0 -22px; padding: 0 22px 2px; }
+.n-cal-grid {
+  grid-area: 1 / 1;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  row-gap: 2px;
+  justify-items: center;
+  align-content: start;
+}
+.n-cal-wd { font-size: 11px; font-weight: 600; color: var(--notch-dim); padding: 2px 0 6px; }
+.n-cal-day {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.n-cal-day.weekend { color: var(--notch-dim); }
+.n-cal-day.other { color: rgba(255, 255, 255, 0.2); }
+.n-cal-day.today { background: var(--tint); color: #000; font-weight: 700; }
+
 /* Vue agrandie */
 .n-expanded {
   width: 420px;

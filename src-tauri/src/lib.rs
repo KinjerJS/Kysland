@@ -16,7 +16,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
-use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, RunEvent, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
@@ -41,7 +41,6 @@ struct Shared {
     cfg: Value,
     bars: Vec<Bar>,
     layout: String,
-    taskbar_hidden: bool,
     hide_osd: bool,
     wallpaper: Option<String>,
     autostart_on: bool,
@@ -56,9 +55,9 @@ const LAYOUT_KEYS: [&str; 5] = ["position", "height", "monitors", "popup-space",
 
 fn resources(app: &AppHandle) -> PathBuf { app.path().resource_dir().unwrap_or_default() }
 
-fn styles(app: &AppHandle, cfg: &Value) -> Value {
-    let theme = cfg["theme"].as_str().and_then(|t| config::theme_file(&resources(app), t));
-    json!({ "theme": theme, "style": config::style_file(), "v": util::now_ms() })
+/// Feuille de style de l'utilisateur ; v force le rechargement.
+fn styles() -> Value {
+    json!({ "style": config::style_file(), "v": util::now_ms() })
 }
 
 /// Message dans l'encoche (erreurs de config, scripts : --island="...").
@@ -155,15 +154,6 @@ fn reload(app: &AppHandle, force_layout: bool) {
 }
 
 fn apply_system(cfg: &Value) {
-    let hide = cfg["hideWindowsTaskbar"] == true;
-    let was = with(|s| std::mem::replace(&mut s.taskbar_hidden, hide));
-    if hide && !was {
-        let original = win32::hide_taskbar();
-        let _ = std::fs::write(config::config_dir().join(".taskbar-state"), original.to_string());
-    } else if !hide && was {
-        win32::show_taskbar(None);
-        let _ = std::fs::remove_file(config::config_dir().join(".taskbar-state"));
-    }
     let island = config::island_conf(cfg);
     let hide_osd = config::island_name(cfg).is_some() && island["hide-windows-osd"] != false;
     with(|s| s.hide_osd = hide_osd);
@@ -281,8 +271,7 @@ fn background_loop(app: AppHandle) {
             // Explorer peut réafficher la barre des tâches ou recréer la pastille de volume.
             if shell_at.elapsed() >= Duration::from_millis(1500) {
                 shell_at = Instant::now();
-                let (taskbar, osd) = with(|s| (s.taskbar_hidden, s.hide_osd));
-                if taskbar { win32::hide_taskbar(); }
+                let osd = with(|s| s.hide_osd);
                 if osd { win32::hide_volume_osd(); }
             }
         }
@@ -305,8 +294,7 @@ fn watch_config(app: AppHandle) {
                 let a = app.clone();
                 let _ = app.run_on_main_thread(move || reload(&a, false));
             } else if paths.iter().any(|p| p.extension().is_some_and(|x| x == "css")) {
-                let cfg = with(|s| s.cfg.clone());
-                hub::emit("style", styles(&app, &cfg));
+                hub::emit("style", styles());
             }
         }
     });
@@ -316,7 +304,6 @@ fn watch_config(app: AppHandle) {
 
 #[tauri::command]
 fn init(window: WebviewWindow) -> Value {
-    let app = window.app_handle();
     let (cfg, monitor) = with(|s| {
         let bar = s.bars.iter().find(|b| b.label == window.label());
         (s.cfg.clone(), bar.map(|b| json!({
@@ -324,7 +311,7 @@ fn init(window: WebviewWindow) -> Value {
             "physical": { "x": b.monitor.0, "y": b.monitor.1, "width": b.monitor.2, "height": b.monitor.3 },
         })))
     });
-    json!({ "config": cfg, "styles": styles(app, &cfg), "monitor": monitor, "glaze": glaze::state(), "data": hub::snapshot() })
+    json!({ "config": cfg, "styles": styles(), "monitor": monitor, "glaze": glaze::state(), "data": hub::snapshot() })
 }
 
 #[tauri::command]
@@ -399,10 +386,6 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let cfg = with(|s| s.cfg.clone());
     let island = config::island_conf(&cfg);
     let claude = system::claude_installed();
-    let themes: Vec<CheckMenuItem<tauri::Wry>> = config::list_themes(&resources(app)).into_iter()
-        .map(|t| CheckMenuItem::with_id(app, format!("theme:{t}"), &t, true, cfg["theme"] == t.as_str(), None::<&str>))
-        .collect::<tauri::Result<_>>()?;
-    let theme_refs: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = themes.iter().map(|t| t as &dyn tauri::menu::IsMenuItem<tauri::Wry>).collect();
     Menu::with_items(app, &[
         &MenuItem::with_id(app, "title", "Kysland", false, None::<&str>)?,
         &PredefinedMenuItem::separator(app)?,
@@ -411,9 +394,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         &MenuItem::with_id(app, "edit-config", "Éditer config.jsonc", true, None::<&str>)?,
         &MenuItem::with_id(app, "edit-style", "Éditer style.css", true, None::<&str>)?,
         &MenuItem::with_id(app, "devtools", "Inspecteur CSS (DevTools)", true, None::<&str>)?,
-        &Submenu::with_items(app, "Thème", true, &theme_refs)?,
         &PredefinedMenuItem::separator(app)?,
-        &CheckMenuItem::with_id(app, "taskbar", "Masquer la barre des tâches Windows", true, cfg["hideWindowsTaskbar"] == true, None::<&str>)?,
         &CheckMenuItem::with_id(app, "fullscreen", "Cacher en plein écran (jeux, vidéos)", true, cfg["hide-on-fullscreen"] != false, None::<&str>)?,
         &CheckMenuItem::with_id(app, "claude",
             if claude { "Afficher l'utilisation Claude" } else { "Afficher l'utilisation Claude (Claude Code non détecté)" },
@@ -433,12 +414,10 @@ fn on_menu(app: &AppHandle, id: &str) {
         "edit-config" => { win32::shell_open(&config::config_file().to_string_lossy()); Ok(()) }
         "edit-style" => { win32::shell_open(&config::style_file().to_string_lossy()); Ok(()) }
         "devtools" => { if let Some(b) = with(|s| s.bars.first().map(|b| b.label.clone())) { if let Some(w) = app.get_webview_window(&b) { w.open_devtools(); } } Ok(()) }
-        "taskbar" => config::set_value(&["hideWindowsTaskbar"], json!(cfg["hideWindowsTaskbar"] != true)),
         "fullscreen" => config::set_value(&["hide-on-fullscreen"], json!(cfg["hide-on-fullscreen"] == false)),
         "claude" => config::set_value(&[&island, "claude"], json!(config::island_conf(&cfg)["claude"] != true)),
         "autostart" => { set_autostart(app, !with(|s| s.autostart_on)); Ok(()) }
         "quit" => { app.exit(0); Ok(()) }
-        t if t.starts_with("theme:") => config::set_value(&["theme"], json!(&t[6..])),
         _ => Ok(()),
     };
     if let Err(e) = result { island_message(&format!("Impossible de modifier la config : {e}"), "triangle-alert"); }
@@ -521,7 +500,6 @@ fn repair() {
 
 fn cleanup(app: &AppHandle) {
     destroy_bars(app);
-    if with(|s| s.taskbar_hidden) { win32::show_taskbar(None); let _ = std::fs::remove_file(config::config_dir().join(".taskbar-state")); }
     win32::restore_volume_osd();
     audio::set_key_hook(None);
 }

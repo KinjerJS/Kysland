@@ -2,7 +2,6 @@
 //! premier plan, fenêtre active, touches, fond d'écran.
 #![allow(clippy::missing_safety_doc)]
 use std::ffi::c_void;
-use std::sync::Mutex;
 use windows::core::{PCWSTR, PWSTR};
 use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, POINT, RECT};
 use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED};
@@ -12,7 +11,7 @@ use windows::Win32::Graphics::Gdi::{
 use windows::Win32::System::Threading::{OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION};
 use windows::Win32::UI::Input::KeyboardAndMouse::{keybd_event, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP};
 use windows::Win32::UI::Shell::{
-    SHAppBarMessage, SHGetFileInfoW, ShellExecuteW, ABM_GETSTATE, ABM_NEW, ABM_QUERYPOS, ABM_REMOVE, ABM_SETPOS,
+    SHAppBarMessage, SHGetFileInfoW, ShellExecuteW, ABM_NEW, ABM_QUERYPOS, ABM_REMOVE, ABM_SETPOS,
     ABM_SETSTATE, APPBARDATA, SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON,
 };
 use windows::Win32::UI::WindowsAndMessaging::*;
@@ -154,11 +153,6 @@ fn taskbars() -> Vec<HWND> {
     out
 }
 
-pub fn taskbar_state() -> u32 {
-    let Some(&h) = taskbars().first() else { return 0 };
-    unsafe { SHAppBarMessage(ABM_GETSTATE, &mut abd(h.0 as isize)) as u32 }
-}
-
 fn set_taskbar_state(state: u32) {
     if let Some(&h) = taskbars().first() {
         let mut d = abd(h.0 as isize);
@@ -167,21 +161,10 @@ fn set_taskbar_state(state: u32) {
     }
 }
 
-static SAVED_TASKBAR: Mutex<Option<u32>> = Mutex::new(None);
-
-/// Masque la barre des tâches (auto-hide pour libérer la zone de travail, puis fenêtre cachée).
-/// À rappeler régulièrement : explorer la réaffiche parfois.
-pub fn hide_taskbar() -> u32 {
-    let mut saved = SAVED_TASKBAR.lock().unwrap();
-    let original = *saved.get_or_insert_with(taskbar_state);
-    set_taskbar_state(1 | (original & 2)); // ABS_AUTOHIDE | ABS_ALWAYSONTOP d'origine
-    for h in taskbars() { unsafe { if IsWindowVisible(h).as_bool() { let _ = ShowWindow(h, SW_HIDE); } } }
-    original
-}
-
+/// Réaffiche la barre des tâches (secours : --repair, ou barre laissée masquée par une
+/// ancienne version qui proposait de la masquer).
 pub fn show_taskbar(state: Option<u32>) {
-    let saved = SAVED_TASKBAR.lock().unwrap().take();
-    set_taskbar_state(state.or(saved).unwrap_or(0));
+    set_taskbar_state(state.unwrap_or(0));
     for h in taskbars() { unsafe { let _ = ShowWindow(h, SW_SHOW); } }
 }
 

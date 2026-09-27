@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  Kysland — config (JSON avec commentaires, rechargée à chaque sauvegarde)
-//  Dossier : %USERPROFILE%\.config\kysland\   (config.jsonc, style.css, themes\)
+//  Dossier : %USERPROFILE%\.config\kysland\   (config.jsonc, style.css)
 // ─────────────────────────────────────────────────────────────────────────────
 {
   "position": "top",            // "top" | "bottom"
@@ -8,8 +8,6 @@
   "reserve": false,              // true : les fenêtres maximisées s'arrêtent sous l'encoche
                                 // false : l'encoche flotte par-dessus les fenêtres (façon iPhone)
   "monitors": "primary",        // "all" | "primary" | [0, 1] (écrans triés de gauche à droite)
-  "theme": "catppuccin-mocha",  // couleurs d'accent (themes\<nom>.css)
-  "hideWindowsTaskbar": false,  // true = masque la barre des tâches Windows (restaurée en quittant)
   "hide-on-fullscreen": true,    // cache l'encoche quand une appli est en plein écran (jeu, vidéo, F11)
   "wallpaper": null,            // ex: "~/Pictures/wall.jpg"
 
@@ -22,7 +20,7 @@
   // ── L'encoche ──────────────────────────────────────────────────────────────
   //  Au repos : heure + date (+ pochette et égaliseur si de la musique joue)
   //  Survol : s'agrandit → musique (contrôles, progression cliquable), CPU, RAM, réseau, volume
-  //  Molette : volume. Clic droit : menu Kysland (aussi Ctrl+Alt+W, utile si la barre des tâches est masquée).
+  //  Molette : volume. Clic droit : menu Kysland (aussi Ctrl+Alt+W).
   "island": {
     "time-format": "HH:mm",              // formats dayjs : https://day.js.org/docs/en/display/format
     "date-format": "ddd D MMM",

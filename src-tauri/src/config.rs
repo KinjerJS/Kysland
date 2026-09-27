@@ -14,12 +14,11 @@ pub fn config_dir() -> PathBuf {
 
 pub fn config_file() -> PathBuf { config_dir().join("config.jsonc") }
 pub fn style_file() -> PathBuf { config_dir().join("style.css") }
-pub fn user_themes() -> PathBuf { config_dir().join("themes") }
 
 /// Crée la config au premier lancement : reprend celle de WinCustom si elle existe, sinon les défauts.
 pub fn ensure(defaults: &Path) {
     let dir = config_dir();
-    let _ = fs::create_dir_all(user_themes());
+    let _ = fs::create_dir_all(&dir);
     let legacy = home().join(".config").join("wincustom");
     for name in ["config.jsonc", "style.css"] {
         let target = dir.join(name);
@@ -67,7 +66,7 @@ fn line_of(text: &str, err: &serde_json::Error) -> String {
 
 const BASE: &str = r#"{
   "position": "top", "height": 32, "reserve": false, "monitors": "primary",
-  "theme": "catppuccin-mocha", "hideWindowsTaskbar": false, "hide-on-fullscreen": true,
+  "hide-on-fullscreen": true,
   "wallpaper": null, "popup-space": 420,
   "modules-left": [], "modules-center": ["island"], "modules-right": []
 }"#;
@@ -84,7 +83,7 @@ pub fn load() -> Result<Value, String> {
 }
 
 /// Modifie une option booléenne ou texte en préservant commentaires et mise en forme.
-/// `path` : ["theme"] ou ["island", "claude"]. Ajoute la clé si elle manque.
+/// `path` : ["hide-on-fullscreen"] ou ["island", "claude"]. Ajoute la clé si elle manque.
 pub fn set_value(path: &[&str], value: Value) -> Result<(), String> {
     let file = config_file();
     let text = fs::read_to_string(&file).map_err(|e| e.to_string())?;
@@ -108,26 +107,6 @@ pub fn set_value(path: &[&str], value: Value) -> Result<(), String> {
         format!("{}\n    \"{}\": {},{}", &text[..at], key, rendered, &text[at..])
     };
     fs::write(&file, new_text).map_err(|e| e.to_string())
-}
-
-pub fn theme_file(resources: &Path, name: &str) -> Option<PathBuf> {
-    [user_themes(), resources.join("themes")]
-        .into_iter()
-        .map(|d| d.join(format!("{name}.css")))
-        .find(|p| p.exists())
-}
-
-pub fn list_themes(resources: &Path) -> Vec<String> {
-    let mut names: Vec<String> = [resources.join("themes"), user_themes()]
-        .iter()
-        .filter_map(|d| fs::read_dir(d).ok())
-        .flatten()
-        .flatten()
-        .filter_map(|e| e.file_name().to_str()?.strip_suffix(".css").map(str::to_owned))
-        .collect();
-    names.sort();
-    names.dedup();
-    names
 }
 
 /// Nom du module "island" dans la config (island, island#2...), s'il est utilisé.

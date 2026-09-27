@@ -574,9 +574,8 @@ const TYPES = {
 };
 
 // --- Construction de la barre --------------------------------------------------------
-// Chemins absolus envoyés par le moteur, servis via le protocole "asset" de Tauri ; v force le rechargement.
-function applyStyles({ theme, style, v }) {
-  document.getElementById('theme-css').href = theme ? `${api.fileUrl(theme)}?v=${v}` : '';
+// style.css de l'utilisateur, servi via le protocole "asset" de Tauri ; v force le rechargement.
+function applyStyles({ style, v }) {
   document.getElementById('user-css').href = `${api.fileUrl(style)}?v=${v}`;
 }
 

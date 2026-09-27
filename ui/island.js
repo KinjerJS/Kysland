@@ -206,6 +206,8 @@
           if (!e.target.closest('.n-close')) openNotif(S.notif.data);
           return showNextNotif(m);
         }
+        // Clic sur la date (encoche compacte) : directement le calendrier.
+        if (e.target.closest('.n-date')) return openCalendar(m);
         if (!S.expanded && !e.target.closest('button, input')) setExpanded(m, true);
       });
       notch.addEventListener('contextmenu', (e) => {
@@ -357,6 +359,7 @@
   function expandedView(m) {
     const S = m.island;
     if (S.page === 'notifs') return historyView(m);
+    if (S.page === 'calendar') return calendarView(m);
     const md = S.data.media?.has ? S.data.media : null;
     const now = dayjs();
     return {
@@ -386,6 +389,7 @@
       </div>`,
       mount(el) {
         el.querySelector('.n-bell').onclick = () => openHistory(m);
+        el.querySelector('.n-date-long').onclick = () => openCalendar(m);
         el.querySelectorAll('.n-claude-refresh').forEach((b) => {
           b.onclick = () => {
             S.claudeSpinAt = Date.now();
@@ -605,6 +609,91 @@
       size: 'wide',
       html: `<div class="n-wide">${icon('layout-grid')}<span class="n-label">Bureau ${esc(ws.displayName || ws.name)}</span></div>`,
     };
+  }
+
+  // --- Calendrier (clic sur la date) -----------------------------------------------------------
+  function openCalendar(m) {
+    const S = m.island;
+    S.page = 'calendar';
+    S.calMonth = dayjs().startOf('month');
+    if (!S.expanded) setExpanded(m, true); else render(m);
+  }
+
+  function calendarView(m) {
+    const S = m.island;
+    return {
+      key: 'calendar',
+      size: 'expanded',
+      html: `<div class="n-expanded n-calendar-view">
+        <div class="n-hist-head">
+          <button class="n-back" title="Retour">${icon('chevron-left')}</button>
+          <span class="n-hist-title n-cal-title"></span>
+          <button class="n-cal-today" title="Aujourd'hui">${icon('calendar-check')}</button>
+          <button class="n-cal-prev" title="Mois précédent">${icon('chevron-up')}</button>
+          <button class="n-cal-next" title="Mois suivant">${icon('chevron-down')}</button>
+        </div>
+        <div class="n-cal-slot"></div>
+      </div>`,
+      mount(el) {
+        el.querySelector('.n-back').onclick = () => { S.page = 'main'; render(m); };
+        const go = (delta) => {
+          const target = delta ? S.calMonth.add(delta, 'month') : dayjs().startOf('month');
+          if (target.isSame(S.calMonth, 'month')) return;
+          const dir = target.isAfter(S.calMonth) ? 1 : -1;
+          S.calMonth = target;
+          drawCalendar(el, S, dir);
+        };
+        el.querySelector('.n-cal-prev').onclick = () => go(-1);
+        el.querySelector('.n-cal-next').onclick = () => go(1);
+        el.querySelector('.n-cal-today').onclick = () => go(0);
+        // Molette : mois précédent / suivant (plutôt que le volume).
+        let lastWheel = 0;
+        el.querySelector('.n-cal-slot').addEventListener('wheel', (e) => {
+          e.stopPropagation();
+          if (Date.now() - lastWheel < 300) return; // un cran de molette = un mois
+          lastWheel = Date.now();
+          go(e.deltaY < 0 ? -1 : 1);
+        }, { passive: true });
+        drawCalendar(el, S, 0);
+      },
+      update(el) {
+        // Passage à minuit : le jour mis en évidence change.
+        if (el.dataset.today !== dayjs().format('YYYY-MM-DD')) drawCalendar(el, S, 0);
+      },
+    };
+  }
+
+  // Grille du mois (semaines du lundi au dimanche, jours des mois voisins estompés).
+  // dir : 1 / -1 → l'ancien mois glisse vers le haut / le bas pendant que le nouveau arrive.
+  function drawCalendar(el, S, dir) {
+    const month = S.calMonth;
+    const today = dayjs();
+    el.dataset.today = today.format('YYYY-MM-DD');
+    const title = month.format('MMMM YYYY');
+    el.querySelector('.n-cal-title').textContent = title.charAt(0).toUpperCase() + title.slice(1);
+    el.querySelector('.n-cal-today').classList.toggle('hidden', month.isSame(today, 'month'));
+    const first = month.startOf('month');
+    const start = first.subtract((first.day() + 6) % 7, 'day');
+    const weeks = Math.ceil(((first.day() + 6) % 7 + month.daysInMonth()) / 7);
+    let cells = ['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((d) => `<span class="n-cal-wd">${d}</span>`).join('');
+    for (let i = 0; i < weeks * 7; i++) {
+      const d = start.add(i, 'day');
+      const cls = ['n-cal-day', !d.isSame(month, 'month') && 'other', d.day() % 6 === 0 && 'weekend', d.isSame(today, 'day') && 'today'].filter(Boolean).join(' ');
+      cells += `<span class="${cls}">${d.date()}</span>`;
+    }
+    const slot = el.querySelector('.n-cal-slot');
+    const old = slot.querySelector('.n-cal-grid:not(.leaving)');
+    slot.insertAdjacentHTML('beforeend', `<div class="n-cal-grid">${cells}</div>`);
+    const next = slot.lastElementChild;
+    if (old && dir) {
+      old.classList.add('leaving');
+      old.animate([{ transform: 'none', opacity: 1 }, { transform: `translateY(${-24 * dir}px)`, opacity: 0 }], { duration: 200, easing: 'ease-in', fill: 'forwards' })
+        .finished.then(() => old.remove()).catch(() => old.remove());
+      next.animate([{ transform: `translateY(${24 * dir}px)`, opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 380, delay: 60, easing: 'cubic-bezier(.3, 1.25, .5, 1)', fill: 'backwards' });
+    } else if (old) {
+      old.remove();
+    }
+    requestAnimationFrame(() => S.notch.resize()); // 5 ou 6 semaines : l'encoche s'ajuste
   }
 
   // --- Historique des notifications ------------------------------------------------------

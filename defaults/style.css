@@ -1,7 +1,7 @@
 /*
  * style.css — le look de ta barre. Sauvegarde = rechargement instantané.
  *
- * Les couleurs viennent du thème ("theme" dans config.jsonc) sous forme de variables :
+ * Couleurs disponibles sous forme de variables (à redéfinir dans :root pour les changer) :
  *   --bg --bg-alt --fg --fg-dim --accent --accent-2 --red --yellow --green --border
  * Chaque module a une classe = son type (.clock, .cpu, .workspaces...) et un id = son nom
  * (#custom-weather pour "custom/weather"). États : .warning .critical .muted .charging ...

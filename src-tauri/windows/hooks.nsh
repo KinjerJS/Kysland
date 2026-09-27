@@ -10,6 +10,11 @@
     Sleep 1500
 !macroend
 
+!macro NSIS_HOOK_POSTINSTALL
+  ; Mise à jour : ressources des anciennes versions qui n'existent plus (thèmes retirés en 0.2.0).
+  RMDir /r "$INSTDIR\themes"
+!macroend
+
 !macro NSIS_HOOK_PREUNINSTALL
   IfFileExists "$INSTDIR\${MAINBINARYNAME}.exe" 0 +3
     nsExec::Exec '"$INSTDIR\${MAINBINARYNAME}.exe" --quit'

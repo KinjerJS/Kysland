@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Kysland",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "identifier": "com.kinjer.kysland",
   "build": {
     "frontendDist": "../ui",
@@ -15,7 +15,7 @@
       "csp": null,
       "assetProtocol": {
         "enable": true,
-        "scope": ["$HOME/.config/kysland/**", "$RESOURCE/**"]
+        "scope": ["$HOME/.config/kysland/**"]
       }
     }
   },
@@ -32,8 +32,7 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "../defaults/*": "defaults/",
-      "../themes/*": "themes/"
+      "../defaults/*": "defaults/"
     },
     "windows": {
       "nsis": {
