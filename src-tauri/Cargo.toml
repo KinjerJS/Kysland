@@ -1,0 +1,36 @@
+[package]
+name = "kysland"
+version = "0.1.0"
+description = "Dynamic Island pour Windows"
+authors = ["Kinjer"]
+license = "MIT"
+repository = ""
+edition = "2024"
+rust-version = "1.90"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "kysland_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7.0", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+tauri = { version = "2", features = ["tray-icon", "image-png", "protocol-asset", "devtools"] }
+tauri-plugin-single-instance = "2"
+tauri-plugin-global-shortcut = "2"
+sysinfo = "0.38.4"
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+notify = "8.2.0"
+base64 = "0.23.1"
+png = "0.18.1"
+tungstenite = "0.30.0"
+ureq = { version = "3.4.2", features = ["json"] }
+windows = { version = "0.62.2", features = ["Foundation", "Foundation_Collections", "Media_Control", "Storage_Streams", "UI_Notifications", "UI_Notifications_Management", "Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_UI_Shell", "Win32_UI_Input_KeyboardAndMouse", "Win32_Media_Audio", "Win32_Media_Audio_Endpoints", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Threading", "Win32_System_Power", "Win32_System_LibraryLoader", "Win32_Graphics_Dwm", "Win32_Graphics_Gdi", "Win32_UI_HiDpi", "Win32_System_Variant", "Win32_System_Shutdown"] }
+windows-core = "0.62.2"
+regex = "1.13.1"
+

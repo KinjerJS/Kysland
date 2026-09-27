@@ -1,0 +1,128 @@
+/* Squelette structurel de la barre. Le look se règle dans le thème et ~/.config/kysland/style.css. */
+:root {
+  --bar-height: 44px;
+  --font: 'Segoe UI Variable Text', 'Segoe UI', sans-serif;
+  --font-size: 13px;
+  --bg: #1e1e2e;
+  --bg-alt: #313244;
+  --fg: #cdd6f4;
+  --fg-dim: #7f849c;
+  --accent: #cba6f7;
+  --accent-2: #89b4fa;
+  --red: #f38ba8;
+  --yellow: #f9e2af;
+  --green: #a6e3a1;
+  --border: #45475a;
+  --radius: 12px;
+}
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: var(--font-size);
+  cursor: default;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+body { display: flex; flex-direction: column; }
+body.pos-bottom { flex-direction: column-reverse; }
+
+#bar {
+  flex: none;
+  height: var(--bar-height);
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+}
+
+.modules-left, .modules-center, .modules-right {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.modules-left { justify-self: start; }
+.modules-center { justify-self: center; }
+.modules-right { justify-self: end; }
+.modules-left:empty, .modules-center:empty, .modules-right:empty { display: none; }
+
+.module {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  height: 100%;
+  box-sizing: border-box;
+}
+.module.hidden { display: none; }
+.module .label { overflow: hidden; text-overflow: ellipsis; }
+
+.icon {
+  font-family: 'lucide';
+  font-style: normal;
+  line-height: 1;
+  font-size: 1.1em;
+}
+
+.app-icon { width: 16px; height: 16px; flex: none; }
+
+.workspaces button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.module-error { color: var(--red); font-style: italic; }
+
+/* --- Popups (infobulles riches, menus) ---------------------------------------- */
+#popup {
+  position: absolute;
+  top: calc(var(--bar-height) + 6px);
+  left: 0;
+  box-sizing: border-box;
+  max-width: calc(100vw - 16px);
+  padding: 10px 12px;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  line-height: 1.5;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 120ms ease, transform 120ms ease;
+  pointer-events: none;
+}
+body.pos-bottom #popup { top: auto; bottom: calc(var(--bar-height) + 6px); transform: translateY(4px); }
+#popup.visible { opacity: 1; transform: none; pointer-events: auto; }
+
+/* Calendrier */
+.cal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.cal-title { font-weight: 600; text-transform: capitalize; }
+.cal-nav { cursor: pointer; padding: 2px 6px; border-radius: 6px; color: var(--fg-dim); }
+.cal-nav:hover { background: var(--bg-alt); color: var(--fg); }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 2em); text-align: center; gap: 2px; }
+.cal-grid .wd { color: var(--fg-dim); font-size: 0.85em; }
+.cal-grid .day { border-radius: 6px; }
+.cal-grid .day.weekend { color: var(--fg-dim); }
+.cal-grid .day.today { background: var(--accent); color: var(--bg); font-weight: 700; }
+
+/* Menus */
+.menu { display: flex; flex-direction: column; gap: 2px; min-width: 180px; margin: -4px -6px; }
+.menu-item { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 8px; cursor: pointer; }
+.menu-item:hover { background: var(--bg-alt); }
+.menu-item.confirm { background: var(--red); color: var(--bg); }
+
+/* Slider */
+.slider-row { display: flex; align-items: center; gap: 10px; min-width: 220px; }
+.slider-row input[type=range] { flex: 1; accent-color: var(--accent); cursor: pointer; }
+.slider-row .value { width: 3ch; text-align: right; font-variant-numeric: tabular-nums; }

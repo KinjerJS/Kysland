@@ -1,0 +1,88 @@
+/*
+ * style.css — le look de ta barre. Sauvegarde = rechargement instantané.
+ *
+ * Les couleurs viennent du thème ("theme" dans config.jsonc) sous forme de variables :
+ *   --bg --bg-alt --fg --fg-dim --accent --accent-2 --red --yellow --green --border
+ * Chaque module a une classe = son type (.clock, .cpu, .workspaces...) et un id = son nom
+ * (#custom-weather pour "custom/weather"). États : .warning .critical .muted .charging ...
+ * Les fenêtres de chaque écran ont body.monitor-0, body.monitor-1... et body.primary.
+ *
+ * Astuce : clic droit sur l'icône Kysland (zone de notification) → "Inspecteur CSS"
+ * pour explorer la barre avec les DevTools de Chromium.
+ */
+
+:root {
+  --font: 'JetBrainsMono Nerd Font', 'Cascadia Code', 'Segoe UI Variable Text', sans-serif;
+  --font-size: 13px;
+  --radius: 12px;
+  --gap: 8px;         /* écart avec le bord de l'écran, façon "gaps_out" de Hyprland */
+}
+
+/* --- Style "îlots flottants" ----------------------------------------------- */
+#bar {
+  padding: var(--gap) calc(var(--gap) + 2px) 0;
+}
+body.pos-bottom #bar { padding: 0 calc(var(--gap) + 2px) var(--gap); }
+
+.modules-left,
+.modules-center,
+.modules-right {
+  height: 100%;
+  box-sizing: border-box;
+  padding: 0 4px;
+  gap: 2px;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: var(--radius);
+}
+
+.module {
+  padding: 0 10px;
+  border-radius: calc(var(--radius) - 4px);
+  transition: background 150ms ease, color 150ms ease;
+}
+.module:hover { background: var(--bg-alt); }
+
+/* --- Modules ----------------------------------------------------------------- */
+.launcher { color: var(--accent); font-size: 15px; }
+
+.workspaces { gap: 4px; padding: 0 6px; }
+.workspaces:hover { background: none; }
+.workspaces .ws {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 11px;
+  color: var(--fg-dim);
+  transition: all 200ms cubic-bezier(.4, 0, .2, 1);
+}
+.workspaces .ws:hover { background: var(--bg-alt); color: var(--fg); }
+.workspaces .ws.visible { color: var(--fg); }
+.workspaces .ws.focused { min-width: 36px; background: var(--accent); color: var(--bg); font-weight: 700; }
+.workspaces .ws.empty:not(.focused) { opacity: .5; }
+.workspaces.disconnected { color: var(--fg-dim); }
+
+.mode { color: var(--bg); background: var(--yellow); font-weight: 700; }
+
+.window { color: var(--fg-dim); }
+.window:hover { background: none; }
+
+.clock { font-weight: 700; color: var(--fg); }
+
+.cpu      { color: var(--accent-2); }
+.memory   { color: var(--accent); }
+.disk     { color: var(--green); }
+.network  { color: var(--accent-2); }
+.audio    { color: var(--yellow); }
+.battery  { color: var(--green); }
+.power    { color: var(--red); }
+
+.network.disconnected, .audio.muted { color: var(--fg-dim); }
+
+.warning  { color: var(--yellow) !important; }
+.critical { color: var(--red) !important; animation: blink 1s steps(2) infinite; }
+@keyframes blink { 50% { opacity: .45; } }
+
+#custom-weather { color: var(--fg); }
+#custom-separator { color: var(--border); padding: 0 2px; }
+#custom-separator:hover { background: none; }

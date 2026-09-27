@@ -1,0 +1,67 @@
+// ─────────────────────────────────────────────────────────────────────────────
+//  Kysland — config (JSON avec commentaires, rechargée à chaque sauvegarde)
+//  Dossier : %USERPROFILE%\.config\kysland\   (config.jsonc, style.css, themes\)
+// ─────────────────────────────────────────────────────────────────────────────
+{
+  "position": "top",            // "top" | "bottom"
+  "height": 32,                 // hauteur réservée en haut de l'écran (= hauteur de l'encoche)
+  "reserve": false,              // true : les fenêtres maximisées s'arrêtent sous l'encoche
+                                // false : l'encoche flotte par-dessus les fenêtres (façon iPhone)
+  "monitors": "primary",        // "all" | "primary" | [0, 1] (écrans triés de gauche à droite)
+  "theme": "catppuccin-mocha",  // couleurs d'accent (themes\<nom>.css)
+  "hideWindowsTaskbar": false,  // true = masque la barre des tâches Windows (restaurée en quittant)
+  "hide-on-fullscreen": true,    // cache l'encoche quand une appli est en plein écran (jeu, vidéo, F11)
+  "wallpaper": null,            // ex: "~/Pictures/wall.jpg"
+
+  // Juste l'encoche. Pour une barre complète façon Waybar, ajoute des modules
+  // à gauche / à droite (voir la liste plus bas).
+  "modules-left": [],
+  "modules-center": ["island"],
+  "modules-right": [],
+
+  // ── L'encoche ──────────────────────────────────────────────────────────────
+  //  Au repos : heure + date (+ pochette et égaliseur si de la musique joue)
+  //  Survol : s'agrandit → musique (contrôles, progression cliquable), CPU, RAM, réseau, volume
+  //  Molette : volume. Clic droit : menu Kysland (aussi Ctrl+Alt+W, utile si la barre des tâches est masquée).
+  "island": {
+    "time-format": "HH:mm",              // formats dayjs : https://day.js.org/docs/en/display/format
+    "date-format": "ddd D MMM",
+    "date-long-format": "dddd D MMMM",
+    "expand-on-hover": true,
+    "hover-delay": 120,                  // ms avant de s'agrandir
+    "collapse-delay": 350,               // ms avant de se refermer
+    "media-linger": 15,                  // secondes pendant lesquelles un morceau en pause reste affiché
+    "hide-windows-osd": true,           // les touches volume ne montrent plus la pastille Windows (Kysland s'en charge)
+    "volume-step": 2,                   // % par appui sur une touche volume
+    "notifications": true,              // notifications Windows affichées dans l'encoche
+    "notification-duration": 6,         // secondes (survol : pause, clic : suivante, clic droit : tout effacer)
+    "claude": false,                     // utilisation du forfait Claude (session 5 h / semaine), si Claude Code est installé
+    "kemhome": "http://localhost:8080",  // agent KemHome (extension Chrome, pochettes) ; false pour désactiver
+    // Événements qui font s'étirer l'encoche quelques secondes :
+    "transients": { "volume": true, "media": true, "battery": true, "network": true, "workspace": true }
+  },
+
+  // ── Modules pour une barre complète (optionnels) ───────────────────────────
+  //  launcher, workspaces (GlazeWM), mode, window, clock, cpu, memory, disk,
+  //  network, audio, battery, media, power, custom/<nom>
+  //  Exemple :
+  //    "modules-left": ["launcher", "workspaces", "window"],
+  //    "modules-right": ["network", "cpu", "memory", "audio", "power"],
+  //
+  //  Formats : {clé}, {i:icone-lucide} (https://lucide.dev/icons), {icon}
+  //  Actions souris : "commande shell" ou "@open <url>", "@audio up", "@media next",
+  //  "@power lock", "@glaze <commande>", "@start-menu", "@toggle", "@reload"
+
+  "workspaces": {
+    "persistent-workspaces": ["1", "2", "3", "4", "5"]
+  },
+  "window": {
+    "max-length": 55,
+    "rewrite": { "(.*) - Google Chrome": "$1" }
+  },
+  "custom/weather": {
+    "exec": "curl -s \"https://wttr.in/?format=%c%t\"",
+    "interval": 900,
+    "on-click": "@open https://wttr.in"
+  }
+}

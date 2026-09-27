@@ -1,0 +1,22 @@
+{
+  "name": "kysland",
+  "version": "0.1.0",
+  "description": "Dynamic Island for Windows (Tauri)",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "check": "node scripts/check.js",
+    "vendor": "node scripts/vendor.js"
+  },
+  "author": "Kinjer",
+  "license": "MIT",
+  "type": "commonjs",
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.0"
+  },
+  "dependencies": {
+    "dayjs": "^1.11.23",
+    "lucide-static": "^1.48.0"
+  },
+  "private": true
+}

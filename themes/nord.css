@@ -1,0 +1,13 @@
+/* Thème Nord */
+:root {
+  --bg: #2e3440;
+  --bg-alt: #3b4252;
+  --fg: #eceff4;
+  --fg-dim: #7b88a1;
+  --accent: #88c0d0;
+  --accent-2: #81a1c1;
+  --red: #bf616a;
+  --yellow: #ebcb8b;
+  --green: #a3be8c;
+  --border: #4c566a;
+}
