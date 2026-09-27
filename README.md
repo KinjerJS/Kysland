@@ -16,6 +16,7 @@ It can also be a full **Waybar / Hyprland-style status bar**.
 - **Adaptive colors**: the equalizer and progress bar take the dominant color of the album art.
 - **Live events**: the island stretches for a few seconds on volume changes, track changes, charger plugged or unplugged, network lost or restored, and GlazeWM workspace switches.
 - **Script messages**: `kysland.exe --island="Build finished" --icon=check-circle`.
+- **Calendar**: click the date to open a month calendar (today highlighted, arrows or mouse wheel to change month).
 - **Mouse**: the wheel changes the volume. Right-click opens the Kysland menu.
 
 ### Windows notifications
@@ -44,9 +45,7 @@ If [Claude Code](https://claude.com/claude-code) is signed in on the PC, the exp
 
 - Floating "island" bar, one per screen (or on the screens you choose), at the top or bottom.
 - Can reserve screen space (Windows AppBar), so maximized windows stay below it.
-- Can hide the Windows taskbar. It is restored when Kysland quits.
 - **GlazeWM** integration: clickable workspaces, scroll to switch, active binding mode.
-- 7 bundled themes: Catppuccin Mocha / Latte, Tokyo Night, Gruvbox, Nord, Rosé Pine, Dracula.
 
 ## Install
 
@@ -54,19 +53,19 @@ Download `Kysland_x.y.z_x64-setup.exe` from the [Releases](../../releases) and r
 
 - It installs for your user account, no admin rights needed.
 - Kysland starts with Windows right after you sign in (through a scheduled task, which Windows doesn't delay the way it delays startup apps). Turn it off from the menu.
-- To uninstall: Settings → Apps. Kysland quits cleanly first, so the taskbar and the volume flyout are restored. Your configuration in `~\.config\kysland` is kept.
+- To uninstall: Settings → Apps. Kysland quits cleanly first, so the volume flyout is restored. Your configuration in `~\.config\kysland` is kept.
 - On first launch, an existing WinCustom configuration (`~\.config\wincustom`) is imported.
 
-If something is left in a bad state after a crash, `kysland.exe --repair` shows the taskbar again, restores the volume flyout and frees the reserved screen space.
+If something is left in a bad state after a crash, `kysland.exe --repair` restores the volume flyout and the taskbar, and frees the reserved screen space.
 
 ## Usage
 
-Right-click the island, press **`Ctrl+Alt+W`** anywhere, or use the tray icon to open the menu. From there you can reload, open or edit the configuration, switch themes, toggle the Windows taskbar, fullscreen hiding, Claude usage and start with Windows, and open the **CSS inspector** (DevTools).
+Right-click the island, press **`Ctrl+Alt+W`** anywhere, or use the tray icon to open the menu. From there you can reload, open or edit the configuration, toggle fullscreen hiding, Claude usage and start with Windows, and open the **CSS inspector** (DevTools).
 
 | Option | Effect |
 |---|---|
 | `--quit` | Quit cleanly |
-| `--repair` | Restore the taskbar, the volume flyout and the screen space, then exit |
+| `--repair` | Restore the volume flyout, the taskbar and the screen space, then exit |
 | `--island="text" --icon=name` | Show a message in the island |
 | `--autostart=on` / `--autostart=off` | Start with Windows or not |
 
@@ -77,8 +76,7 @@ Files live in `%USERPROFILE%\.config\kysland\`:
 | File | Purpose |
 |---|---|
 | `config.jsonc` | Layout, modules, formats, mouse actions (documented with comments) |
-| `style.css` | The look, using the theme variables (`--bg`, `--accent`…) |
-| `themes\*.css` | Your own themes |
+| `style.css` | The look (CSS variables such as `--accent`, `--notch-bg`…) |
 
 Island options (in the `"island"` section):
 
@@ -96,7 +94,7 @@ Island options (in the `"island"` section):
 | `claude` | `false` | Show Claude plan usage |
 | `transients` | all `true` | Which events stretch the island: `volume`, `media`, `battery`, `network`, `workspace` |
 
-Top-level options include `reserve`, `hide-on-fullscreen`, `hideWindowsTaskbar`, `monitors`, `theme` and `wallpaper`. Status bar modules (`workspaces`, `window`, `clock`, `cpu`, `memory`, `disk`, `network`, `audio`, `battery`, `launcher`, `power`, `media`, `custom/<name>`…) are listed in the comments of `config.jsonc`.
+Top-level options include `reserve`, `hide-on-fullscreen`, `monitors` and `wallpaper`. Status bar modules (`workspaces`, `window`, `clock`, `cpu`, `memory`, `disk`, `network`, `audio`, `battery`, `launcher`, `power`, `media`, `custom/<name>`…) are listed in the comments of `config.jsonc`.
 
 ## Privacy
 
@@ -122,7 +120,7 @@ Layout:
 
 - `ui/`: the interface (HTML, CSS, JS), served by the WebView. `api.js` bridges it to the Rust commands and events.
 - `src-tauri/src/`: the engine. `lib.rs` (windows, menu, commands, background loop), `audio.rs`, `media.rs`, `notifs.rs`, `system.rs`, `glaze.rs`, `win32.rs`, `config.rs`, `autostart.rs`.
-- `defaults/`, `themes/`: bundled as resources.
+- `defaults/`: default configuration, bundled as a resource.
 
 ## Releasing
 
