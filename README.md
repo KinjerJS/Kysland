@@ -60,7 +60,7 @@ If something is left in a bad state after a crash, `kysland.exe --repair` restor
 
 ## Usage
 
-Right-click the island, press **`Ctrl+Alt+W`** anywhere, or use the tray icon to open the menu. From there you can reload, open or edit the configuration, toggle fullscreen hiding, Claude usage and start with Windows, and open the **CSS inspector** (DevTools).
+Right-click the island, press **`Ctrl+Alt+W`** anywhere, or use the tray icon to open the menu. From there you can reload, open or edit the configuration, pick the language (automatic = Windows display language, English or French), toggle fullscreen hiding, Claude usage and start with Windows, and open the **CSS inspector** (DevTools).
 
 | Option | Effect |
 |---|---|
@@ -94,7 +94,7 @@ Island options (in the `"island"` section):
 | `claude` | `false` | Show Claude plan usage |
 | `transients` | all `true` | Which events stretch the island: `volume`, `media`, `battery`, `network`, `workspace` |
 
-Top-level options include `reserve`, `hide-on-fullscreen`, `monitors` and `wallpaper`. Status bar modules (`workspaces`, `window`, `clock`, `cpu`, `memory`, `disk`, `network`, `audio`, `battery`, `launcher`, `power`, `media`, `custom/<name>`…) are listed in the comments of `config.jsonc`.
+Top-level options include `language` (`"auto"`, `"en"`, `"fr"`), `reserve`, `hide-on-fullscreen`, `monitors` and `wallpaper`. Status bar modules (`workspaces`, `window`, `clock`, `cpu`, `memory`, `disk`, `network`, `audio`, `battery`, `launcher`, `power`, `media`, `custom/<name>`…) are listed in the comments of `config.jsonc`.
 
 ## Privacy
 
@@ -118,8 +118,9 @@ npm run build      # build the NSIS installer into src-tauri/target/release/bund
 
 Layout:
 
-- `ui/`: the interface (HTML, CSS, JS), served by the WebView. `api.js` bridges it to the Rust commands and events.
-- `src-tauri/src/`: the engine. `lib.rs` (windows, menu, commands, background loop), `audio.rs`, `media.rs`, `notifs.rs`, `system.rs`, `glaze.rs`, `win32.rs`, `config.rs`, `autostart.rs`.
+- `ui/`: the interface (HTML, CSS, JS), served by the WebView. `api.js` bridges it to the Rust commands and events, `i18n.js` holds the displayed strings.
+- `src-tauri/src/`: the engine. `lib.rs` (windows, menu, commands, background loop), `audio.rs`, `media.rs`, `notifs.rs`, `system.rs`, `glaze.rs`, `win32.rs`, `config.rs`, `autostart.rs`, `i18n.rs` (menu strings).
+- Code, comments and commits are in English; only displayed text is translated (`ui/i18n.js`, `src-tauri/src/i18n.rs`).
 - `defaults/`: default configuration, bundled as a resource.
 
 ## Releasing

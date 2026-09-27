@@ -1,4 +1,4 @@
-/* Squelette structurel de la barre. Le look se règle dans le thème et ~/.config/kysland/style.css. */
+/* Structural skeleton of the bar. The look is set in ~/.config/kysland/style.css. */
 :root {
   --bar-height: 44px;
   --font: 'Segoe UI Variable Text', 'Segoe UI', sans-serif;
@@ -82,7 +82,7 @@ body.pos-bottom { flex-direction: column-reverse; }
 
 .module-error { color: var(--red); font-style: italic; }
 
-/* --- Popups (infobulles riches, menus) ---------------------------------------- */
+/* --- Popups (rich tooltips, menus) -------------------------------------------- */
 #popup {
   position: absolute;
   top: calc(var(--bar-height) + 6px);
@@ -105,7 +105,7 @@ body.pos-bottom { flex-direction: column-reverse; }
 body.pos-bottom #popup { top: auto; bottom: calc(var(--bar-height) + 6px); transform: translateY(4px); }
 #popup.visible { opacity: 1; transform: none; pointer-events: auto; }
 
-/* Calendrier */
+/* Calendar */
 .cal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
 .cal-title { font-weight: 600; text-transform: capitalize; }
 .cal-nav { cursor: pointer; padding: 2px 6px; border-radius: 6px; color: var(--fg-dim); }

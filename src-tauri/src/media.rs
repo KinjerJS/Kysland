@@ -1,5 +1,5 @@
-//! Média en cours : SMTC de Windows (Spotify, navigateurs, lecteurs) + agent KemHome
-//! (extension Chrome, avec les pochettes que Chrome ne transmet pas à Windows).
+//! Now playing: Windows SMTC (Spotify, browsers, media players) + the KemHome agent
+//! (Chrome extension, with the album art Chrome doesn't pass on to Windows).
 use crate::{hub, util};
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -76,7 +76,7 @@ fn run_control(s: &Session, cmd: Control) {
     };
 }
 
-/// (données, clé du morceau, pochette si nouvelle).
+/// (data, track key, album art if it's new).
 fn read_session(s: &Session, thumb_key: &mut Option<String>) -> Option<(Value, String, Option<String>)> {
     let props = s.TryGetMediaPropertiesAsync().ok()?.join().ok()?;
     let pb = s.GetPlaybackInfo().ok()?;
@@ -92,7 +92,7 @@ fn read_session(s: &Session, thumb_key: &mut Option<String>) -> Option<(Value, S
     let secs = |t: windows::Foundation::TimeSpan| t.Duration as f64 / 10_000_000.0;
     let updated = tl.LastUpdatedTime().map(|d| (d.UniversalTime - 116_444_736_000_000_000) / 10_000).unwrap_or(0);
     let can_seek = pb.Controls().and_then(|c| c.IsPlaybackPositionEnabled()).unwrap_or(false);
-    // Pochette lue une seule fois par morceau (réessayée tant qu'elle n'est pas disponible).
+    // Album art read once per track (retried until it's available).
     let mut thumb = None;
     if thumb_key.as_deref() != Some(&key) {
         if let Some(bytes) = props.Thumbnail().ok().and_then(|r| read_stream(&r)) {
@@ -112,7 +112,7 @@ fn read_session(s: &Session, thumb_key: &mut Option<String>) -> Option<(Value, S
 fn read_stream(r: &windows::Storage::Streams::IRandomAccessStreamReference) -> Option<Vec<u8>> {
     let stream = r.OpenReadAsync().ok()?.join().ok()?;
     let reader = DataReader::CreateDataReader(&stream).ok()?;
-    // La taille du flux n'est pas toujours connue d'avance : lecture par morceaux jusqu'à la fin.
+    // The stream size isn't always known up front: read in chunks until the end.
     let _ = reader.SetInputStreamOptions(InputStreamOptions::Partial);
     let mut out = Vec::new();
     while out.len() < 8 * 1024 * 1024 {
@@ -158,7 +158,7 @@ fn on_kemhome(base: &str, text: &str) {
     let need_thumb = d["hasThumbnail"].as_bool().unwrap_or(false) && with_state(|s| !s.thumbs.contains_key(&key));
     with_state(|s| s.kem = Some((data, Instant::now())));
     if need_thumb {
-        with_state(|s| s.thumbs.insert(key.clone(), None)); // évite les requêtes en double
+        with_state(|s| s.thumbs.insert(key.clone(), None)); // avoids duplicate requests
         let thumb = ureq::get(&format!("{base}/media/thumbnail")).call().ok()
             .filter(|r| r.status() == 200)
             .and_then(|mut r| r.body_mut().read_to_vec().ok())
@@ -168,7 +168,7 @@ fn on_kemhome(base: &str, text: &str) {
     publish();
 }
 
-/// KemHome gagne s'il a parlé il y a moins de 3 s (même règle que son MediaService).
+/// KemHome wins if it spoke less than 3 s ago (same rule as its MediaService).
 fn publish() {
     let data = with_state(|s| {
         let kem = s.kem.as_ref().filter(|(_, at)| at.elapsed() < Duration::from_secs(3)).map(|(v, _)| v.clone());
@@ -181,7 +181,7 @@ fn publish() {
         };
         let key = m["key"].as_str().unwrap_or("").to_owned();
         let title = m["title"].as_str().unwrap_or("").to_owned();
-        // Même morceau vu par l'autre source (sans pochette) : on réutilise la pochette connue.
+        // Same track seen by the other source (without art): reuse the known album art.
         let thumb = s.thumbs.get(&key).cloned().flatten().or_else(|| {
             s.thumbs.iter().find(|(k, v)| v.is_some() && k.split('|').nth(1) == Some(title.as_str())).and_then(|(_, v)| v.clone())
         });
@@ -190,7 +190,7 @@ fn publish() {
         obj.insert("has".into(), json!(true));
         obj.insert("thumb".into(), json!(thumb));
         obj.insert("playing".into(), json!(playing));
-        // Pas de nouvel envoi si seule la position avance normalement.
+        // Nothing to send if only the position moved forward as expected.
         if let Some(p) = &s.published {
             let drift = p["position"].as_f64().unwrap_or(0.0)
                 + if p["playing"] == true { (m["at"].as_f64().unwrap_or(0.0) - p["at"].as_f64().unwrap_or(0.0)) / 1000.0 } else { 0.0 }

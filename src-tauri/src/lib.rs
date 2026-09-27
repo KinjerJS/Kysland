@@ -1,34 +1,38 @@
-//! Kysland : Dynamic Island (et barre de statut) pour Windows.
+//! Kysland: a Dynamic Island (and optional status bar) for Windows.
 mod audio;
 mod autostart;
 mod config;
 mod glaze;
 mod hub;
+mod i18n;
 mod media;
 mod notifs;
 mod system;
 mod util;
 mod win32;
 
+use i18n::{t, tf};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
-use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
+use tauri::menu::{CheckMenuItem, IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, RunEvent, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
+/// Clickable area reported by the page, in CSS pixels relative to the window.
 #[derive(Clone, Copy, Deserialize)]
 struct Rect { x: f64, y: f64, w: f64, h: f64 }
 
+/// One transparent window per screen, holding the island (and the bar modules, if any).
 struct Bar {
     label: String,
     hwnd: isize,
     index: usize,
     primary: bool,
-    monitor: (i32, i32, i32, i32), // x, y, largeur, hauteur (pixels physiques)
+    monitor: (i32, i32, i32, i32), // x, y, width, height (physical pixels)
     scale: f64,
     appbar: Option<win32::AppBar>,
     rects: Vec<Rect>,
@@ -51,22 +55,23 @@ static BAR_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 fn with<R>(f: impl FnOnce(&mut Shared) -> R) -> R { f(SHARED.lock().unwrap().get_or_insert_with(Shared::default)) }
 
+/// Config keys whose change requires recreating the windows.
 const LAYOUT_KEYS: [&str; 5] = ["position", "height", "monitors", "popup-space", "reserve"];
 
 fn resources(app: &AppHandle) -> PathBuf { app.path().resource_dir().unwrap_or_default() }
 
-/// Feuille de style de l'utilisateur ; v force le rechargement.
+/// The user's style sheet; `v` busts the WebView cache.
 fn styles() -> Value {
     json!({ "style": config::style_file(), "v": util::now_ms() })
 }
 
-/// Message dans l'encoche (erreurs de config, scripts : --island="...").
+/// Message shown in the island (config errors, scripts using --island="...").
 fn island_message(text: &str, icon: &str) {
     eprintln!("[kysland] {text}");
     hub::emit("island", json!({ "text": text, "icon": icon }));
 }
 
-// --- Fenêtres (une par écran) -------------------------------------------------------------------
+// --- Windows (one per screen) -----------------------------------------------------------------------
 
 fn create_bars(app: &AppHandle, cfg: &Value) {
     let mut monitors = app.available_monitors().unwrap_or_default();
@@ -132,13 +137,14 @@ fn destroy_bars(app: &AppHandle) {
 
 fn bar_hwnds() -> Vec<isize> { with(|s| s.bars.iter().map(|b| b.hwnd).collect()) }
 
-// --- Application de la config ------------------------------------------------------------------
+// --- Applying the config ------------------------------------------------------------------------
 
 fn reload(app: &AppHandle, force_layout: bool) {
     let cfg = match config::load() {
         Ok(c) => c,
         Err(e) => return island_message(&e, "triangle-alert"),
     };
+    i18n::set(i18n::resolve(cfg["language"].as_str()));
     let layout = LAYOUT_KEYS.iter().map(|k| cfg[*k].to_string()).collect::<Vec<_>>().join("|");
     let relayout = force_layout || with(|s| s.bars.is_empty() || s.layout != layout);
     with(|s| { s.cfg = cfg.clone(); s.layout = layout; });
@@ -148,7 +154,7 @@ fn reload(app: &AppHandle, force_layout: bool) {
     } else {
         hub::emit("reload", Value::Null);
     }
-    start_pollers(app, &cfg);
+    start_pollers(&cfg);
     apply_system(&cfg);
     update_tray(app);
 }
@@ -162,14 +168,18 @@ fn apply_system(cfg: &Value) {
     if let Some(w) = cfg["wallpaper"].as_str() {
         if with(|s| s.wallpaper.as_deref() != Some(w)) {
             let file = config::config_dir().join(w.replacen('~', &config::home().to_string_lossy(), 1));
-            if file.exists() { win32::set_wallpaper(&file.to_string_lossy()); with(|s| s.wallpaper = Some(w.to_owned())); }
-            else { island_message(&format!("Fond d'écran introuvable : {}", file.display()), "image"); }
+            if file.exists() {
+                win32::set_wallpaper(&file.to_string_lossy());
+                with(|s| s.wallpaper = Some(w.to_owned()));
+            } else {
+                island_message(&tf("msg.wallpaper_missing", &[("path", &file.display().to_string())]), "image");
+            }
         }
     }
 }
 
-/// Démarre les sondes utilisées par les modules de la config (arrêtées au rechargement suivant).
-fn start_pollers(_app: &AppHandle, cfg: &Value) {
+/// Starts the pollers used by the configured modules (stopped at the next reload).
+fn start_pollers(cfg: &Value) {
     let epoch = hub::next_generation();
     let mut need: std::collections::HashMap<&str, f64> = std::collections::HashMap::new();
     let mut want = |topic: &'static str, secs: f64| {
@@ -221,10 +231,10 @@ fn start_pollers(_app: &AppHandle, cfg: &Value) {
     if glaze_on { glaze::start(epoch); }
 }
 
-// --- Boucle de fond : souris, plein écran, premier plan ------------------------------------------
+// --- Background loop: mouse, fullscreen, z-order -----------------------------------------------------
 
-/// La fenêtre couvre tout le haut de l'écran mais ne capte la souris qu'au-dessus des zones
-/// envoyées par la page (encoche, popups, modules) : ailleurs, les clics passent dessous.
+/// The window covers the top of the screen but only captures the mouse over the areas reported
+/// by the page (island, popups, modules): anywhere else, clicks go through to the windows below.
 fn background_loop(app: AppHandle) {
     std::thread::spawn(move || {
         let (mut fs_at, mut top_at, mut shell_at) = (Instant::now(), Instant::now(), Instant::now());
@@ -244,7 +254,7 @@ fn background_loop(app: AppHandle) {
                 if let Some(w) = app.get_webview_window(&label) { let _ = w.set_ignore_cursor_events(!inside); }
                 if !inside { let _ = app.emit("pointer-left", json!({ "label": label })); }
             }
-            // Plein écran : la fenêtre au premier plan épouse exactement l'écran (à 1 px près).
+            // Fullscreen: the foreground window exactly matches the screen (within 1 px).
             if fs_at.elapsed() >= Duration::from_millis(400) {
                 fs_at = Instant::now();
                 let enabled = with(|s| s.cfg["hide-on-fullscreen"] != false);
@@ -261,24 +271,23 @@ fn background_loop(app: AppHandle) {
                     }
                 }
             }
-            // Premier plan perdu (fenêtre créée à l'ouverture de session...).
+            // Lost topmost position (window created while the session was starting...).
             if top_at.elapsed() >= Duration::from_secs(1) {
                 top_at = Instant::now();
                 for hwnd in with(|s| s.bars.iter().filter(|b| !b.fullscreen).map(|b| b.hwnd).collect::<Vec<_>>()) {
                     if win32::is_buried(hwnd) { win32::raise_topmost(hwnd); }
                 }
             }
-            // Explorer peut réafficher la barre des tâches ou recréer la pastille de volume.
+            // Explorer may recreate the volume flyout.
             if shell_at.elapsed() >= Duration::from_millis(1500) {
                 shell_at = Instant::now();
-                let osd = with(|s| s.hide_osd);
-                if osd { win32::hide_volume_osd(); }
+                if with(|s| s.hide_osd) { win32::hide_volume_osd(); }
             }
         }
     });
 }
 
-/// Rechargement à chaud : style.css / thèmes → styles ; config.jsonc → rechargement.
+/// Hot reload: style.css → styles only; config.jsonc → full reload.
 fn watch_config(app: AppHandle) {
     use notify::{RecursiveMode, Watcher};
     std::thread::spawn(move || {
@@ -300,7 +309,7 @@ fn watch_config(app: AppHandle) {
     });
 }
 
-// --- Commandes appelées par l'interface -------------------------------------------------------------
+// --- Commands called by the page ---------------------------------------------------------------------
 
 #[tauri::command]
 fn init(window: WebviewWindow) -> Value {
@@ -311,7 +320,10 @@ fn init(window: WebviewWindow) -> Value {
             "physical": { "x": b.monitor.0, "y": b.monitor.1, "width": b.monitor.2, "height": b.monitor.3 },
         })))
     });
-    json!({ "config": cfg, "styles": styles(), "monitor": monitor, "glaze": glaze::state(), "data": hub::snapshot() })
+    json!({
+        "config": cfg, "lang": i18n::lang(), "styles": styles(), "monitor": monitor,
+        "glaze": glaze::state(), "data": hub::snapshot(),
+    })
 }
 
 #[tauri::command]
@@ -349,7 +361,7 @@ fn action(window: WebviewWindow, name: String, arg: Value, extra: Value) {
         "glaze" => glaze::command(&text),
         "start-menu" => win32::press_keys(&[win32::VK_LWIN]),
         "media" => {
-            // Contrôle précis via SMTC ; touches multimédia si aucune session n'est connue.
+            // Precise control through SMTC; media keys when no session is known.
             let ctl = match text.as_str() {
                 "play-pause" => Some(media::Control::PlayPause), "next" => Some(media::Control::Next),
                 "prev" => Some(media::Control::Prev), "seek" => Some(media::Control::Seek(extra.as_f64().unwrap_or(0.0))), _ => None,
@@ -370,38 +382,44 @@ fn action(window: WebviewWindow, name: String, arg: Value, extra: Value) {
         },
         "reload" => { let a = app.clone(); let _ = app.run_on_main_thread(move || reload(&a, true)); }
         "open-config" => win32::shell_open(&config::config_dir().to_string_lossy()),
-        "notification-center" => win32::press_keys(&[win32::VK_LWIN, 0x4E]),
+        "notification-center" => win32::press_keys(&[win32::VK_LWIN, 0x4E]), // Win+N
         "notif-remove" => if let Some(id) = arg.as_u64() { notifs::remove(vec![id as u32]) },
         "notif-clear" => notifs::clear_all(),
-        "claude-refresh" => system::claude_refresh(),
         "notif-open" => notifs::open(arg["aumid"].as_str(), arg["launch"].as_str()),
+        "claude-refresh" => system::claude_refresh(),
         "menu" => show_menu(&app, Some(window.label().to_owned())),
         _ => {}
     }
 }
 
-// --- Menu (zone de notification, clic droit sur l'encoche, Ctrl+Alt+W) -----------------------------
+// --- Menu (tray icon, right-click on the island, Ctrl+Alt+W) -------------------------------------------
 
 fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let cfg = with(|s| s.cfg.clone());
     let island = config::island_conf(&cfg);
     let claude = system::claude_installed();
+    let chosen = cfg["language"].as_str().filter(|l| i18n::SUPPORTED.iter().any(|(c, _)| c == l)).unwrap_or("auto");
+    let mut languages = vec![CheckMenuItem::with_id(app, "lang:auto", t("menu.language_auto"), true, chosen == "auto", None::<&str>)?];
+    for (code, name) in i18n::SUPPORTED {
+        languages.push(CheckMenuItem::with_id(app, format!("lang:{code}"), *name, true, chosen == *code, None::<&str>)?);
+    }
+    let language_items: Vec<&dyn IsMenuItem<tauri::Wry>> = languages.iter().map(|i| i as &dyn IsMenuItem<tauri::Wry>).collect();
     Menu::with_items(app, &[
         &MenuItem::with_id(app, "title", "Kysland", false, None::<&str>)?,
         &PredefinedMenuItem::separator(app)?,
-        &MenuItem::with_id(app, "reload", "Recharger", true, None::<&str>)?,
-        &MenuItem::with_id(app, "open-config", "Ouvrir le dossier de config", true, None::<&str>)?,
-        &MenuItem::with_id(app, "edit-config", "Éditer config.jsonc", true, None::<&str>)?,
-        &MenuItem::with_id(app, "edit-style", "Éditer style.css", true, None::<&str>)?,
-        &MenuItem::with_id(app, "devtools", "Inspecteur CSS (DevTools)", true, None::<&str>)?,
+        &MenuItem::with_id(app, "reload", t("menu.reload"), true, None::<&str>)?,
+        &MenuItem::with_id(app, "open-config", t("menu.open_config"), true, None::<&str>)?,
+        &MenuItem::with_id(app, "edit-config", t("menu.edit_config"), true, None::<&str>)?,
+        &MenuItem::with_id(app, "edit-style", t("menu.edit_style"), true, None::<&str>)?,
+        &MenuItem::with_id(app, "devtools", t("menu.devtools"), true, None::<&str>)?,
+        &Submenu::with_items(app, t("menu.language"), true, &language_items)?,
         &PredefinedMenuItem::separator(app)?,
-        &CheckMenuItem::with_id(app, "fullscreen", "Cacher en plein écran (jeux, vidéos)", true, cfg["hide-on-fullscreen"] != false, None::<&str>)?,
-        &CheckMenuItem::with_id(app, "claude",
-            if claude { "Afficher l'utilisation Claude" } else { "Afficher l'utilisation Claude (Claude Code non détecté)" },
+        &CheckMenuItem::with_id(app, "fullscreen", t("menu.fullscreen"), true, cfg["hide-on-fullscreen"] != false, None::<&str>)?,
+        &CheckMenuItem::with_id(app, "claude", t(if claude { "menu.claude" } else { "menu.claude_missing" }),
             claude, claude && island["claude"] == true, None::<&str>)?,
-        &CheckMenuItem::with_id(app, "autostart", "Lancer au démarrage de Windows", true, with(|s| s.autostart_on), None::<&str>)?,
+        &CheckMenuItem::with_id(app, "autostart", t("menu.autostart"), true, with(|s| s.autostart_on), None::<&str>)?,
         &PredefinedMenuItem::separator(app)?,
-        &MenuItem::with_id(app, "quit", "Quitter", true, None::<&str>)?,
+        &MenuItem::with_id(app, "quit", t("menu.quit"), true, None::<&str>)?,
     ])
 }
 
@@ -413,14 +431,18 @@ fn on_menu(app: &AppHandle, id: &str) {
         "open-config" => { win32::shell_open(&config::config_dir().to_string_lossy()); Ok(()) }
         "edit-config" => { win32::shell_open(&config::config_file().to_string_lossy()); Ok(()) }
         "edit-style" => { win32::shell_open(&config::style_file().to_string_lossy()); Ok(()) }
-        "devtools" => { if let Some(b) = with(|s| s.bars.first().map(|b| b.label.clone())) { if let Some(w) = app.get_webview_window(&b) { w.open_devtools(); } } Ok(()) }
+        "devtools" => {
+            if let Some(w) = with(|s| s.bars.first().map(|b| b.label.clone())).and_then(|l| app.get_webview_window(&l)) { w.open_devtools(); }
+            Ok(())
+        }
         "fullscreen" => config::set_value(&["hide-on-fullscreen"], json!(cfg["hide-on-fullscreen"] == false)),
         "claude" => config::set_value(&[&island, "claude"], json!(config::island_conf(&cfg)["claude"] != true)),
         "autostart" => { set_autostart(app, !with(|s| s.autostart_on)); Ok(()) }
         "quit" => { app.exit(0); Ok(()) }
+        l if l.starts_with("lang:") => config::set_value(&["language"], json!(&l[5..])),
         _ => Ok(()),
     };
-    if let Err(e) = result { island_message(&format!("Impossible de modifier la config : {e}"), "triangle-alert"); }
+    if let Err(e) = result { island_message(&tf("msg.config_write", &[("error", &e)]), "triangle-alert"); }
 }
 
 fn update_tray(app: &AppHandle) {
@@ -439,8 +461,8 @@ fn update_tray(app: &AppHandle) {
         .build(app);
 }
 
-/// Menu à la position du curseur, depuis l'encoche. Windows referme un menu dont la fenêtre
-/// n'est pas au premier plan : on la passe au premier plan le temps du menu.
+/// Menu at the cursor, from the island. Windows closes a menu whose window isn't in the
+/// foreground, so the window is brought to the foreground for the menu's lifetime.
 fn show_menu(app: &AppHandle, label: Option<String>) {
     let label = label.or_else(|| with(|s| s.bars.first().map(|b| b.label.clone())));
     let Some(win) = label.and_then(|l| app.get_webview_window(&l)) else { return };
@@ -449,7 +471,7 @@ fn show_menu(app: &AppHandle, label: Option<String>) {
     let _ = win.popup_menu(&menu);
 }
 
-// --- Lancement avec Windows ------------------------------------------------------------------------
+// --- Start with Windows -----------------------------------------------------------------------------
 
 fn autostart_file() -> PathBuf { config::config_dir().join(".autostart") }
 
@@ -457,14 +479,17 @@ fn set_autostart(app: &AppHandle, on: bool) {
     let exe = std::env::current_exe().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
     let result = if on { autostart::enable(&exe, &[]) } else { autostart::disable(); Ok(()) };
     match result {
-        Ok(()) => { with(|s| s.autostart_on = on); let _ = std::fs::write(autostart_file(), if on { "on" } else { "off" }); }
-        Err(e) => island_message(&format!("Lancement au démarrage impossible : {e}"), "triangle-alert"),
+        Ok(()) => {
+            with(|s| s.autostart_on = on);
+            let _ = std::fs::write(autostart_file(), if on { "on" } else { "off" });
+        }
+        Err(e) => island_message(&tf("msg.autostart_failed", &[("error", &e)]), "triangle-alert"),
     }
     update_tray(app);
 }
 
-/// Version installée : activé par défaut, puis selon le choix mémorisé (recréé si la tâche a
-/// disparu). En développement, on ne touche à rien tout seul.
+/// Installed build: on by default, then follows the saved choice (recreated if the task went
+/// missing). Development builds never change it on their own.
 fn ensure_autostart(app: &AppHandle) {
     let active = autostart::is_enabled();
     with(|s| s.autostart_on = active);
@@ -475,12 +500,13 @@ fn ensure_autostart(app: &AppHandle) {
     else { update_tray(app); }
 }
 
-// --- Arguments, cycle de vie ------------------------------------------------------------------------
+// --- Command line, lifecycle ------------------------------------------------------------------------
 
 fn opt(argv: &[String], name: &str) -> Option<String> {
     argv.iter().find_map(|a| a.strip_prefix(&format!("--{name}=")).map(str::to_owned))
 }
 
+/// Arguments of a second instance, forwarded to the running one.
 fn handle_args(app: &AppHandle, argv: Vec<String>) {
     if argv.iter().any(|a| a == "--quit") { return app.exit(0); }
     if let Some(text) = opt(&argv, "island") {
@@ -490,7 +516,8 @@ fn handle_args(app: &AppHandle, argv: Vec<String>) {
     reload(app, true);
 }
 
-/// Barre des tâches, pastille de volume et zone de travail remises d'aplomb.
+/// Restores the volume flyout, the taskbar and the work area (after a crash, or from the
+/// uninstaller). Older versions could hide the taskbar.
 fn repair() {
     win32::show_taskbar(Some(0));
     win32::restore_volume_osd();
@@ -507,12 +534,13 @@ fn cleanup(app: &AppHandle) {
 pub fn run() {
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--repair") { repair(); return; }
+    i18n::set(i18n::windows_language());
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, argv, _| handle_args(app, argv)))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                .with_shortcuts(["ctrl+alt+w"]).expect("raccourci")
+                .with_shortcuts(["ctrl+alt+w"]).expect("invalid shortcut")
                 .with_handler(|app, _, e| {
                     if e.state == tauri_plugin_global_shortcut::ShortcutState::Pressed { show_menu(app, None); }
                 })
@@ -524,7 +552,7 @@ pub fn run() {
             let handle = app.handle().clone();
             hub::init(handle.clone());
             if args.iter().any(|a| a == "--quit") { handle.exit(0); return Ok(()); }
-            // Après un crash : barre des tâches laissée masquée / réservations d'écran orphelines.
+            // After a crash: taskbar left hidden by an older version / orphaned screen reservations.
             if let Ok(state) = std::fs::read_to_string(config::config_dir().join(".taskbar-state")) {
                 win32::show_taskbar(state.trim().parse().ok());
             }
@@ -537,9 +565,9 @@ pub fn run() {
             Ok(())
         })
         .build(tauri::generate_context!())
-        .expect("impossible de démarrer Kysland")
+        .expect("failed to start Kysland")
         .run(|app, event| match event {
-            // Fenêtres détruites par un rechargement : l'appli continue (zone de notification).
+            // Windows destroyed by a reload: keep running (tray icon).
             RunEvent::ExitRequested { code: None, api, .. } => api.prevent_exit(),
             RunEvent::Exit => cleanup(app),
             _ => {}

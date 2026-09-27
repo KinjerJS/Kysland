@@ -1,11 +1,11 @@
 'use strict';
 const api = window.kysland;
-dayjs.locale('fr');
+const { t } = window.i18n;
 
 let state = { config: null, data: {}, glaze: { connected: false, monitors: [] }, monitor: null };
 let modules = [];
 
-// --- Utilitaires ----------------------------------------------------------------
+// --- Helpers --------------------------------------------------------------------
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const typeOf = (name) => name.split(/[/#]/)[0];
@@ -15,10 +15,10 @@ function lookup(values, key) {
   return key.split('.').reduce((o, k) => (o == null ? undefined : o[k]), values);
 }
 
-// Clés dont la valeur est déjà du HTML (icônes rendues).
+// Keys whose value is already HTML (rendered icons).
 const RAW_KEYS = new Set(['icon']);
 
-// Mini-langage de format :  {clé}  {i:nom-icone-lucide}  {}=texte  \n=retour ligne
+// Format mini-language:  {key}  {i:lucide-icon-name}  {}=text  \n=line break
 function tpl(format, values = {}) {
   if (format == null || format === false) return '';
   return String(format).replace(/\{([^{}]*)\}/g, (_, key) => {
@@ -29,7 +29,7 @@ function tpl(format, values = {}) {
   }).replace(/\n/g, '<br>');
 }
 
-// format-icons : tableau (choisi selon le pourcentage), objet (par état) ou chaîne.
+// format-icons: array (picked from the percentage), object (per state) or string.
 function pickIcon(icons, percent, key) {
   if (icons == null) return '';
   if (typeof icons === 'string') return icons;
@@ -41,7 +41,7 @@ function pickIcon(icons, percent, key) {
   return Array.isArray(v) ? pickIcon(v, percent) : v ?? '';
 }
 
-// states : { "warning": 70, "critical": 90 } → classe CSS. inverse = seuils "vers le bas" (batterie).
+// states: { "warning": 70, "critical": 90 } → CSS class. inverse = "downward" thresholds (battery).
 function stateClass(value, states, inverse = false) {
   if (!states || value == null) return null;
   const entries = Object.entries(states).sort((a, b) => (inverse ? a[1] - b[1] : b[1] - a[1]));
@@ -49,7 +49,7 @@ function stateClass(value, states, inverse = false) {
   return null;
 }
 
-// "@action arg" → action interne, sinon commande shell.
+// "@action arg" → internal action, otherwise a shell command.
 function runCommand(cmd, module) {
   if (cmd.startsWith('@')) {
     const [action, ...rest] = cmd.slice(1).split(' ');
@@ -61,7 +61,7 @@ function runCommand(cmd, module) {
   api.action('exec', cmd);
 }
 
-// --- Popup (infobulle riche / menu) -------------------------------------------------
+// --- Popup (rich tooltip / menu) ----------------------------------------------------
 const popup = {
   el: document.getElementById('popup'),
   owner: null,
@@ -81,7 +81,7 @@ const popup = {
     this.el.classList.add('visible');
   },
 
-  // Re-rendu quand les données du module changent pendant que la popup est ouverte.
+  // Re-render when the module's data changes while the popup is open.
   refresh() {
     const m = this.owner;
     if (!m) return;
@@ -122,9 +122,9 @@ const popup = {
 popup.el.addEventListener('mouseenter', () => clearTimeout(popup.hideTimer));
 popup.el.addEventListener('mouseleave', () => { popup.hideTimer = setTimeout(() => popup.close(), 250); });
 
-// La fenêtre couvre aussi la zone des popups : on laisse passer les clics hors de la barre.
-// Zones cliquables envoyées au processus principal, qui rend la fenêtre cliquable au-dessus
-// d'elles seulement : ailleurs, les clics atteignent les fenêtres en dessous.
+// The window also covers the popup area, so clicks outside the bar must go through.
+// Clickable areas are sent to the engine, which makes the window clickable above them only:
+// anywhere else, clicks reach the windows below.
 const HIT_SELECTOR = '.modules-left, .modules-center, .modules-right, #popup.visible, .notch';
 let lastHitRects = '';
 function reportHitRects() {
@@ -135,14 +135,14 @@ function reportHitRects() {
   const json = JSON.stringify(rects);
   if (json !== lastHitRects) { lastHitRects = json; api.setHitRects(rects); }
 }
-setInterval(reportHitRects, 100); // suit aussi les animations (encoche qui s'agrandit, popups)
+setInterval(reportHitRects, 100); // also follows animations (notch expanding, popups)
 
-// Sortie du curseur détectée par le processus principal : on simule les "mouseleave" manqués.
+// Cursor exit detected by the engine: fire the "mouseleave" events the page missed.
 api.on('pointer-left', () => {
   document.querySelectorAll('.module, .notch, #popup').forEach((el) => el.dispatchEvent(new MouseEvent('mouseleave')));
 });
 
-// --- Module générique ------------------------------------------------------------
+// --- Generic module --------------------------------------------------------------
 class Module {
   constructor(name, conf, def) {
     this.name = name;
@@ -199,8 +199,8 @@ class Module {
   }
 
   tooltipFrom(values) {
-    const t = this.conf['tooltip-format'];
-    return this.conf.tooltip === false || !t ? null : tpl(t, values);
+    const format = this.conf['tooltip-format'];
+    return this.conf.tooltip === false || !format ? null : tpl(format, values);
   }
 
   set({ html = '', tooltip = null, classes = [], hidden = false }) {
@@ -234,7 +234,7 @@ class Module {
   }
 }
 
-// --- Définitions des modules -------------------------------------------------------
+// --- Module definitions ------------------------------------------------------------
 function myGlazeMonitor() {
   const p = state.monitor.physical;
   let best = null, bestDist = Infinity;
@@ -248,8 +248,8 @@ function myGlazeMonitor() {
 function calendarHtml(month) {
   const today = dayjs();
   const start = month.startOf('month');
-  const offset = (start.day() + 6) % 7; // semaine commençant le lundi
-  let cells = ['lu', 'ma', 'me', 'je', 've', 'sa', 'di'].map((d) => `<span class="wd">${d}</span>`).join('');
+  const offset = (start.day() + 6) % 7; // weeks start on Monday
+  let cells = t('bar.weekdays').split(',').map((d) => `<span class="wd">${d}</span>`).join('');
   cells += '<span></span>'.repeat(offset);
   for (let d = 1; d <= month.daysInMonth(); d++) {
     const date = start.date(d);
@@ -263,12 +263,13 @@ function calendarHtml(month) {
 }
 
 const POWER_ITEMS = [
-  { id: 'lock', label: 'Verrouiller', icon: 'lock' },
-  { id: 'sleep', label: 'Veille', icon: 'moon' },
-  { id: 'logout', label: 'Se déconnecter', icon: 'log-out', confirm: true },
-  { id: 'restart', label: 'Redémarrer', icon: 'rotate-ccw', confirm: true },
-  { id: 'shutdown', label: 'Éteindre', icon: 'power', confirm: true },
+  { id: 'lock', icon: 'lock' },
+  { id: 'sleep', icon: 'moon' },
+  { id: 'logout', icon: 'log-out', confirm: true },
+  { id: 'restart', icon: 'rotate-ccw', confirm: true },
+  { id: 'shutdown', icon: 'power', confirm: true },
 ];
+const powerLabel = (id) => t(`bar.power.${id}`);
 
 const TYPES = {
   clock: {
@@ -319,7 +320,7 @@ const TYPES = {
       if (!g?.connected) {
         return m.set({
           html: tpl(m.conf['format-disconnected']),
-          tooltip: 'GlazeWM non détecté<br><span style="opacity:.6">clic : ouvrir la page du projet</span>',
+          tooltip: `${esc(t('bar.glaze_missing'))}<br><span style="opacity:.6">${esc(t('bar.glaze_open_page'))}</span>`,
           classes: ['disconnected'],
         });
       }
@@ -377,7 +378,7 @@ const TYPES = {
 
   cpu: {
     topic: 'cpu',
-    defaults: { format: '{i:cpu} {usage}%', states: { warning: 70, critical: 90 }, 'tooltip-format': '{model}\n{cores} cœurs · {speed} GHz' },
+    defaults: { format: '{i:cpu} {usage}%', states: { warning: 70, critical: 90 }, get 'tooltip-format'() { return t('bar.cpu_tooltip'); } },
     render(m, d) {
       if (!d) return;
       m.set({ html: tpl(m.fmt(), d), tooltip: m.tooltipFrom(d), classes: [stateClass(d.usage, m.conf.states)] });
@@ -386,7 +387,7 @@ const TYPES = {
 
   memory: {
     topic: 'memory',
-    defaults: { format: '{i:memory-stick} {percentage}%', states: { warning: 75, critical: 90 }, 'tooltip-format': '{used} Go / {total} Go utilisés' },
+    defaults: { format: '{i:memory-stick} {percentage}%', states: { warning: 75, critical: 90 }, get 'tooltip-format'() { return t('bar.memory_tooltip'); } },
     render(m, d) {
       if (!d) return;
       m.set({ html: tpl(m.fmt(), d), tooltip: m.tooltipFrom(d), classes: [stateClass(d.percentage, m.conf.states)] });
@@ -395,7 +396,12 @@ const TYPES = {
 
   disk: {
     topic: 'disk',
-    defaults: { format: '{i:hard-drive} {free} Go', path: 'C', states: { warning: 85, critical: 95 }, 'tooltip-format': '{path}: {used} / {total} Go ({percentage}%)' },
+    defaults: {
+      get format() { return `{i:hard-drive} ${t('bar.disk_free')}`; },
+      path: 'C',
+      states: { warning: 85, critical: 95 },
+      get 'tooltip-format'() { return t('bar.disk_tooltip'); },
+    },
     render(m, d) {
       const key = String(m.conf.path).toUpperCase()[0];
       const disk = d?.[key];
@@ -431,7 +437,7 @@ const TYPES = {
     defaults: {
       'format-wifi': '{icon} {essid}',
       'format-ethernet': '{i:ethernet-port} {down}',
-      'format-disconnected': '{i:wifi-off} Déconnecté',
+      get 'format-disconnected'() { return `{i:wifi-off} ${t('bar.disconnected')}`; },
       'format-icons': ['{i:wifi-zero}', '{i:wifi-low}', '{i:wifi-high}', '{i:wifi}'],
       'tooltip-format': '{ifname} · {ipaddr}\n{i:arrow-down} {down}   {i:arrow-up} {up}',
       'on-click-right': '@open ms-settings:network',
@@ -449,7 +455,7 @@ const TYPES = {
     topic: 'audio',
     defaults: {
       format: '{icon} {volume}%',
-      'format-muted': '{i:volume-x} muet',
+      get 'format-muted'() { return `{i:volume-x} ${t('island.muted')}`; },
       'format-icons': ['{i:volume}', '{i:volume-1}', '{i:volume-2}'],
       'scroll-step': 5,
       'on-click': '@audio mute',
@@ -492,7 +498,7 @@ const TYPES = {
   },
 
   launcher: {
-    defaults: { format: '{i:layout-grid}', 'on-click': '@start-menu', 'tooltip-format': 'Menu Démarrer' },
+    defaults: { format: '{i:layout-grid}', 'on-click': '@start-menu', get 'tooltip-format'() { return t('bar.start_menu'); } },
     render(m) { m.set({ html: tpl(m.fmt()), tooltip: m.tooltipFrom({}) }); },
   },
 
@@ -524,17 +530,17 @@ const TYPES = {
         const items = (m.conf.items || POWER_ITEMS.map((i) => i.id)).map((id) => POWER_ITEMS.find((i) => i.id === id)).filter(Boolean);
         popup.open(m, {
           interactive: true,
-          html: `<div class="menu">${items.map((i) => `<div class="menu-item" data-power="${i.id}"><i class="icon icon-${i.icon}"></i><span>${i.label}</span></div>`).join('')}</div>`,
+          html: `<div class="menu">${items.map((i) => `<div class="menu-item" data-power="${i.id}"><i class="icon icon-${i.icon}"></i><span>${esc(powerLabel(i.id))}</span></div>`).join('')}</div>`,
           mount(el) {
             el.onclick = (e) => {
               const item = e.target.closest('[data-power]');
               if (!item) return;
               const def = POWER_ITEMS.find((i) => i.id === item.dataset.power);
               if (def.confirm && pending !== item) {
-                el.querySelectorAll('.confirm').forEach((x) => { x.classList.remove('confirm'); x.lastChild.textContent = POWER_ITEMS.find((i) => i.id === x.dataset.power).label; });
+                el.querySelectorAll('.confirm').forEach((x) => { x.classList.remove('confirm'); x.lastChild.textContent = powerLabel(x.dataset.power); });
                 pending = item;
                 item.classList.add('confirm');
-                item.lastChild.textContent = `${def.label} ? (re-cliquer)`;
+                item.lastChild.textContent = t('bar.power.confirm', { label: powerLabel(def.id) });
                 return;
               }
               popup.close();
@@ -573,8 +579,8 @@ const TYPES = {
   },
 };
 
-// --- Construction de la barre --------------------------------------------------------
-// style.css de l'utilisateur, servi via le protocole "asset" de Tauri ; v force le rechargement.
+// --- Building the bar ---------------------------------------------------------------
+// The user's style.css, served through Tauri's "asset" protocol; v forces a reload.
 function applyStyles({ style, v }) {
   document.getElementById('user-css').href = `${api.fileUrl(style)}?v=${v}`;
 }
@@ -586,7 +592,7 @@ function build() {
     for (const name of cfg[`modules-${side}`] || []) {
       const def = TYPES[typeOf(name)];
       if (!def) {
-        container.insertAdjacentHTML('beforeend', `<div class="module"><span class="module-error">module inconnu : ${esc(name)}</span></div>`);
+        container.insertAdjacentHTML('beforeend', `<div class="module"><span class="module-error">${esc(t('bar.unknown_module', { name }))}</span></div>`);
         continue;
       }
       const m = new Module(name, cfg[name] || {}, def);
@@ -602,6 +608,7 @@ function build() {
 async function boot() {
   const init = await api.init();
   if (!init) return;
+  i18n.setLang(init.lang);
   state = { ...state, ...init, data: init.data || {} };
   const cfg = state.config;
   applyStyles(init.styles);
@@ -628,5 +635,5 @@ api.on('island', (msg) => modules.forEach((m) => m.def.onMessage?.(m, msg)));
 api.on('style', applyStyles);
 api.on('reload', () => location.reload());
 
-// island.js (et d'autres modules) s'enregistrent dans TYPES avant le démarrage.
+// island.js (and other modules) register themselves in TYPES before boot.
 document.addEventListener('DOMContentLoaded', boot);

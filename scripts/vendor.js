@@ -1,5 +1,5 @@
-// Copie les dépendances web de l'interface (dayjs, police d'icônes Lucide) dans ui/vendor.
-// Lancé avant chaque build : ui/vendor n'est pas versionné.
+// Copies the page's web dependencies (dayjs, Lucide icon font) into ui/vendor.
+// Runs before every build: ui/vendor isn't committed.
 const fs = require('fs');
 const path = require('path');
 
@@ -13,4 +13,4 @@ const files = {
   'lucide.woff2': 'node_modules/lucide-static/font/lucide.woff2',
 };
 for (const [name, src] of Object.entries(files)) fs.copyFileSync(path.join(root, src), path.join(out, name));
-console.log(`ui/vendor : ${Object.keys(files).length} fichiers`);
+console.log(`ui/vendor: ${Object.keys(files).length} files`);

@@ -1,8 +1,8 @@
-; Étapes ajoutées à l'installateur NSIS de Tauri.
-; Kysland peut masquer la barre des tâches / la pastille de volume et réserver de l'espace à
-; l'écran : on le fait quitter proprement (il restaure tout) plutôt que de le laisser tuer.
-; Une mise à jour lance l'ancien désinstalleur avec /UPDATE ($UpdateMode = 1) : ce qui ne
-; concerne qu'une vraie désinstallation est donc conditionné.
+; Steps added to Tauri's NSIS installer.
+; Kysland can hide the volume flyout and reserve screen space, so it is asked to quit cleanly
+; (it restores everything) instead of being killed.
+; An update runs the old uninstaller with /UPDATE ($UpdateMode = 1): anything that only
+; concerns a real uninstall is therefore conditional.
 
 !macro NSIS_HOOK_PREINSTALL
   IfFileExists "$INSTDIR\${MAINBINARYNAME}.exe" 0 +3
@@ -11,7 +11,7 @@
 !macroend
 
 !macro NSIS_HOOK_POSTINSTALL
-  ; Mise à jour : ressources des anciennes versions qui n'existent plus (thèmes retirés en 0.2.0).
+  ; Update: resources of older versions that no longer exist (themes removed in 0.2.0).
   RMDir /r "$INSTDIR\themes"
 !macroend
 
@@ -20,8 +20,8 @@
     nsExec::Exec '"$INSTDIR\${MAINBINARYNAME}.exe" --quit'
     Sleep 1500
   ${If} $UpdateMode <> 1
-    ; Remise d'aplomb au cas où l'appli aurait planté, puis retrait du lancement au démarrage.
-    ; La config dans ~\.config\kysland est conservée.
+    ; Cleanup in case the app crashed, then remove the start-with-Windows task.
+    ; The config in ~\.config\kysland is kept.
     nsExec::Exec '"$INSTDIR\${MAINBINARYNAME}.exe" --repair'
     nsExec::Exec 'schtasks.exe /Delete /TN "Kysland" /F'
   ${EndIf}

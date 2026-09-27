@@ -1,5 +1,5 @@
-// Vérifications rapides (CI et local) : syntaxe des scripts de l'interface, caractères de
-// contrôle invisibles (un \b devenu "retour arrière" casse une regex sans erreur visible).
+// Quick checks (CI and local): syntax of the page scripts, invisible control characters
+// (a \b turned into a backspace breaks a regex without any visible error).
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
@@ -22,8 +22,8 @@ const scanned = [...files, ...fs.readdirSync(path.join(root, 'src-tauri', 'src')
 for (const file of scanned) {
   if (/[\x00-\x08\x0e-\x1f]/.test(fs.readFileSync(file, 'utf8'))) {
     failed++;
-    console.error(`✗ ${path.relative(root, file)} : caractère de contrôle invisible`);
+    console.error(`✗ ${path.relative(root, file)}: invisible control character`);
   }
 }
 if (failed) process.exit(1);
-console.log(`✓ ${scanned.length} fichiers vérifiés`);
+console.log(`✓ ${scanned.length} files checked`);

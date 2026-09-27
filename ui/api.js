@@ -1,6 +1,6 @@
 'use strict';
-// Pont entre l'interface et le moteur Rust (commandes et événements Tauri).
-// Même API que l'ancien preload d'Electron : bar.js et island.js n'ont presque rien à changer.
+// Bridge between the page and the Rust engine (Tauri commands and events).
+// Same API as the old Electron preload, so bar.js and island.js barely had to change.
 (() => {
   const { invoke, convertFileSrc } = window.__TAURI__.core;
   const { listen } = window.__TAURI__.event;
@@ -14,7 +14,7 @@
     action: (name, arg, extra) => invoke('action', { name, arg: arg ?? null, extra: extra ?? null }),
     setHitRects: (rects) => invoke('set_hit_rects', { rects }),
     fileUrl: (file) => convertFileSrc(file),
-    // Les événements destinés à une seule fenêtre portent son label ("pointer-left").
+    // Events meant for a single window carry its label ("pointer-left").
     on: (channel, cb) => listen(channel, (e) => {
       const p = e.payload;
       if (p && typeof p === 'object' && p.label && p.label !== label) return;

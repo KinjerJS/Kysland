@@ -1,5 +1,5 @@
-//! Volume via Core Audio : notifications instantanées, commandes, et interception des touches
-//! volume (Kysland règle le volume lui-même, donc la pastille de volume Windows ne s'affiche plus).
+//! Volume through Core Audio: instant change notifications, commands, and volume key handling
+//! (Kysland sets the volume itself, so the Windows volume flyout no longer shows up).
 use crate::hub;
 use serde_json::json;
 use std::cell::RefCell;
@@ -62,10 +62,10 @@ static COMMANDS: Mutex<Option<Sender<Command>>> = Mutex::new(None);
 
 pub enum Command { Set(u32), Up(u32), Down(u32), ToggleMute }
 
-/// Démarre (une seule fois) le suivi du volume et le fil des commandes.
+/// Starts (once) the volume watcher and the command thread.
 pub fn start() {
     STARTED.call_once(|| {
-        // Notifications : réabonnement quand la sortie audio par défaut change.
+        // Notifications: re-subscribe when the default output device changes.
         std::thread::spawn(|| {
             com_init();
             let cb: IAudioEndpointVolumeCallback = VolumeCallback.into();
@@ -87,7 +87,7 @@ pub fn start() {
                 std::thread::sleep(Duration::from_secs(2));
             }
         });
-        // Commandes (molette, slider, clic "muet").
+        // Commands (mouse wheel, slider, mute click).
         let (tx, rx) = channel::<Command>();
         *COMMANDS.lock().unwrap() = Some(tx);
         std::thread::spawn(move || {
@@ -121,7 +121,7 @@ pub fn command(cmd: Command) {
     if let Some(tx) = COMMANDS.lock().unwrap().as_ref() { let _ = tx.send(cmd); }
 }
 
-// --- Interception des touches volume ---------------------------------------------------------
+// --- Volume keys ----------------------------------------------------------------------------
 
 static HOOK_ENABLED: AtomicBool = AtomicBool::new(false);
 static HOOK_STEP: AtomicU32 = AtomicU32::new(2);
@@ -148,13 +148,13 @@ unsafe extern "system" fn keyboard_proc(code: i32, w: WPARAM, l: LPARAM) -> LRES
                     }
                 });
             }
-            return LRESULT(1); // touche consommée : Windows n'affiche pas sa pastille
+            return LRESULT(1); // key swallowed: Windows won't show its flyout
         }
     }
     unsafe { CallNextHookEx(None, code, w, l) }
 }
 
-/// `Some(pas)` : touches volume gérées par Kysland ; `None` : rendues à Windows.
+/// `Some(step)`: volume keys handled by Kysland; `None`: handed back to Windows.
 pub fn set_key_hook(step: Option<u32>) {
     HOOK_ENABLED.store(step.is_some(), Ordering::Relaxed);
     if let Some(s) = step { HOOK_STEP.store(s, Ordering::Relaxed); }

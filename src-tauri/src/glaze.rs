@@ -1,4 +1,4 @@
-//! Client IPC GlazeWM (tiling façon Hyprland) : WebSocket sur ws://localhost:6123.
+//! GlazeWM IPC client (Hyprland-style tiling): WebSocket on ws://localhost:6123.
 use crate::hub;
 use serde_json::{json, Value};
 use std::io::ErrorKind;
@@ -49,7 +49,7 @@ pub fn start(epoch: u64) {
                         continue;
                     }
                     if v["messageType"] != "client_response" || v["success"] != true {
-                        // Anciennes versions : "all" n'est pas reconnu, abonnement événement par événement.
+                        // Older versions don't accept "all": subscribe to each event.
                         if v["clientMessage"] == "sub -e all" {
                             let _ = ws.send(Message::text("sub -e focus_changed workspace_activated workspace_deactivated workspace_updated window_managed window_unmanaged monitor_added monitor_removed binding_modes_changed"));
                         }

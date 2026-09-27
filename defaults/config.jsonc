@@ -1,54 +1,55 @@
 // ─────────────────────────────────────────────────────────────────────────────
-//  Kysland — config (JSON avec commentaires, rechargée à chaque sauvegarde)
-//  Dossier : %USERPROFILE%\.config\kysland\   (config.jsonc, style.css)
+//  Kysland — config (JSON with comments, reloaded on every save)
+//  Folder: %USERPROFILE%\.config\kysland\   (config.jsonc, style.css)
 // ─────────────────────────────────────────────────────────────────────────────
 {
+  "language": "auto",           // "auto" (Windows display language) | "en" | "fr"
   "position": "top",            // "top" | "bottom"
-  "height": 32,                 // hauteur réservée en haut de l'écran (= hauteur de l'encoche)
-  "reserve": false,              // true : les fenêtres maximisées s'arrêtent sous l'encoche
-                                // false : l'encoche flotte par-dessus les fenêtres (façon iPhone)
-  "monitors": "primary",        // "all" | "primary" | [0, 1] (écrans triés de gauche à droite)
-  "hide-on-fullscreen": true,    // cache l'encoche quand une appli est en plein écran (jeu, vidéo, F11)
-  "wallpaper": null,            // ex: "~/Pictures/wall.jpg"
+  "height": 32,                 // height reserved at the top of the screen (= notch height)
+  "reserve": false,              // true: maximized windows stop below the notch
+                                // false: the notch floats above windows (iPhone style)
+  "monitors": "primary",        // "all" | "primary" | [0, 1] (screens sorted left to right)
+  "hide-on-fullscreen": true,    // hides the notch while an app is fullscreen (game, video, F11)
+  "wallpaper": null,            // e.g. "~/Pictures/wall.jpg"
 
-  // Juste l'encoche. Pour une barre complète façon Waybar, ajoute des modules
-  // à gauche / à droite (voir la liste plus bas).
+  // Just the notch. For a full Waybar-style bar, add modules
+  // on the left / right (see the list below).
   "modules-left": [],
   "modules-center": ["island"],
   "modules-right": [],
 
-  // ── L'encoche ──────────────────────────────────────────────────────────────
-  //  Au repos : heure + date (+ pochette et égaliseur si de la musique joue)
-  //  Survol : s'agrandit → musique (contrôles, progression cliquable), CPU, RAM, réseau, volume
-  //  Molette : volume. Clic droit : menu Kysland (aussi Ctrl+Alt+W).
+  // ── The notch ──────────────────────────────────────────────────────────────
+  //  At rest: time + date (+ album art and equalizer while music plays)
+  //  Hover: expands → music (controls, clickable progress), CPU, RAM, network, volume
+  //  Mouse wheel: volume. Right click: Kysland menu (also Ctrl+Alt+W).
   "island": {
-    "time-format": "HH:mm",              // formats dayjs : https://day.js.org/docs/en/display/format
+    "time-format": "HH:mm",              // dayjs formats: https://day.js.org/docs/en/display/format
     "date-format": "ddd D MMM",
     "date-long-format": "dddd D MMMM",
     "expand-on-hover": true,
-    "hover-delay": 120,                  // ms avant de s'agrandir
-    "collapse-delay": 350,               // ms avant de se refermer
-    "media-linger": 15,                  // secondes pendant lesquelles un morceau en pause reste affiché
-    "hide-windows-osd": true,           // les touches volume ne montrent plus la pastille Windows (Kysland s'en charge)
-    "volume-step": 2,                   // % par appui sur une touche volume
-    "notifications": true,              // notifications Windows affichées dans l'encoche
-    "notification-duration": 6,         // secondes (survol : pause, clic : suivante, clic droit : tout effacer)
-    "claude": false,                     // utilisation du forfait Claude (session 5 h / semaine), si Claude Code est installé
-    "kemhome": "http://localhost:8080",  // agent KemHome (extension Chrome, pochettes) ; false pour désactiver
-    // Événements qui font s'étirer l'encoche quelques secondes :
+    "hover-delay": 120,                  // ms before expanding
+    "collapse-delay": 350,               // ms before collapsing
+    "media-linger": 15,                  // seconds a paused track stays visible
+    "hide-windows-osd": true,           // volume keys no longer show the Windows flyout (Kysland handles them)
+    "volume-step": 2,                   // % per volume key press
+    "notifications": true,              // Windows notifications shown in the notch
+    "notification-duration": 6,         // seconds (hover: pause, click: next, right click: clear all)
+    "claude": false,                     // Claude plan usage (5 h session / week), if Claude Code is installed
+    "kemhome": "http://localhost:8080",  // KemHome agent (Chrome extension, album art); false to disable
+    // Events that stretch the notch for a few seconds:
     "transients": { "volume": true, "media": true, "battery": true, "network": true, "workspace": true }
   },
 
-  // ── Modules pour une barre complète (optionnels) ───────────────────────────
+  // ── Modules for a full bar (optional) ──────────────────────────────────────
   //  launcher, workspaces (GlazeWM), mode, window, clock, cpu, memory, disk,
-  //  network, audio, battery, media, power, custom/<nom>
-  //  Exemple :
+  //  network, audio, battery, media, power, custom/<name>
+  //  Example:
   //    "modules-left": ["launcher", "workspaces", "window"],
   //    "modules-right": ["network", "cpu", "memory", "audio", "power"],
   //
-  //  Formats : {clé}, {i:icone-lucide} (https://lucide.dev/icons), {icon}
-  //  Actions souris : "commande shell" ou "@open <url>", "@audio up", "@media next",
-  //  "@power lock", "@glaze <commande>", "@start-menu", "@toggle", "@reload"
+  //  Formats: {key}, {i:lucide-icon} (https://lucide.dev/icons), {icon}
+  //  Mouse actions: "shell command" or "@open <url>", "@audio up", "@media next",
+  //  "@power lock", "@glaze <command>", "@start-menu", "@toggle", "@reload"
 
   "workspaces": {
     "persistent-workspaces": ["1", "2", "3", "4", "5"]

@@ -1,24 +1,24 @@
 /*
- * style.css — le look de ta barre. Sauvegarde = rechargement instantané.
+ * style.css — the look of your bar. Save = instant reload.
  *
- * Couleurs disponibles sous forme de variables (à redéfinir dans :root pour les changer) :
+ * Colors available as variables (redefine them in :root to change them):
  *   --bg --bg-alt --fg --fg-dim --accent --accent-2 --red --yellow --green --border
- * Chaque module a une classe = son type (.clock, .cpu, .workspaces...) et un id = son nom
- * (#custom-weather pour "custom/weather"). États : .warning .critical .muted .charging ...
- * Les fenêtres de chaque écran ont body.monitor-0, body.monitor-1... et body.primary.
+ * Each module has a class = its type (.clock, .cpu, .workspaces...) and an id = its name
+ * (#custom-weather for "custom/weather"). States: .warning .critical .muted .charging ...
+ * Each screen's window has body.monitor-0, body.monitor-1... and body.primary.
  *
- * Astuce : clic droit sur l'icône Kysland (zone de notification) → "Inspecteur CSS"
- * pour explorer la barre avec les DevTools de Chromium.
+ * Tip: right click the island → "CSS inspector" to explore the bar with the WebView
+ * DevTools.
  */
 
 :root {
   --font: 'JetBrainsMono Nerd Font', 'Cascadia Code', 'Segoe UI Variable Text', sans-serif;
   --font-size: 13px;
   --radius: 12px;
-  --gap: 8px;         /* écart avec le bord de l'écran, façon "gaps_out" de Hyprland */
+  --gap: 8px;         /* gap with the screen edge, like Hyprland's "gaps_out" */
 }
 
-/* --- Style "îlots flottants" ----------------------------------------------- */
+/* --- "Floating islands" style ---------------------------------------------- */
 #bar {
   padding: var(--gap) calc(var(--gap) + 2px) 0;
 }

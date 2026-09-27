@@ -1,4 +1,4 @@
-/* Encoche "Dynamic Island" — structure et look par défaut (surchargeables dans style.css). */
+/* "Dynamic Island" notch — structure and default look (can be overridden in style.css). */
 :root {
   --notch-bg: #000;
   --notch-fg: #f5f5f7;
@@ -8,7 +8,7 @@
   --notch-h: 32px;
   --notch-radius: 14px;
   --notch-radius-lg: 28px;
-  --notch-ear: 10px;          /* congés concaves qui raccordent l'encoche au bord de l'écran */
+  --notch-ear: 10px;          /* concave fillets joining the notch to the screen edge */
   --spring: cubic-bezier(.3, 1.35, .5, 1);
   --tint: var(--accent);
 }
@@ -69,7 +69,7 @@ body.pos-bottom .notch-view { top: auto; bottom: 0; transform-origin: bottom cen
 .notch-view.shown { opacity: 1; scale: 1; filter: none; transition-delay: .08s; }
 .notch-view.leaving { opacity: 0; scale: .94; filter: blur(4px); transition-delay: 0s; }
 
-/* Transitions à éléments partagés : les vues ne zooment pas, les éléments voyagent. */
+/* Shared-element transitions: views don't zoom, elements travel. */
 .notch-view.morphing { scale: 1; }
 .notch-fly {
   position: fixed;
@@ -90,7 +90,7 @@ body.pos-bottom .notch-view { top: auto; bottom: 0; transform-origin: bottom cen
 .notch button:hover { scale: 1.12; }
 .notch button:active { scale: .9; }
 
-/* Pochettes */
+/* Album art */
 .n-cover { display: block; flex: none; object-fit: cover; background: var(--notch-soft); }
 .n-cover.placeholder { display: grid; place-items: center; color: var(--notch-dim); }
 .n-cover.sm { width: 20px; height: 20px; border-radius: 5px; }
@@ -99,8 +99,8 @@ body.pos-bottom .notch-view { top: auto; bottom: 0; transform-origin: bottom cen
 .n-cover.lg { width: 60px; height: 60px; border-radius: 14px; box-shadow: 0 6px 18px rgba(0, 0, 0, .4); }
 .n-cover.lg .icon { font-size: 24px; }
 
-/* Bloc pochette + titre : ancien et nouveau morceau superposés le temps du glissement,
-   rognés aux bords de l'encoche (la zone de rognage déborde sur les marges intérieures). */
+/* Art + title block: old and new track stacked during the slide, clipped at the notch
+   edges (the clipping area extends over the inner padding). */
 .n-slot {
   display: grid;
   flex: 1;
@@ -114,7 +114,7 @@ body.pos-bottom .notch-view { top: auto; bottom: 0; transform-origin: bottom cen
 .n-info { grid-area: 1 / 1; display: flex; align-items: center; gap: 14px; min-width: 0; }
 .n-wide .n-info { gap: 12px; }
 
-/* Égaliseur */
+/* Equalizer */
 .eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; flex: none; }
 .eq i { width: 3px; height: 30%; border-radius: 2px; background: var(--tint); animation: eq-bounce .8s ease-in-out infinite alternate; }
 .eq i:nth-child(2) { animation-duration: .55s; animation-delay: -.2s; }
@@ -123,7 +123,7 @@ body.pos-bottom .notch-view { top: auto; bottom: 0; transform-origin: bottom cen
 .eq.paused i { animation: none; height: 22%; opacity: .6; }
 @keyframes eq-bounce { from { height: 18%; } to { height: 100%; } }
 
-/* Compact : heure + date */
+/* Compact: time + date */
 .n-compact {
   height: var(--notch-h);
   min-width: 160px;
@@ -138,7 +138,7 @@ body.pos-bottom .notch-view { top: auto; bottom: 0; transform-origin: bottom cen
 .n-time { font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: .2px; }
 .n-date { color: var(--notch-dim); }
 
-/* Événements (volume, morceau, charge...) */
+/* Events (volume, track, charging...) */
 .n-wide {
   height: calc(var(--notch-h) + 6px);
   min-width: 250px;
@@ -157,7 +157,7 @@ body.pos-bottom .notch-view { top: auto; bottom: 0; transform-origin: bottom cen
 .n-good .icon { color: var(--green); }
 .n-bad .icon, .n-bad .n-label { color: var(--red); }
 
-/* Notifications Windows */
+/* Windows notifications */
 .notch[data-size=card] { border-radius: 0 0 24px 24px; box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45); }
 body.pos-bottom .notch[data-size=card] { border-radius: 24px 24px 0 0; }
 .n-notif {
@@ -194,7 +194,7 @@ body.pos-bottom .notch[data-size=card] { border-radius: 24px 24px 0 0; }
   overflow: hidden;
 }
 
-/* Non lues : point sur l'encoche, badge sur la cloche */
+/* Unread: dot on the notch, badge on the bell */
 .n-dot { width: 6px; height: 6px; flex: none; border-radius: 50%; background: #ff453a; }
 .n-head-right { display: flex; align-items: center; gap: 14px; }
 .n-bell { position: relative; color: var(--notch-dim); }
@@ -218,7 +218,7 @@ body.pos-bottom .notch[data-size=card] { border-radius: 24px 24px 0 0; }
 }
 .n-badge[hidden] { display: none; }
 
-/* Historique des notifications */
+/* Notification history */
 .n-history-view { gap: 10px; }
 .n-hist-head { display: flex; align-items: center; gap: 10px; }
 .n-hist-title { flex: 1; font-weight: 650; font-size: 15px; }
@@ -255,7 +255,7 @@ body.pos-bottom .notch[data-size=card] { border-radius: 24px 24px 0 0; }
 .n-clear:hover { color: #ff453a; }
 .n-clear .icon { font-size: 16px; }
 
-/* ✕ de fermeture / suppression, visible au survol */
+/* ✕ close / delete button, visible on hover */
 .n-notif { position: relative; }
 .n-close {
   position: absolute;
@@ -277,7 +277,7 @@ body.pos-bottom .notch[data-size=card] { border-radius: 24px 24px 0 0; }
 .n-hist-item .n-notif-icon { width: 32px; height: 32px; margin-top: 2px; border-radius: 9px; }
 .n-hist-item .n-notif-icon.letter { font-size: 14px; }
 
-/* Utilisation Claude (session 5 h / semaine) */
+/* Claude usage (5 h session / week) */
 :root { --claude: #d97757; }
 .n-claude {
   display: flex;
@@ -311,11 +311,11 @@ body.pos-bottom .notch[data-size=card] { border-radius: 24px 24px 0 0; }
 .n-claude-reset { font-size: 10.5px; color: var(--notch-dim); }
 .n-claude-alert .icon { color: var(--claude); }
 
-/* Date cliquable → calendrier */
+/* Clickable date → calendar */
 .n-date, .n-date-long { cursor: pointer; transition: color .15s; }
 .n-date:hover, .n-date-long:hover { color: var(--notch-fg); }
 
-/* Calendrier */
+/* Calendar */
 .n-calendar-view { gap: 8px; }
 .n-cal-today, .n-cal-prev, .n-cal-next { color: var(--notch-dim); }
 .n-cal-today:hover, .n-cal-prev:hover, .n-cal-next:hover { color: var(--notch-fg); }
@@ -344,7 +344,7 @@ body.pos-bottom .notch[data-size=card] { border-radius: 24px 24px 0 0; }
 .n-cal-day.other { color: rgba(255, 255, 255, 0.2); }
 .n-cal-day.today { background: var(--tint); color: #000; font-weight: 700; }
 
-/* Vue agrandie */
+/* Expanded view */
 .n-expanded {
   width: 420px;
   box-sizing: border-box;
@@ -377,7 +377,7 @@ body.pos-bottom .notch[data-size=card] { border-radius: 24px 24px 0 0; }
 
 .n-empty { color: var(--notch-dim); text-align: center; padding: 4px 0; }
 
-/* Cases de largeur égale : leurs valeurs changent sans faire bouger la mise en page. */
+/* Equal-width chips: their values change without shifting the layout. */
 .n-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: -6px; }
 .n-stats .n-chip { justify-content: center; min-width: 0; overflow: hidden; }
 .n-chip {

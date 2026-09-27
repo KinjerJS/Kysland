@@ -1,4 +1,4 @@
-//! Petits outils partagés.
+//! Shared helpers.
 use base64::Engine;
 use std::os::windows::process::CommandExt;
 use std::process::{Command, Stdio};
@@ -14,7 +14,7 @@ pub fn data_url(bytes: &[u8], mime: &str) -> String {
     format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes))
 }
 
-/// Type d'image d'après ses premiers octets (les pochettes arrivent sans en-tête fiable).
+/// Image type from its first bytes (album art comes without a reliable content type).
 pub fn image_mime(bytes: &[u8]) -> &'static str {
     match bytes {
         [0xFF, 0xD8, ..] => "image/jpeg",
@@ -35,19 +35,19 @@ pub fn png_data_url(rgba: &[u8], w: u32, h: u32) -> String {
     data_url(&out, "image/png")
 }
 
-/// Commande sans fenêtre de console.
+/// Command without a console window.
 pub fn hidden(program: &str) -> Command {
     let mut c = Command::new(program);
     c.creation_flags(CREATE_NO_WINDOW);
     c
 }
 
-/// Commande shell (cmd.exe) lancée sans attendre (actions "on-click" de la config).
+/// Shell command (cmd.exe), fire and forget ("on-click" actions of the config).
 pub fn spawn_shell(cmd: &str) {
     let _ = hidden("cmd.exe").args(["/C", cmd]).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn();
 }
 
-/// Commande shell dont on récupère la sortie (modules custom/*).
+/// Shell command whose output is returned (custom/* modules).
 pub fn run_shell(cmd: &str) -> (bool, String) {
     match hidden("cmd.exe").args(["/C", cmd]).stdin(Stdio::null()).output() {
         Ok(o) => (o.status.success(), String::from_utf8_lossy(&o.stdout).trim().to_owned()),

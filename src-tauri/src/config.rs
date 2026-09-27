@@ -1,4 +1,5 @@
-//! Configuration utilisateur (~/.config/kysland) : JSON avec commentaires, rechargé à chaud.
+//! User configuration (~/.config/kysland): JSON with comments, hot-reloaded.
+use crate::i18n::tf;
 use regex::Regex;
 use serde_json::{json, Value};
 use std::fs;
@@ -15,7 +16,7 @@ pub fn config_dir() -> PathBuf {
 pub fn config_file() -> PathBuf { config_dir().join("config.jsonc") }
 pub fn style_file() -> PathBuf { config_dir().join("style.css") }
 
-/// Crée la config au premier lancement : reprend celle de WinCustom si elle existe, sinon les défauts.
+/// Creates the config on first launch: imports WinCustom's if it exists, defaults otherwise.
 pub fn ensure(defaults: &Path) {
     let dir = config_dir();
     let _ = fs::create_dir_all(&dir);
@@ -31,7 +32,7 @@ pub fn ensure(defaults: &Path) {
     }
 }
 
-/// Retire commentaires et virgules finales pour obtenir du JSON strict.
+/// Strips comments and trailing commas to get strict JSON.
 fn strip_jsonc(text: &str) -> String {
     let text = text.trim_start_matches('\u{feff}');
     let mut out = String::with_capacity(text.len());
@@ -59,12 +60,8 @@ fn strip_jsonc(text: &str) -> String {
     Regex::new(r",(\s*[}\]])").unwrap().replace_all(&out, "$1").into_owned()
 }
 
-fn line_of(text: &str, err: &serde_json::Error) -> String {
-    let _ = text;
-    format!("ligne {}, colonne {}", err.line(), err.column())
-}
-
 const BASE: &str = r#"{
+  "language": "auto",
   "position": "top", "height": 32, "reserve": false, "monitors": "primary",
   "hide-on-fullscreen": true,
   "wallpaper": null, "popup-space": 420,
@@ -72,9 +69,11 @@ const BASE: &str = r#"{
 }"#;
 
 pub fn load() -> Result<Value, String> {
-    let text = fs::read_to_string(config_file()).map_err(|e| format!("config.jsonc illisible : {e}"))?;
+    let text = fs::read_to_string(config_file()).map_err(|e| tf("msg.config_unreadable", &[("error", &e.to_string())]))?;
     let clean = strip_jsonc(&text);
-    let user: Value = serde_json::from_str(&clean).map_err(|e| format!("config.jsonc : {} ({})", e, line_of(&clean, &e)))?;
+    let user: Value = serde_json::from_str(&clean).map_err(|e| {
+        tf("msg.config_invalid", &[("error", &e.to_string()), ("line", &e.line().to_string()), ("column", &e.column().to_string())])
+    })?;
     let mut cfg: Value = serde_json::from_str(BASE).unwrap();
     if let (Some(base), Some(user)) = (cfg.as_object_mut(), user.as_object()) {
         for (k, v) in user { base.insert(k.clone(), v.clone()); }
@@ -82,17 +81,17 @@ pub fn load() -> Result<Value, String> {
     Ok(cfg)
 }
 
-/// Modifie une option booléenne ou texte en préservant commentaires et mise en forme.
-/// `path` : ["hide-on-fullscreen"] ou ["island", "claude"]. Ajoute la clé si elle manque.
+/// Changes a simple option while keeping comments and formatting.
+/// `path`: ["hide-on-fullscreen"] or ["island", "claude"]. Adds the key if it's missing.
 pub fn set_value(path: &[&str], value: Value) -> Result<(), String> {
     let file = config_file();
     let text = fs::read_to_string(&file).map_err(|e| e.to_string())?;
-    let key = path.last().ok_or("chemin vide")?;
+    let key = path.last().ok_or("empty path")?;
     let rendered = serde_json::to_string(&value).unwrap();
-    // Valeur simple (true/false/nombre/"texte"/null) de la clé, dans la section voulue.
+    // Simple value (true / false / number / "text" / null) of the key, inside the right section.
     let scope_start = if path.len() > 1 {
         let re = Regex::new(&format!(r#""{}"\s*:\s*\{{"#, regex::escape(path[0]))).unwrap();
-        re.find(&text).map(|m| m.end()).ok_or("section introuvable")?
+        re.find(&text).map(|m| m.end()).ok_or("section not found")?
     } else {
         0
     };
@@ -102,14 +101,18 @@ pub fn set_value(path: &[&str], value: Value) -> Result<(), String> {
         let (a, b) = (scope_start + m.start(), scope_start + m.end());
         format!("{}{}{}", &text[..a], rendered, &text[b..])
     } else {
-        // Clé absente : insérée en tête de la section (ou de l'objet racine).
-        let at = if path.len() > 1 { scope_start } else { text.find('{').ok_or("objet racine introuvable")? + 1 };
-        format!("{}\n    \"{}\": {},{}", &text[..at], key, rendered, &text[at..])
+        // Missing key: inserted at the top of the section (or of the root object).
+        let (at, indent) = if path.len() > 1 {
+            (scope_start, "    ")
+        } else {
+            (text.find('{').ok_or("root object not found")? + 1, "  ")
+        };
+        format!("{}\n{indent}\"{}\": {},{}", &text[..at], key, rendered, &text[at..])
     };
     fs::write(&file, new_text).map_err(|e| e.to_string())
 }
 
-/// Nom du module "island" dans la config (island, island#2...), s'il est utilisé.
+/// Name of the island module in the config (island, island#2...), if it is used.
 pub fn island_name(cfg: &Value) -> Option<String> {
     all_modules(cfg).into_iter().find(|m| m.starts_with("island"))
 }

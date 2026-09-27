@@ -1,7 +1,8 @@
 'use strict';
-// Encoche "Dynamic Island" collée au bord de l'écran : heure + date au repos,
-// s'agrandit au survol (musique, système), s'étire brièvement pour les événements.
+// "Dynamic Island" notch stuck to the screen edge: time + date at rest, expands on hover
+// (music, system), stretches briefly for events.
 (() => {
+  const { t } = window.i18n;
   const icon = (n) => `<i class="icon icon-${n}"></i>`;
   const eq = (playing) => `<span class="eq${playing ? '' : ' paused'}" data-morph="eq"><i></i><i></i><i></i><i></i></span>`;
   const appName = (app = '') => app.split('!').pop().replace(/\.exe$/i, '');
@@ -18,7 +19,7 @@
       : `<span class="n-cover ${size} placeholder" data-morph="cover">${icon('music')}</span>`;
   }
 
-  // Couleur dominante (saturée) de la pochette → teinte de l'égaliseur et de la progression.
+  // Dominant (saturated) color of the album art → tint of the equalizer and the progress bar.
   function tintFrom(src) {
     return new Promise((resolve) => {
       const img = new Image();
@@ -55,7 +56,7 @@
     return [h * 60, s, l];
   }
 
-  // --- Moteur de morphing ------------------------------------------------------------
+  // --- Morphing engine ---------------------------------------------------------------
   class Notch {
     constructor() {
       this.el = document.createElement('div');
@@ -64,7 +65,7 @@
       this.inner.className = 'notch-inner';
       this.el.appendChild(this.inner);
       document.body.appendChild(this.el);
-      // Calque des éléments "en vol" pendant les transitions (hors de l'encoche, qui rogne son contenu).
+      // Layer for elements "in flight" during transitions (outside the notch, which clips its content).
       this.flyLayer = document.createElement('div');
       this.flyLayer.className = 'notch-fly';
       document.body.appendChild(this.flyLayer);
@@ -73,14 +74,14 @@
       this.key = null;
     }
 
-    // view : { key, size, html, mount(el), update(el) }
+    // view: { key, size, html, mount(el), update(el) }
     show(view) {
       if (view.key === this.key && this.current) {
         view.update?.(this.current);
       } else {
         this.finishFlights();
         const old = this.current;
-        // Positions de départ des éléments partagés, avant que l'ancienne vue ne s'efface.
+        // Start positions of the shared elements, before the old view fades out.
         const from = new Map();
         old?.querySelectorAll('[data-morph]').forEach((el) => from.set(el.dataset.morph, el));
         const fromRects = new Map([...from].map(([k, el]) => [k, el.getBoundingClientRect()]));
@@ -91,7 +92,7 @@
         const pairs = [...next.querySelectorAll('[data-morph]')]
           .filter((el) => from.has(el.dataset.morph))
           .map((el) => [from.get(el.dataset.morph), el]);
-        // Avec des éléments partagés, pas d'effet de zoom sur les vues : positions exactes.
+        // With shared elements, no zoom effect on the views: exact positions.
         if (pairs.length) { next.classList.add('morphing'); old.classList.add('morphing'); }
         this.inner.appendChild(next);
         view.mount?.(next);
@@ -110,8 +111,8 @@
       this.resize();
     }
 
-    // Transition à élément partagé : une copie de l'ancien élément et une du nouveau
-    // parcourent le trajet ensemble en fondu enchaîné ; les originaux restent cachés pendant le vol.
+    // Shared-element transition: a copy of the old element and one of the new one travel
+    // together while cross-fading; the originals stay hidden during the flight.
     fly(oldEl, from, newEl) {
       const to = newEl.getBoundingClientRect();
       if (!from.width || !to.width) return;
@@ -131,7 +132,7 @@
       oldEl.style.visibility = 'hidden';
       newEl.style.visibility = 'hidden';
       const dx = from.left - to.left, dy = from.top - to.top;
-      const s = from.height / to.height; // échelle uniforme : le texte ne se déforme pas
+      const s = from.height / to.height; // uniform scale: text isn't distorted
       const timing = { duration: 520, easing: 'cubic-bezier(.3, 1.2, .5, 1)', fill: 'both' };
       const anims = [
         b.animate([{ transform: `translate(${dx}px, ${dy}px) scale(${s})` }, { transform: 'none' }], timing),
@@ -147,7 +148,7 @@
       }).catch(() => {});
     }
 
-    // Nouvelle transition avant la fin de la précédente : on termine l'ancienne net.
+    // New transition before the previous one ended: finish the old one instantly.
     finishFlights() {
       for (const f of this.flights) { f.anims.forEach((an) => an.cancel()); f.done(); }
       this.flights = [];
@@ -170,16 +171,16 @@
       'expand-on-hover': true,
       'hover-delay': 120,
       'collapse-delay': 350,
-      'media-linger': 15, // secondes d'affichage après une pause
+      'media-linger': 15, // seconds shown after a pause
       'scroll-step': 5,
-      notifications: true,           // notifications Windows dans l'encoche
-      claude: false,                 // utilisation du forfait Claude (si Claude Code est installé)
-      'notification-duration': 6,    // secondes
+      notifications: true,           // Windows notifications in the island
+      claude: false,                 // Claude plan usage (if Claude Code is installed)
+      'notification-duration': 6,    // seconds
       transients: { volume: true, media: true, battery: true, network: true, workspace: true },
     },
 
     init(m) {
-      m.el.remove(); // l'encoche vit hors de la barre, directement collée au bord
+      m.el.remove(); // the island lives outside the bar, stuck to the edge
       if (m.conf.monitor === 'primary' && !state.monitor.primary) return;
       const S = (m.island = {
         notch: new Notch(), expanded: false, transient: null, transientTimer: 0,
@@ -191,7 +192,7 @@
       if (m.conf['expand-on-hover']) {
         notch.addEventListener('mouseenter', () => {
           clearTimeout(leaveT);
-          if (S.notif) return clearTimeout(S.notifTimer); // on lit la notification : pause
+          if (S.notif) return clearTimeout(S.notifTimer); // reading the notification: pause
           enterT = setTimeout(() => setExpanded(m, true), m.conf['hover-delay']);
         });
         notch.addEventListener('mouseleave', () => {
@@ -202,22 +203,22 @@
       }
       notch.addEventListener('click', (e) => {
         if (S.notif) {
-          // Clic : ouvre l'appli (et retire la notification) ; ✕ : ferme seulement.
+          // Click: opens the app (and removes the notification); ✕: just closes.
           if (!e.target.closest('.n-close')) openNotif(S.notif.data);
           return showNextNotif(m);
         }
-        // Clic sur la date (encoche compacte) : directement le calendrier.
+        // Click on the date (compact notch): straight to the calendar.
         if (e.target.closest('.n-date')) return openCalendar(m);
         if (!S.expanded && !e.target.closest('button, input')) setExpanded(m, true);
       });
       notch.addEventListener('contextmenu', (e) => {
         e.preventDefault();
-        if (S.notif) { S.queue = []; return showNextNotif(m); } // clic droit : tout effacer
+        if (S.notif) { S.queue = []; return showNextNotif(m); } // right click: clear all
         setExpanded(m, false);
         api.action('menu');
       });
       notch.addEventListener('wheel', (e) => {
-        if (e.target.closest('input, .n-history')) return; // l'historique défile, pas le volume
+        if (e.target.closest('input, .n-history')) return; // the history scrolls, not the volume
         api.action('audio', e.deltaY < 0 ? 'up' : 'down', m.conf['scroll-step']);
       }, { passive: true });
       setInterval(() => render(m), 500);
@@ -280,11 +281,11 @@
     if (S.expanded === v) return;
     S.expanded = v;
     if (!v) S.page = 'main';
-    if (!v && !S.notif && S.queue.length) return showNextNotif(m); // notifications arrivées pendant l'agrandissement
+    if (!v && !S.notif && S.queue.length) return showNextNotif(m); // notifications that arrived while expanded
     render(m);
   }
 
-  // --- File de notifications : une à la fois, prioritaire sur les autres événements ---
+  // --- Notification queue: one at a time, takes priority over other events ---
   function showNextNotif(m) {
     const S = m.island;
     clearTimeout(S.notifTimer);
@@ -297,13 +298,13 @@
   function startNotifTimer(m, ms) {
     const S = m.island;
     clearTimeout(S.notifTimer);
-    // Des notifications attendent : on accélère un peu le défilement.
+    // Notifications are waiting: go through them a bit faster.
     S.notifTimer = setTimeout(() => showNextNotif(m), S.queue.length ? Math.min(ms, 3500) : ms);
   }
 
   function pushTransient(m, view, ms) {
     const S = m.island;
-    if (S.expanded) return; // la vue agrandie montre déjà tout
+    if (S.expanded) return; // the expanded view already shows everything
     S.transient = view;
     clearTimeout(S.transientTimer);
     S.transientTimer = setTimeout(() => { S.transient = null; render(m); }, ms);
@@ -337,7 +338,7 @@
     S.notch.show(S.expanded ? expandedView(m) : S.notif || S.transient || compactView(m));
   }
 
-  // --- Vues ---------------------------------------------------------------------------------
+  // --- Views --------------------------------------------------------------------------------
   function compactView(m) {
     const md = activeMedia(m);
     const now = dayjs();
@@ -367,7 +368,7 @@
       size: 'expanded',
       html: `<div class="n-expanded">
         <div class="n-head"><span class="n-date-long" data-morph="date"></span><div class="n-head-right">
-          <button class="n-bell" title="Notifications">${icon('bell')}<span class="n-badge"></span></button>
+          <button class="n-bell" title="${t('island.notifications')}">${icon('bell')}<span class="n-badge"></span></button>
           <span class="n-time-big" data-morph="time"></span></div></div>
         ${md ? `<div class="n-media">
           <div class="n-slot">${trackInfo(md, 'lg', true)}</div>
@@ -378,7 +379,7 @@
           <button data-media="prev">${icon('skip-back')}</button>
           <button data-media="play-pause" class="n-play"><i class="icon"></i></button>
           <button data-media="next">${icon('skip-forward')}</button>
-        </div>` : '<div class="n-empty">Aucune lecture en cours</div>'}
+        </div>` : `<div class="n-empty">${t('island.nothing_playing')}</div>`}
         <div class="n-stats">
           <span class="n-chip" data-stat="cpu">${icon('cpu')}<b></b></span>
           <span class="n-chip" data-stat="memory">${icon('memory-stick')}<b></b></span>
@@ -434,7 +435,7 @@
           el.querySelector('.n-pos').textContent = fmtDuration(pos);
           el.querySelector('.n-dur').textContent = cur.duration ? fmtDuration(cur.duration) : '';
           el.querySelector('.n-fill').style.width = `${cur.duration ? (pos / cur.duration) * 100 : 0}%`;
-          // Direct / flux sans durée : pas de barre de progression.
+          // Live / stream without a duration: no progress bar.
           el.querySelector('.n-progress').hidden = !(cur.duration >= 1);
           el.querySelector('.n-play .icon').className = `icon icon-${cur.playing ? 'pause' : 'play'}`;
           el.querySelector('.eq')?.classList.toggle('paused', !cur.playing);
@@ -442,7 +443,7 @@
         const chip = (name, text) => { el.querySelector(`[data-stat="${name}"] b`).textContent = text; };
         chip('cpu', d.cpu ? `${d.cpu.usage}%` : '–');
         chip('memory', d.memory ? `${d.memory.percentage}%` : '–');
-        chip('network', d.network?.connected ? d.network.down : 'hors ligne');
+        chip('network', d.network?.connected ? d.network.down : t('island.offline'));
         updateClaude(el, d.claude);
         if (d.audio) {
           el.querySelector('[data-mute]').className = `icon icon-${d.audio.muted ? 'volume-x' : 'volume-2'}`;
@@ -464,7 +465,7 @@
         const v = a.muted ? 0 : a.volume;
         el.querySelector('.icon').className = `icon icon-${a.muted ? 'volume-x' : v < 34 ? 'volume' : v < 67 ? 'volume-1' : 'volume-2'}`;
         el.querySelector('.n-bar-fill').style.width = `${v}%`;
-        el.querySelector('.n-num').textContent = a.muted ? 'muet' : v;
+        el.querySelector('.n-num').textContent = a.muted ? t('island.muted') : v;
       },
     };
   }
@@ -478,8 +479,8 @@
     };
   }
 
-  // --- Changement de morceau : le bloc pochette + titre glisse ------------------------------
-  // L'ancien part vers la gauche, le nouveau arrive de la droite ; le reste de la vue ne bouge pas.
+  // --- Track change: the art + title block slides ------------------------------------------
+  // The old one leaves to the left, the new one comes from the right; the rest of the view stays.
   function trackInfo(md, size, withMeta) {
     const meta = withMeta
       ? `<div class="n-meta"><div class="n-title" data-morph="title">${esc(md.title)}</div>`
@@ -493,7 +494,7 @@
     const cur = slot?.querySelector('.n-info:not(.leaving)');
     if (!slot || !cur) return;
     if (cur.dataset.track !== md.key) return slideTrack(slot, cur, trackInfo(md, size, withMeta));
-    // Même morceau, pochette arrivée entre-temps : remplacée sur place, sans glissement.
+    // Same track, album art arrived in the meantime: replaced in place, no slide.
     if (md.thumb && cur.dataset.thumb === '0') {
       cur.querySelector('.n-cover').outerHTML = cover(md, size);
       cur.dataset.thumb = '1';
@@ -504,7 +505,7 @@
     slot.insertAdjacentHTML('beforeend', html);
     const next = slot.lastElementChild;
     old.classList.add('leaving');
-    old.querySelectorAll('[data-morph]').forEach((e) => e.removeAttribute('data-morph')); // un seul élément partagé
+    old.querySelectorAll('[data-morph]').forEach((e) => e.removeAttribute('data-morph')); // a single shared element
     old.animate(
       [{ transform: 'translateX(0)', opacity: 1, filter: 'blur(0)' }, { transform: 'translateX(-48px)', opacity: 0, filter: 'blur(3px)' }],
       { duration: 280, easing: 'cubic-bezier(.5, 0, .75, 0)', fill: 'forwards' },
@@ -520,7 +521,7 @@
       key: `transient|battery|${b.plugged}`,
       size: 'wide',
       html: `<div class="n-wide ${b.plugged ? 'n-good' : ''}">${icon(b.plugged ? 'battery-charging' : 'battery')}`
-        + `<span class="n-label">${b.plugged ? 'En charge' : 'Sur batterie'}</span><span class="n-num">${b.capacity}%</span></div>`,
+        + `<span class="n-label">${t(b.plugged ? 'island.charging' : 'island.on_battery')}</span><span class="n-num">${b.capacity}%</span></div>`,
     };
   }
 
@@ -529,20 +530,20 @@
       key: `transient|network|${n.connected}`,
       size: 'wide',
       html: n.connected
-        ? `<div class="n-wide n-good">${icon(n.type === 'wifi' ? 'wifi' : 'ethernet-port')}<span class="n-label">Connecté</span><span class="n-num">${esc(n.essid || n.ifname || '')}</span></div>`
-        : `<div class="n-wide n-bad">${icon('wifi-off')}<span class="n-label">Réseau perdu</span></div>`,
+        ? `<div class="n-wide n-good">${icon(n.type === 'wifi' ? 'wifi' : 'ethernet-port')}<span class="n-label">${t('island.connected')}</span><span class="n-num">${esc(n.essid || n.ifname || '')}</span></div>`
+        : `<div class="n-wide n-bad">${icon('wifi-off')}<span class="n-label">${t('island.network_lost')}</span></div>`,
     };
   }
 
-  // --- Utilisation Claude -----------------------------------------------------------------
-  // 'off' : option désactivée / pas de données ; 'ok' : jauges ; sinon message (jeton expiré...).
+  // --- Claude usage -------------------------------------------------------------------------
+  // 'off': option disabled / no data; 'ok': gauges; otherwise a message (expired token...).
   const claudeState = (S) => (!S.claudeOn || !S.data.claude ? 'off' : S.data.claude.ok ? 'ok' : S.data.claude.reason);
   const claudeLevel = (p) => (p >= 90 ? 'critical' : p >= 75 ? 'warning' : '');
 
   function claudeReset(ts, short) {
     if (!ts) return '';
     const min = Math.max(0, Math.round((ts - Date.now()) / 60000));
-    if (short) return min < 60 ? `dans ${min} min` : `dans ${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')}`;
+    if (short) return min < 60 ? t('time.in_minutes', { n: min }) : t('time.in_hours', { h: Math.floor(min / 60), m: String(min % 60).padStart(2, '0') });
     return dayjs(ts).format('ddd HH:mm');
   }
 
@@ -550,11 +551,11 @@
     const state = claudeState(S);
     if (state === 'off' || state === 'absent') return '';
     if (state === 'rate-limited') {
-      const at = S.data.claude.retryAt ? ` (nouvel essai à ${dayjs(S.data.claude.retryAt).format('HH:mm')})` : '';
-      return `<div class="n-claude muted"><i class="icon icon-sparkle"></i><span>Claude : trop de requêtes pour l'instant${at}</span><button class="n-claude-refresh" title="Actualiser"><i class="icon icon-refresh-cw"></i></button></div>`;
+      const at = S.data.claude.retryAt ? t('claude.retry_at', { time: dayjs(S.data.claude.retryAt).format('HH:mm') }) : '';
+      return `<div class="n-claude muted"><i class="icon icon-sparkle"></i><span>${t('claude.rate_limited')}${at}</span><button class="n-claude-refresh" title="${t('claude.refresh')}"><i class="icon icon-refresh-cw"></i></button></div>`;
     }
     if (state !== 'ok') {
-      return `<div class="n-claude muted"><i class="icon icon-sparkle"></i><span>Claude : ouvre Claude Code pour actualiser l'utilisation</span></div>`;
+      return `<div class="n-claude muted"><i class="icon icon-sparkle"></i><span>${t('claude.open_claude_code')}</span></div>`;
     }
     const gauge = (key, label) => `<div class="n-claude-gauge" data-claude="${key}">
         <div class="n-claude-top"><span>${label}</span><b></b></div>
@@ -564,8 +565,8 @@
     const plan = c.plan ? ` ${c.plan.charAt(0).toUpperCase()}${c.plan.slice(1)}` : '';
     return `<div class="n-claude">
         <div class="n-claude-head"><i class="icon icon-sparkle"></i><span class="n-claude-plan">Claude${esc(plan)}</span>
-          <span class="n-claude-account">${esc(c.account || '')}</span><span class="n-claude-age"></span><button class="n-claude-refresh" title="Actualiser"><i class="icon icon-refresh-cw"></i></button></div>
-        <div class="n-claude-gauges">${gauge('session', 'Session')}${gauge('week', 'Semaine')}</div>
+          <span class="n-claude-account">${esc(c.account || '')}</span><span class="n-claude-age"></span><button class="n-claude-refresh" title="${t('claude.refresh')}"><i class="icon icon-refresh-cw"></i></button></div>
+        <div class="n-claude-gauges">${gauge('session', t('claude.session'))}${gauge('week', t('claude.week'))}</div>
       </div>`;
   }
 
@@ -588,7 +589,7 @@
       g.querySelector('b').textContent = `${w.percent} %`;
       g.querySelector('.n-claude-fill').style.width = `${Math.min(100, w.percent)}%`;
       g.className = `n-claude-gauge ${claudeLevel(w.percent)}`;
-      g.querySelector('.n-claude-reset').textContent = w.resetsAt ? `réinit. ${claudeReset(w.resetsAt, key === 'session')}` : '';
+      g.querySelector('.n-claude-reset').textContent = w.resetsAt ? t('claude.resets', { when: claudeReset(w.resetsAt, key === 'session') }) : '';
     }
   }
 
@@ -598,7 +599,7 @@
       key: `transient|claude|${reached}`,
       size: 'wide',
       html: `<div class="n-wide ${reached ? 'n-bad' : 'n-claude-alert'}"><i class="icon icon-sparkle"></i>`
-        + `<span class="n-label">${reached ? 'Limite de session Claude atteinte' : 'Claude : 80 % de la session'}</span>`
+        + `<span class="n-label">${t(reached ? 'claude.limit_reached' : 'claude.session_80')}</span>`
         + `<span class="n-num">${reached ? `${reset}` : `${c.session.percent} %`}</span></div>`,
     };
   }
@@ -607,11 +608,11 @@
     return {
       key: `transient|ws|${ws.name}`,
       size: 'wide',
-      html: `<div class="n-wide">${icon('layout-grid')}<span class="n-label">Bureau ${esc(ws.displayName || ws.name)}</span></div>`,
+      html: `<div class="n-wide">${icon('layout-grid')}<span class="n-label">${t('island.desktop', { name: esc(ws.displayName || ws.name) })}</span></div>`,
     };
   }
 
-  // --- Calendrier (clic sur la date) -----------------------------------------------------------
+  // --- Calendar (click on the date) ------------------------------------------------------------
   function openCalendar(m) {
     const S = m.island;
     S.page = 'calendar';
@@ -626,11 +627,11 @@
       size: 'expanded',
       html: `<div class="n-expanded n-calendar-view">
         <div class="n-hist-head">
-          <button class="n-back" title="Retour">${icon('chevron-left')}</button>
+          <button class="n-back" title="${t('island.back')}">${icon('chevron-left')}</button>
           <span class="n-hist-title n-cal-title"></span>
-          <button class="n-cal-today" title="Aujourd'hui">${icon('calendar-check')}</button>
-          <button class="n-cal-prev" title="Mois précédent">${icon('chevron-up')}</button>
-          <button class="n-cal-next" title="Mois suivant">${icon('chevron-down')}</button>
+          <button class="n-cal-today" title="${t('island.today')}">${icon('calendar-check')}</button>
+          <button class="n-cal-prev" title="${t('island.prev_month')}">${icon('chevron-up')}</button>
+          <button class="n-cal-next" title="${t('island.next_month')}">${icon('chevron-down')}</button>
         </div>
         <div class="n-cal-slot"></div>
       </div>`,
@@ -646,25 +647,25 @@
         el.querySelector('.n-cal-prev').onclick = () => go(-1);
         el.querySelector('.n-cal-next').onclick = () => go(1);
         el.querySelector('.n-cal-today').onclick = () => go(0);
-        // Molette : mois précédent / suivant (plutôt que le volume).
+        // Mouse wheel: previous / next month (instead of the volume).
         let lastWheel = 0;
         el.querySelector('.n-cal-slot').addEventListener('wheel', (e) => {
           e.stopPropagation();
-          if (Date.now() - lastWheel < 300) return; // un cran de molette = un mois
+          if (Date.now() - lastWheel < 300) return; // one wheel notch = one month
           lastWheel = Date.now();
           go(e.deltaY < 0 ? -1 : 1);
         }, { passive: true });
         drawCalendar(el, S, 0);
       },
       update(el) {
-        // Passage à minuit : le jour mis en évidence change.
+        // Midnight: the highlighted day changes.
         if (el.dataset.today !== dayjs().format('YYYY-MM-DD')) drawCalendar(el, S, 0);
       },
     };
   }
 
-  // Grille du mois (semaines du lundi au dimanche, jours des mois voisins estompés).
-  // dir : 1 / -1 → l'ancien mois glisse vers le haut / le bas pendant que le nouveau arrive.
+  // Month grid (weeks from Monday to Sunday, days of the neighboring months dimmed).
+  // dir: 1 / -1 → the old month slides up / down while the new one comes in.
   function drawCalendar(el, S, dir) {
     const month = S.calMonth;
     const today = dayjs();
@@ -675,7 +676,7 @@
     const first = month.startOf('month');
     const start = first.subtract((first.day() + 6) % 7, 'day');
     const weeks = Math.ceil(((first.day() + 6) % 7 + month.daysInMonth()) / 7);
-    let cells = ['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((d) => `<span class="n-cal-wd">${d}</span>`).join('');
+    let cells = t('island.weekdays').split(',').map((d) => `<span class="n-cal-wd">${d}</span>`).join('');
     for (let i = 0; i < weeks * 7; i++) {
       const d = start.add(i, 'day');
       const cls = ['n-cal-day', !d.isSame(month, 'month') && 'other', d.day() % 6 === 0 && 'weekend', d.isSame(today, 'day') && 'today'].filter(Boolean).join(' ');
@@ -693,10 +694,10 @@
     } else if (old) {
       old.remove();
     }
-    requestAnimationFrame(() => S.notch.resize()); // 5 ou 6 semaines : l'encoche s'ajuste
+    requestAnimationFrame(() => S.notch.resize()); // 5 or 6 weeks: the notch adjusts
   }
 
-  // --- Historique des notifications ------------------------------------------------------
+  // --- Notification history -------------------------------------------------------------
   function openHistory(m) {
     const S = m.island;
     S.page = 'notifs';
@@ -711,13 +712,13 @@
     });
   }
 
-  // Ouvre l'appli de la notification (comme un clic dans Windows) et la retire du centre.
+  // Opens the notification's app (like a click in Windows) and removes it from the center.
   function openNotif(n) {
     api.action('notif-open', { aumid: n.aumid, launch: n.launch });
     api.action('notif-remove', n.nid);
   }
 
-  // Retire un élément de l'historique avec une petite animation, sans recharger la liste.
+  // Removes a history item with a short animation, without reloading the list.
   function removeHistoryItem(m, el, n) {
     const S = m.island;
     S.history = S.history.filter((x) => x !== n);
@@ -726,39 +727,39 @@
     setTimeout(() => {
       const box = el.parentElement;
       el.remove();
-      // Un seul message, une fois le dernier élément réellement parti (plusieurs animations peuvent finir ensemble).
-      if (box && !box.querySelector('.n-hist-item, .n-empty')) box.insertAdjacentHTML('beforeend', '<div class="n-empty">Aucune notification</div>');
+      // A single message, once the last item is really gone (several animations can end together).
+      if (box && !box.querySelector('.n-hist-item, .n-empty')) box.insertAdjacentHTML('beforeend', `<div class="n-empty">${t('island.no_notifications')}</div>`);
       S.notch.resize();
     }, 220);
   }
 
   function ago(ts) {
     const sec = (Date.now() - ts) / 1000;
-    if (sec < 60) return "à l'instant";
-    if (sec < 3600) return `il y a ${Math.floor(sec / 60)} min`;
-    if (sec < 86400) return `il y a ${Math.floor(sec / 3600)} h`;
+    if (sec < 60) return t('time.just_now');
+    if (sec < 3600) return t('time.minutes_ago', { n: Math.floor(sec / 60) });
+    if (sec < 86400) return t('time.hours_ago', { n: Math.floor(sec / 3600) });
     return dayjs(ts).format('D MMM HH:mm');
   }
 
   function historyView(m) {
     const S = m.island;
     const list = S.history;
-    const items = !list ? '<div class="n-empty">Chargement…</div>'
-      : !list.length ? '<div class="n-empty">Aucune notification</div>'
+    const items = !list ? `<div class="n-empty">${t('island.loading')}</div>`
+      : !list.length ? `<div class="n-empty">${t('island.no_notifications')}</div>`
       : list.map((n, i) => `<div class="n-hist-item" data-idx="${i}">${notifIcon(n)}<div class="n-notif-main">
           <div class="n-notif-head"><span class="n-notif-app">${esc(n.app)}</span><span class="n-notif-time" data-at="${n.at}"></span></div>
           <div class="n-title">${esc(n.title)}</div>
           ${n.body ? `<div class="n-notif-text">${esc(n.body)}</div>` : ''}
-        </div><button class="n-close" title="Supprimer">${icon('x')}</button></div>`).join('');
+        </div><button class="n-close" title="${t('island.delete')}">${icon('x')}</button></div>`).join('');
     return {
       key: `notifs|${list ? S.historyLoad : 'loading'}`,
       size: 'expanded',
       html: `<div class="n-expanded n-history-view">
         <div class="n-hist-head">
-          <button class="n-back" title="Retour">${icon('chevron-left')}</button>
-          <span class="n-hist-title">Notifications</span>
-          <button class="n-clear" title="Tout effacer">${icon('trash-2')}</button>
-          <button class="n-center" title="Centre de notifications Windows">${icon('panel-right-open')}</button>
+          <button class="n-back" title="${t('island.back')}">${icon('chevron-left')}</button>
+          <span class="n-hist-title">${t('island.notifications')}</span>
+          <button class="n-clear" title="${t('island.clear_all')}">${icon('trash-2')}</button>
+          <button class="n-center" title="${t('island.notification_center')}">${icon('panel-right-open')}</button>
         </div>
         <div class="n-history">${items}</div>
       </div>`,
@@ -785,7 +786,7 @@
     };
   }
 
-  // Couleur stable par appli pour la pastille d'initiale.
+  // Stable color per app for the initial badge.
   const hueOf = (str) => [...str].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
 
   function notifIcon(n) {
@@ -800,10 +801,10 @@
       key: `notif|${n.id}`,
       size: 'card',
       html: `<div class="n-notif">${icon}<div class="n-notif-main">
-          <div class="n-notif-head"><span class="n-notif-app">${esc(n.app)}</span><span class="n-notif-time">maintenant</span></div>
+          <div class="n-notif-head"><span class="n-notif-app">${esc(n.app)}</span><span class="n-notif-time">${t('island.now')}</span></div>
           <div class="n-title">${esc(n.title)}</div>
           ${n.body ? `<div class="n-notif-text">${esc(n.body)}</div>` : ''}
-        </div><button class="n-close" title="Fermer">${`<i class="icon icon-x"></i>`}</button></div>`,
+        </div><button class="n-close" title="${t('island.close')}">${`<i class="icon icon-x"></i>`}</button></div>`,
       data: n,
     };
   }

@@ -1,4 +1,4 @@
-//! Sondes système : CPU, mémoire, disques, réseau, batterie, fenêtre active, utilisation Claude.
+//! System pollers: CPU, memory, disks, network, battery, active window, Claude usage.
 use crate::{config, hub, util, win32};
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
@@ -86,7 +86,7 @@ pub fn network(epoch: u64, secs: f64) {
         let dt = last.elapsed().as_secs_f64().max(0.1);
         last = Instant::now();
         let skip = ["loopback", "vethernet", "vmware", "virtualbox", "wsl", "bluetooth", "teredo", "isatap"];
-        // Interface par défaut : celle qui a le plus de trafic parmi celles qui ont une IPv4.
+        // Default interface: the one with the most traffic among those with an IPv4 address.
         let best = nets.iter()
             .filter(|(name, _)| !skip.iter().any(|s| name.to_lowercase().contains(s)))
             .filter_map(|(name, d)| {
@@ -108,7 +108,7 @@ pub fn network(epoch: u64, secs: f64) {
     });
 }
 
-/// Fenêtre active (module "window" de la barre).
+/// Active window (the bar's "window" module).
 pub fn window(epoch: u64, ignored: impl Fn() -> Vec<isize> + Send + 'static) {
     let mut last_key = String::from("-");
     let mut icons: HashMap<String, Option<String>> = HashMap::new();
@@ -126,15 +126,15 @@ pub fn window(epoch: u64, ignored: impl Fn() -> Vec<isize> + Send + 'static) {
     });
 }
 
-// --- Utilisation du forfait Claude -----------------------------------------------------------------
-// Même source que la commande /usage de Claude Code. Le jeton est relu à chaque fois (Claude Code
-// le renouvelle lui-même) et n'est jamais renouvelé ici : ça déconnecterait Claude Code.
+// --- Claude plan usage ----------------------------------------------------------------------------
+// Same source as Claude Code's /usage command. The token is read again every time (Claude Code
+// refreshes it itself) and is never refreshed here: that would sign Claude Code out.
 
 fn claude_credentials() -> std::path::PathBuf { config::home().join(".claude").join(".credentials.json") }
 
 pub fn claude_installed() -> bool { claude_credentials().exists() }
 
-/// Compte connecté à Claude Code, adresse masquée : jo****83@gmail.com
+/// Account signed in to Claude Code, with a masked address: jo****83@gmail.com
 fn claude_account() -> Option<String> {
     let text = std::fs::read_to_string(config::home().join(".claude.json")).ok()?;
     let v: Value = serde_json::from_str(&text).ok()?;
@@ -148,17 +148,17 @@ fn claude_account() -> Option<String> {
     })
 }
 
-// Derniers chiffres connus et prochain appel autorisé : conservés d'un rechargement à l'autre,
-// pour réafficher tout de suite à la réactivation et ne pas dépasser la limite de requêtes
-// de l'API (cocher / décocher l'option ne relance pas d'appel immédiat).
+// Last known numbers and next allowed call, kept across reloads: shown again right away when
+// the option is turned back on, without exceeding the API rate limit (toggling the option
+// doesn't trigger an immediate call).
 fn claude_cache_file() -> std::path::PathBuf { config::config_dir().join(".claude-usage.json") }
 
 static CLAUDE_CACHE: std::sync::Mutex<Option<Value>> = std::sync::Mutex::new(None);
-static CLAUDE_NEXT: std::sync::Mutex<Option<(Instant, u64)>> = std::sync::Mutex::new(None); // (prochain appel, attente en cas de refus)
+static CLAUDE_NEXT: std::sync::Mutex<Option<(Instant, u64)>> = std::sync::Mutex::new(None); // (next call, backoff after a refusal)
 static CLAUDE_LAST_TRY: std::sync::Mutex<Option<Instant>> = std::sync::Mutex::new(None);
 static CLAUDE_FORCE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// Bouton "actualiser" de l'encoche : appel immédiat, sauf si le dernier date de moins de 20 s.
+/// Refresh button of the island: immediate call, unless the last one is less than 20 s old.
 pub fn claude_refresh() { CLAUDE_FORCE.store(true, std::sync::atomic::Ordering::SeqCst); }
 
 fn republish_cache() {
@@ -168,8 +168,8 @@ fn republish_cache() {
 
 pub fn claude(epoch: u64, secs: f64) {
     let interval = Duration::from_secs_f64(secs.max(60.0));
-    // Derniers chiffres : en mémoire, sinon ceux enregistrés sur le disque (redémarrage de Kysland).
-    // Verrou relâché avant de lire le fichier : le reprendre dans la même instruction bloquerait.
+    // Last numbers: in memory, otherwise the ones saved on disk (Kysland restarted).
+    // Lock released before reading the file: taking it again in the same statement would deadlock.
     let in_memory = CLAUDE_CACHE.lock().unwrap().clone();
     let cached = in_memory.or_else(|| {
         let v = std::fs::read_to_string(claude_cache_file()).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok())?;
@@ -181,7 +181,7 @@ pub fn claude(epoch: u64, secs: f64) {
         let now = Instant::now();
         let forced = CLAUDE_FORCE.swap(false, std::sync::atomic::Ordering::SeqCst);
         if forced {
-            // Appel récent : on réaffiche simplement les derniers chiffres.
+            // Recent call: just show the last numbers again.
             if CLAUDE_LAST_TRY.lock().unwrap().is_some_and(|t| now.duration_since(t) < Duration::from_secs(20)) { return republish_cache(); }
         } else if CLAUDE_NEXT.lock().unwrap().is_some_and(|(next, _)| now < next) {
             return;
@@ -209,18 +209,18 @@ pub fn claude(epoch: u64, secs: f64) {
                 return hub::publish("claude", json!({ "ok": false, "reason": "expired" }));
             }
             Err(ureq::Error::StatusCode(429)) => {
-                // Trop de requêtes : attente croissante (2, 4, 8 puis 15 min), derniers chiffres gardés.
+                // Rate limited: growing backoff (2, 4, 8 then 15 min), last numbers kept.
                 let wait = CLAUDE_NEXT.lock().unwrap().map(|(_, w)| w).filter(|w| *w > 0).map(|w| (w * 2).min(900)).unwrap_or(120);
                 *CLAUDE_NEXT.lock().unwrap() = Some((now + Duration::from_secs(wait), wait));
                 let has_cache = CLAUDE_CACHE.lock().unwrap().is_some();
                 if !has_cache {
                     hub::publish("claude", json!({ "ok": false, "reason": "rate-limited", "retryAt": util::now_ms() + wait as i64 * 1000 }));
                 } else {
-                    republish_cache(); // arrête l'animation du bouton, chiffres inchangés
+                    republish_cache(); // stops the button animation, numbers unchanged
                 }
                 return;
             }
-            Err(_) => { *CLAUDE_NEXT.lock().unwrap() = Some((now + Duration::from_secs(30), 0)); return republish_cache(); } // hors ligne
+            Err(_) => { *CLAUDE_NEXT.lock().unwrap() = Some((now + Duration::from_secs(30), 0)); return republish_cache(); } // offline
         };
         *CLAUDE_NEXT.lock().unwrap() = Some((now + interval, 0));
         let Ok(u) = res.body_mut().read_json::<Value>() else { return };
@@ -240,7 +240,7 @@ pub fn claude(epoch: u64, secs: f64) {
     });
 }
 
-/// "2026-09-27T06:29:59.860705+00:00" → millisecondes Unix (UTC).
+/// "2026-09-27T06:29:59.860705+00:00" → Unix milliseconds (UTC).
 fn parse_iso_ms(s: &str) -> Option<i64> {
     let (date, rest) = s.split_once('T')?;
     let mut d = date.split('-').map(|x| x.parse::<i64>());
@@ -253,7 +253,7 @@ fn parse_iso_ms(s: &str) -> Option<i64> {
         let sign = if z.starts_with('-') { -1 } else { 1 };
         sign * (z[1..3].parse::<i64>().unwrap_or(0) * 60 + z[4..6].parse::<i64>().unwrap_or(0))
     }).unwrap_or(0);
-    // Jours depuis 1970 (algorithme de Howard Hinnant).
+    // Days since 1970 (Howard Hinnant's algorithm).
     let (yy, mo) = if m <= 2 { (y - 1, m + 9) } else { (y, m - 3) };
     let era = yy.div_euclid(400);
     let yoe = yy - era * 400;

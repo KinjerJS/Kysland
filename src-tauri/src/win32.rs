@@ -1,5 +1,5 @@
-//! Appels Windows directs : AppBar, barre des tâches, pastille de volume, plein écran,
-//! premier plan, fenêtre active, touches, fond d'écran.
+//! Direct Windows calls: AppBar, taskbar, volume flyout, fullscreen, z-order, active window,
+//! keys, wallpaper.
 #![allow(clippy::missing_safety_doc)]
 use std::ffi::c_void;
 use windows::core::{PCWSTR, PWSTR};
@@ -27,9 +27,9 @@ fn text_of(h: HWND, class: bool) -> String {
 
 fn ex_style(h: HWND) -> isize { unsafe { GetWindowLongPtrW(h, GWL_EXSTYLE) } }
 
-// --- Fenêtres de Kysland ------------------------------------------------------------------
+// --- Kysland windows ----------------------------------------------------------------------
 
-/// Fenêtre "outil" non activable : hors Alt+Tab, ne vole pas le focus, ignorée par GlazeWM.
+/// Non-activating tool window: not in Alt+Tab, never steals focus, ignored by GlazeWM.
 pub fn make_tool_window(h: isize) {
     let h = hwnd(h);
     let ex = ex_style(h);
@@ -37,7 +37,7 @@ pub fn make_tool_window(h: isize) {
     unsafe { SetWindowLongPtrW(h, GWL_EXSTYLE, ex) };
 }
 
-/// Placement en pixels physiques, sans que Windows recale la fenêtre dans la zone de travail.
+/// Placement in physical pixels, without Windows snapping the window back into the work area.
 pub fn place_window(h: isize, rc: (i32, i32, i32, i32), topmost: bool) {
     let after = if topmost { HWND_TOPMOST } else { HWND_NOTOPMOST };
     unsafe { let _ = SetWindowPos(hwnd(h), Some(after), rc.0, rc.1, rc.2, rc.3, SWP_NOACTIVATE | SWP_NOOWNERZORDER); }
@@ -55,8 +55,8 @@ pub fn cursor_pos() -> (i32, i32) {
     (p.x, p.y)
 }
 
-/// Une fenêtre créée à l'ouverture de session peut garder WS_EX_TOPMOST tout en étant rangée
-/// sous des fenêtres normales : on parcourt l'ordre Z jusqu'à la nôtre.
+/// A window created while the session starts can keep WS_EX_TOPMOST yet sit below normal
+/// windows: walk the z-order down to ours.
 pub fn is_buried(ours: isize) -> bool {
     let ours = hwnd(ours);
     unsafe {
@@ -92,7 +92,7 @@ pub fn set_foreground(h: isize) -> isize {
     }
 }
 
-// --- AppBar : réserve une bande de l'écran ---------------------------------------------------
+// --- AppBar: reserves a strip of the screen --------------------------------------------------
 
 pub struct AppBar { h: isize, last: Option<(String, RECT)> }
 
@@ -108,7 +108,7 @@ impl AppBar {
         AppBar { h, last: None }
     }
 
-    /// `monitor` et `thickness` en pixels physiques ; retourne le rect réservé.
+    /// `monitor` and `thickness` in physical pixels; returns the reserved rect.
     pub fn set_pos(&mut self, bottom: bool, monitor: RECT, thickness: i32) -> RECT {
         let key = format!("{bottom}{monitor:?}{thickness}");
         if let Some((k, rc)) = &self.last { if *k == key { return *rc; } }
@@ -129,7 +129,7 @@ impl Drop for AppBar {
     fn drop(&mut self) { unsafe { SHAppBarMessage(ABM_REMOVE, &mut abd(self.h)) }; }
 }
 
-/// Force explorer à recalculer les zones de travail (AppBars orphelines après un crash).
+/// Makes explorer recompute the work areas (orphaned AppBars after a crash).
 pub fn reset_work_area() {
     unsafe {
         let mut rc = RECT { left: 0, top: 0, right: GetSystemMetrics(SM_CXSCREEN), bottom: GetSystemMetrics(SM_CYSCREEN) };
@@ -137,7 +137,7 @@ pub fn reset_work_area() {
     }
 }
 
-// --- Barre des tâches Windows ------------------------------------------------------------------
+// --- Windows taskbar ----------------------------------------------------------------------------
 
 fn taskbars() -> Vec<HWND> {
     let mut out = Vec::new();
@@ -161,16 +161,16 @@ fn set_taskbar_state(state: u32) {
     }
 }
 
-/// Réaffiche la barre des tâches (secours : --repair, ou barre laissée masquée par une
-/// ancienne version qui proposait de la masquer).
+/// Shows the taskbar again (--repair, or a taskbar left hidden by an older version that
+/// offered to hide it).
 pub fn show_taskbar(state: Option<u32>) {
     set_taskbar_state(state.unwrap_or(0));
     for h in taskbars() { unsafe { let _ = ShowWindow(h, SW_SHOW); } }
 }
 
-// --- Pastille de volume Windows 11 --------------------------------------------------------------
-// Fenêtre XAML d'explorer sans titre, petite et non activable (Alt+Tab utilise la même classe
-// mais a un titre et couvre l'écran). Réduite, explorer ne peut plus l'afficher.
+// --- Windows 11 volume flyout ---------------------------------------------------------------------
+// Explorer's untitled, small, non-activating XAML window (Alt+Tab uses the same class but has a
+// title and covers the screen). Once minimized, explorer can no longer show it.
 
 fn find_volume_osd() -> Option<HWND> {
     unsafe {
@@ -205,10 +205,10 @@ pub fn restore_volume_osd() {
     }
 }
 
-// --- Plein écran ------------------------------------------------------------------------------------
+// --- Fullscreen -------------------------------------------------------------------------------------
 
-/// Rect de la fenêtre au premier plan (le plein écran se reconnaît à un rect qui épouse
-/// exactement le moniteur ; une fenêtre maximisée déborde de ~8 px de chaque côté).
+/// Rect of the foreground window (fullscreen means the rect exactly matches the monitor; a
+/// maximized window overflows by ~8 px on each side).
 pub fn foreground_rect(ignored: &[isize]) -> Option<RECT> {
     unsafe {
         let h = GetForegroundWindow();
@@ -221,7 +221,7 @@ pub fn foreground_rect(ignored: &[isize]) -> Option<RECT> {
     }
 }
 
-// --- Fenêtre active (module "window") ------------------------------------------------------------
+// --- Active window ("window" module) -------------------------------------------------------------
 
 pub struct Foreground { pub hwnd: isize, pub title: String, pub class: String, pub exe: String }
 
@@ -246,7 +246,7 @@ fn process_path(pid: u32) -> String {
     }
 }
 
-/// Icône 32 px d'un exécutable, en PNG (data URL).
+/// 32 px icon of an executable, as a PNG data URL.
 pub fn exe_icon_png(exe: &str) -> Option<String> {
     unsafe {
         let mut info = SHFILEINFOW::default();
@@ -278,14 +278,14 @@ pub fn exe_icon_png(exe: &str) -> Option<String> {
     }
 }
 
-// --- Touches, divers ------------------------------------------------------------------------------
+// --- Keys, misc ------------------------------------------------------------------------------------
 
 pub const VK_LWIN: u8 = 0x5B;
 pub const VK_MEDIA_NEXT: u8 = 0xB0;
 pub const VK_MEDIA_PREV: u8 = 0xB1;
 pub const VK_MEDIA_PLAY_PAUSE: u8 = 0xB3;
 
-/// Combinaison de touches : appui dans l'ordre, relâchement à l'envers.
+/// Key combination: press in order, release in reverse order.
 pub fn press_keys(vks: &[u8]) {
     unsafe {
         for &vk in vks { keybd_event(vk, 0, KEYBD_EVENT_FLAGS(0), 0); }
@@ -304,7 +304,7 @@ pub fn set_wallpaper(file: &str) {
     }
 }
 
-/// Ouvre un lien, un fichier ou un dossier avec l'appli associée (sans passer par un shell).
+/// Opens a link, file or folder with its associated app (no shell involved).
 pub fn shell_open(target: &str) {
     let t = wide(target);
     unsafe { ShellExecuteW(None, windows::core::w!("open"), PCWSTR(t.as_ptr()), PCWSTR::null(), PCWSTR::null(), SW_SHOWNORMAL); }

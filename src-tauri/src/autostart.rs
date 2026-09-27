@@ -1,6 +1,6 @@
-//! Lancement avec Windows via une tâche planifiée "à l'ouverture de session" : la clé Run du
-//! registre est retardée par Windows (plus d'une minute quand il y a beaucoup de programmes
-//! au démarrage), une tâche part tout de suite. Création possible sans droits administrateur.
+//! Start with Windows through an "at log on" scheduled task: Windows delays the registry Run
+//! key (over a minute when many programs start with the session), a task starts right away.
+//! Creating it doesn't need admin rights.
 use crate::util::hidden;
 use std::fs;
 
@@ -18,10 +18,10 @@ pub fn enable(exe: &str, args: &[String]) -> Result<(), String> {
     let user = format!("{}\\{}", std::env::var("USERDOMAIN").unwrap_or_default(), std::env::var("USERNAME").unwrap_or_default());
     let arg_line = args.iter().map(|a| format!("\"{a}\"")).collect::<Vec<_>>().join(" ");
     let arguments = if arg_line.is_empty() { String::new() } else { format!("<Arguments>{}</Arguments>", xml_escape(&arg_line)) };
-    // Priorité 4 : classe "normale" (7, la valeur par défaut, bride l'interface).
+    // Priority 4 is the "normal" class (7, the default, slows the UI down).
     let xml = format!(r#"<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
-  <RegistrationInfo><Description>Lance Kysland à l'ouverture de session</Description></RegistrationInfo>
+  <RegistrationInfo><Description>Starts Kysland when you sign in</Description></RegistrationInfo>
   <Triggers><LogonTrigger><Enabled>true</Enabled><UserId>{u}</UserId></LogonTrigger></Triggers>
   <Principals><Principal id="Author"><UserId>{u}</UserId><LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel></Principal></Principals>
   <Settings>

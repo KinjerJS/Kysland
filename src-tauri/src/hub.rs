@@ -1,5 +1,5 @@
-//! Diffusion des données vers l'interface, avec mémoire de la dernière valeur de chaque sujet
-//! (envoyée aux fenêtres qui se créent) et "génération" pour arrêter les sondes au rechargement.
+//! Sends data to the page, keeping the last value of each topic (for windows created later)
+//! and a "generation" number used to stop the pollers on reload.
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -16,19 +16,19 @@ pub fn emit(channel: &str, payload: Value) {
     if let Some(app) = APP.get() { let _ = app.emit(channel, payload); }
 }
 
-/// Donnée d'un sujet (cpu, audio, media...) : mémorisée et diffusée.
+/// Topic data (cpu, audio, media...): stored and broadcast.
 pub fn publish(topic: &str, data: Value) {
     LAST.lock().unwrap().get_or_insert_with(HashMap::new).insert(topic.to_owned(), data.clone());
     emit("data", json!({ "topic": topic, "data": data }));
 }
 
-/// Événement ponctuel (notification) : diffusé sans être mémorisé.
+/// One-off event (notification): broadcast, not stored.
 pub fn event(topic: &str, data: Value) { emit("data", json!({ "topic": topic, "data": data })); }
 
 pub fn last(topic: &str) -> Option<Value> { LAST.lock().unwrap().as_ref()?.get(topic).cloned() }
 
-/// Oublie les données des sujets qui ne sont plus sondés (option désactivée), pour qu'une
-/// fenêtre rechargée ne réaffiche pas de vieilles valeurs.
+/// Forgets topics that are no longer polled (option turned off), so a reloaded window
+/// doesn't show stale values.
 pub fn retain(topics: &[&str]) {
     if let Some(map) = LAST.lock().unwrap().as_mut() { map.retain(|k, _| topics.contains(&k.as_str())); }
 }
@@ -42,7 +42,7 @@ pub fn generation() -> u64 { GENERATION.load(Ordering::SeqCst) }
 pub fn next_generation() -> u64 { GENERATION.fetch_add(1, Ordering::SeqCst) + 1 }
 pub fn alive(epoch: u64) -> bool { generation() == epoch }
 
-/// Boucle de sondage arrêtée au prochain rechargement de la config.
+/// Polling loop, stopped at the next config reload.
 pub fn every(epoch: u64, period: std::time::Duration, mut f: impl FnMut() + Send + 'static) {
     std::thread::spawn(move || {
         while alive(epoch) {

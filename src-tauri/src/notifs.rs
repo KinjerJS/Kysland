@@ -1,6 +1,6 @@
-//! Notifications Windows : lues dans la base du centre de notifications (l'API officielle
-//! met ~2 s par lecture ; la base répond en 1 ms et son dossier signale chaque écriture),
-//! supprimées via UserNotificationListener (qui, lui, est rapide).
+//! Windows notifications: read from the notification center database (the official API takes
+//! ~2 s per read; the database answers in 1 ms and its folder reports every write), removed
+//! through UserNotificationListener (which is fast).
 use crate::{hub, util, win32};
 use notify::{RecursiveMode, Watcher};
 use regex::Regex;
@@ -33,18 +33,18 @@ struct Row { ord: i64, nid: i64, at: i64, aumid: String, payload: Vec<u8>, name:
 fn rows(sql_tail: &str, param: i64) -> Vec<Row> {
     let guard = DB.lock().unwrap();
     let Some(db) = guard.as_ref() else { return vec![] };
-    let mut stmt = match db.prepare(&format!("{QUERY} {sql_tail}")) { Ok(s) => s, Err(e) => { eprintln!("[kysland] notifications : {e}"); return vec![]; } };
+    let mut stmt = match db.prepare(&format!("{QUERY} {sql_tail}")) { Ok(s) => s, Err(e) => { eprintln!("[kysland] notifications query failed: {e}"); return vec![]; } };
     stmt.query_map([param], |r| Ok(Row {
         ord: r.get(0)?, nid: r.get(1)?, at: r.get(2)?, aumid: r.get(3)?, payload: r.get(4).unwrap_or_default(),
         name: r.get(5).ok(), launch_args: r.get(6).ok(),
     }))
-    .map(|it| it.filter_map(|r| r.map_err(|e| eprintln!("[kysland] notification illisible : {e}")).ok()).collect())
+    .map(|it| it.filter_map(|r| r.map_err(|e| eprintln!("[kysland] unreadable notification: {e}")).ok()).collect())
     .unwrap_or_default()
 }
 
 pub fn start(epoch: u64) {
     let conn = Connection::open_with_flags(dir().join("wpndatabase.db"), OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX);
-    let Ok(conn) = conn else { return eprintln!("[kysland] notifications indisponibles") };
+    let Ok(conn) = conn else { return eprintln!("[kysland] notification database unavailable") };
     let mut last: i64 = conn.query_row("select coalesce(max([Order]), 0) from Notification", [], |r| r.get(0)).unwrap_or(0);
     *DB.lock().unwrap() = Some(conn);
     std::thread::spawn(move || {
@@ -59,7 +59,7 @@ pub fn start(epoch: u64) {
             }
             for r in rows("and n.[Order] > ?1 order by n.[Order]", last) {
                 last = last.max(r.ord);
-                if util::now_ms() - r.at > 60_000 { continue; } // ancienne notification resynchronisée
+                if util::now_ms() - r.at > 60_000 { continue; } // old notification resynced
                 if let Some(n) = parse(&r) { hub::event("notification", n); }
             }
         }
@@ -82,7 +82,7 @@ fn decode(s: &str) -> String {
     }).into_owned()
 }
 
-/// Nom lisible depuis l'identifiant d'appli (AUMID) quand Windows n'en stocke pas.
+/// Readable name from the app ID (AUMID) when Windows doesn't store one.
 fn app_name(aumid: &str) -> String {
     if let Some(pkg) = aumid.split('!').next().filter(|_| aumid.contains('!')) {
         return pkg.split('_').next().unwrap_or(pkg).rsplit('.').next().unwrap_or(pkg).to_owned();
@@ -111,7 +111,7 @@ fn parse(r: &Row) -> Option<Value> {
     let title = texts.first()?.clone();
     let logo = LOGO.find_iter(&xml).map(|m| m.as_str()).find(|t| t.contains("appLogoOverride"))
         .and_then(|t| SRC.captures(t)).map(|c| decode(&c[1])).filter(|s| !s.starts_with("ms-app"));
-    // Lien d'ouverture de la notification (protocole), sinon celui de l'appli (ex. ms-phone:).
+    // The notification's own launch link (protocol), otherwise the app's (e.g. ms-phone:).
     let toast = TOAST.captures(&xml).map(|c| c[1].to_owned()).unwrap_or_default();
     let launch = if toast.contains("activationType=\"protocol\"") { LAUNCH.captures(&toast).map(|c| decode(&c[1])) } else { None }
         .or_else(|| r.launch_args.clone().filter(|a| a.contains(':') && !a.starts_with(':')));
@@ -135,8 +135,8 @@ fn icon(src: &str) -> Option<String> {
     url
 }
 
-/// Suppression dans le centre de notifications (ClearNotifications ne fait rien pour une appli
-/// non packagée : on retire donc chaque notification une par une).
+/// Removal from the notification center (ClearNotifications does nothing for an unpackaged
+/// app, so each notification is removed one by one).
 pub fn remove(ids: Vec<u32>) {
     std::thread::spawn(move || {
         unsafe { let _ = CoInitializeEx(None, COINIT_MULTITHREADED); }
@@ -150,7 +150,7 @@ pub fn clear_all() {
     remove(ids);
 }
 
-/// Ouvre l'appli d'une notification : son lien s'il y en a un, sinon l'appli via son identifiant.
+/// Opens a notification's app: its link if it has one, otherwise the app through its ID.
 pub fn open(aumid: Option<&str>, launch: Option<&str>) {
     if let Some(l) = launch.filter(|l| !l.to_lowercase().starts_with("file:") && !l.to_lowercase().starts_with("javascript:")) {
         return win32::shell_open(l);
