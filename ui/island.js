@@ -177,9 +177,17 @@
     constructor(notch) {
       this.el = document.createElement('div');
       this.el.className = 'notch-eyes';
-      this.el.innerHTML = '<span class="eye l"><b></b><i></i></span><span class="eye r"><b></b><i></i></span>';
+      const pair = '<span class="eye l"><b></b><i></i></span><span class="eye r"><b></b><i></i></span>';
+      this.el.innerHTML = pair;
       notch.appendChild(this.el);
       this.notch = notch;
+      // The same eyes in a little bubble, when they get thrown out of the grown island.
+      this.bubble = document.createElement('div');
+      this.bubble.className = 'eye-bubble';
+      this.bubble.innerHTML = `<div class="notch-eyes">${pair}</div>`;
+      document.body.appendChild(this.bubble);
+      this.bubbleEyes = this.bubble.firstElementChild;
+      this.flight = null;
       this.cursor = null;
       this.cursorAt = 0; // last time the cursor moved
       this.trail = []; // recent cursor positions, to tell a slow sneak from a real move
@@ -212,9 +220,12 @@
     }
 
     stop() {
-      for (const timer of [this.blinkT, this.glanceT, this.backT, this.roamT, this.growT, this.moodT]) clearTimeout(timer);
+      for (const timer of [this.blinkT, this.glanceT, this.backT, this.roamT, this.growT, this.moodT, this.shakeT]) clearTimeout(timer);
       cancelAnimationFrame(this.raf);
       this.setMove(null);
+      this.flight = null;
+      this.bubble.classList.remove('on');
+      this.el.classList.remove('ejected', 'shake');
       this.elsewhere = false;
       this.roaming = false;
       this.notch.classList.remove('roaming');
@@ -227,6 +238,7 @@
     setMood(mood, ms = 0, then = null) {
       clearTimeout(this.moodT);
       this.el.dataset.mood = mood;
+      this.bubbleEyes.dataset.mood = mood;
       if (ms) this.moodT = setTimeout(() => (then ? this.setMood(...then) : this.setMood('neutral')), ms);
     }
 
@@ -279,11 +291,26 @@
         const fresh = now - this.cursorAt < 400;
         this.lastBox = box;
         this.lastC = c;
+        if (this.flight) {
+          this.fly(now, dt, r, mid, box);
+          this.raf = requestAnimationFrame(tick);
+          return;
+        }
         const asleep = this.move?.kind === 'doze';
-        // Cursor right on the eyes: they jump away (not too often, and not in their sleep).
+        // Cursor right on the eyes: they jump away (not too often, and not in their sleep). Too close
+        // to the edge in that direction, the jump throws them out of the island.
         if (c && fresh && !asleep && now - this.fledAt > 1800 && Math.hypot(c.x - this.pos.x, c.y - this.pos.y) < 28) {
           this.fledAt = now;
-          this.setMove(this.flee(now, c, box));
+          const len = Math.hypot(this.pos.x - c.x, this.pos.y - c.y) || 1;
+          const dir = { x: (this.pos.x - c.x) / len, y: (this.pos.y - c.y) / len };
+          const reach = { x: this.pos.x + dir.x * box.x, y: this.pos.y + dir.y * box.y };
+          const out = Math.abs(reach.x) > box.x * 1.25 || reach.y > box.y * 1.25; // not upward: that's the screen edge
+          if (out && now - (this.ejectedAt || 0) > 6000) this.eject(now, dir);
+          else this.setMove(this.flee(now, c, box));
+        }
+        if (this.flight) {
+          this.raf = requestAnimationFrame(tick);
+          return;
         }
         // Woken up by a real move (sneaking up slowly doesn't wake them).
         if (asleep && this.travel() > 45) {
@@ -323,7 +350,7 @@
 
     /** A click on the grown island. */
     poke() {
-      if (!this.roaming) return;
+      if (!this.roaming || this.flight) return;
       const now = performance.now();
       this.jolt();
       if (this.move?.kind === 'doze') {
@@ -342,6 +369,86 @@
       this.el.classList.remove('jolt');
       void this.el.offsetWidth; // restart the animation
       this.el.classList.add('jolt');
+    }
+
+    // Thrown out of the island: a little bubble flying off, then pulled back like by a gravity well.
+    // It circles around the island through the bottom (the top is the screen edge), a little closer
+    // as it goes, spinning, then gets sucked back in on the other side. Screen positions, CSS px.
+    eject(now, dir) {
+      const r = this.notch.getBoundingClientRect();
+      const mid = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      const from = this.center();
+      let a0 = Math.atan2(from.y - mid.y + dir.y * 40, from.x - mid.x + dir.x * 40);
+      let end;
+      if (Math.cos(a0) >= 0) {
+        end = Math.PI + rand(0, 0.35); // out on the right: around the bottom to the left
+      } else {
+        if (a0 < 0) a0 += 2 * Math.PI;
+        end = -rand(0, 0.35); // out on the left: around the bottom to the right
+      }
+      this.flight = { from, a0, sweep: end - a0, orbit: rand(1.8, 2.4), since: now, spin: 0, spinDir: Math.sign(end - a0) };
+      this.el.classList.add('ejected');
+      this.bubble.classList.add('on');
+      this.setMood('surprised');
+    }
+
+    fly(now, dt, r, mid, box) {
+      const f = this.flight;
+      const t = (now - f.since) / 1000;
+      const OUT = 0.45, BACK = 0.5;
+      const ellipse = (a, k) => ({ x: mid.x + Math.cos(a) * (r.width / 2 + 46) * k, y: mid.y + Math.sin(a) * (r.height / 2 + 40) * k });
+      let p;
+      if (t < OUT) {
+        // Thrown out, slowing down.
+        const u = 1 - (1 - t / OUT) ** 3;
+        const to = ellipse(f.a0, 1.25);
+        p = { x: f.from.x + (to.x - f.from.x) * u, y: f.from.y + (to.y - f.from.y) * u };
+      } else if (t < OUT + f.orbit) {
+        // Pulled around the island, a little closer as it goes.
+        const u = (t - OUT) / f.orbit;
+        const ease = u < 0.5 ? 2 * u * u : 1 - (-2 * u + 2) ** 2 / 2;
+        p = ellipse(f.a0 + f.sweep * ease, 1.25 - 0.3 * u + Math.sin(u * Math.PI * 3) * 0.05);
+      } else {
+        // Sucked back in.
+        const u = Math.min(1, (t - OUT - f.orbit) / BACK);
+        const a = f.a0 + f.sweep;
+        const start = ellipse(a, 0.95);
+        const spot = { x: mid.x + Math.cos(a) * box.x * 0.6, y: mid.y + Math.sin(a) * box.y * 0.6 };
+        p = { x: start.x + (spot.x - start.x) * u * u, y: start.y + (spot.y - start.y) * u * u };
+        if (u >= 1) {
+          f.p = p;
+          return this.land(now, mid, box);
+        }
+      }
+      p.y = Math.max(22, p.y);
+      f.p = p;
+      f.spin += dt * (900 - Math.min(1, t / (OUT + f.orbit)) * 650) * f.spinDir; // deg/s, slowing down
+      const s = this.bubble.style;
+      s.setProperty('--bx', `${p.x.toFixed(1)}px`);
+      s.setProperty('--by', `${p.y.toFixed(1)}px`);
+      s.setProperty('--bspin', `${(f.spin % 360).toFixed(1)}deg`);
+      // Rolling eyes: completely lost.
+      const e = this.bubbleEyes.style;
+      e.setProperty('--gx', `${(Math.cos(now / 70) * 3).toFixed(2)}px`);
+      e.setProperty('--gy', `${(Math.sin(now / 70) * 2.5).toFixed(2)}px`);
+      if (t > 0.7 && this.bubbleEyes.dataset.mood === 'surprised') this.setMood('worried');
+    }
+
+    // Back in: eyes shut, shaking its head, then a bit dizzy.
+    land(now, mid, box) {
+      const p = this.flight.p;
+      this.flight = null;
+      this.ejectedAt = now;
+      this.pos = { x: clamp(p.x - mid.x, box.x), y: clamp(p.y - mid.y, box.y) };
+      this.el.style.setProperty('--ex', `${this.pos.x.toFixed(1)}px`);
+      this.el.style.setProperty('--ey', `${this.pos.y.toFixed(1)}px`);
+      this.bubble.classList.remove('on');
+      this.el.classList.remove('ejected');
+      this.el.classList.add('shake');
+      this.shakeT = setTimeout(() => this.el.classList.remove('shake'), 950);
+      this.setMood('dazed', 1100, ['dizzy', 1500]);
+      const still = { ...this.pos };
+      this.setMove({ kind: 'dazed', pull: 3, until: now + 2600, target: () => still, look: () => ({ x: still.x, y: still.y + 40 }) });
     }
 
     nextMove(now, c, box) {

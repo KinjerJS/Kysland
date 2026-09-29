@@ -524,3 +524,42 @@ body.pos-bottom .notch.dodged.eyes.roaming { border-radius: 46px 46px 0 0; }
   60% { scale: .9 1.15; }
   100% { scale: 1; }
 }
+
+/* Thrown out of the grown island: the eyes fly around in a little bubble (island.js). */
+.notch.dodged.eyes.roaming .notch-eyes.ejected { opacity: 0; transition: none; }
+.eye-bubble {
+  --bx: 0px; --by: 0px; --bspin: 0deg;
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 12;
+  width: 58px;
+  height: 34px;
+  margin: -17px 0 0 -29px;
+  border-radius: 17px;
+  background: var(--notch-bg);
+  box-shadow: 0 0 0 1px var(--notch-outline-color), 0 8px 24px rgba(0, 0, 0, 0.45);
+  translate: var(--bx) var(--by);
+  rotate: var(--bspin);
+  pointer-events: none;
+  opacity: 0;
+  scale: .4;
+  transition: opacity .15s ease, scale .25s var(--spring);
+}
+.eye-bubble.on { opacity: 1; scale: 1; }
+.eye-bubble .notch-eyes { position: static; height: 100%; opacity: 1; gap: 9px; translate: none; transition: none; }
+.eye-bubble .notch-eyes i { width: 9px; height: 11px; border-radius: 3.5px; }
+.eye-bubble .notch-eyes b { opacity: var(--brow); width: 10px; height: 2px; margin-bottom: 3px; }
+/* Back in: eyes shut, shaking its head, then dizzy. */
+.notch-eyes[data-mood=dazed] { --brow: 1; --bl-y: -2px; --br-y: -2px; --bl-r: -14deg; --br-r: 14deg; --lid-l: .1; --lid-r: .1; }
+.notch-eyes[data-mood=dizzy] { --brow: 1; --bl-y: -3px; --br-y: 1px; --bl-r: -8deg; --br-r: 10deg; --lid-l: .65; --lid-r: 1.1; }
+.notch-eyes.shake .eye { animation: eyes-shake .9s ease-in-out; }
+@keyframes eyes-shake {
+  0%, 100% { translate: 0 0; }
+  15% { translate: -5px 0; }
+  30% { translate: 5px 0; }
+  45% { translate: -4px 0; }
+  60% { translate: 4px 0; }
+  75% { translate: -2px 0; }
+  90% { translate: 2px 0; }
+}
