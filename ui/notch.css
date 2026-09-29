@@ -214,9 +214,9 @@ body.pos-bottom .notch[data-size=card] { border-radius: 24px 24px 0 0; }
 /* Unread: dot on the notch, badge on the bell */
 .n-dot { width: 6px; height: 6px; flex: none; border-radius: 50%; background: #ff453a; }
 .n-head-right { display: flex; align-items: center; gap: 14px; }
-.n-bell { position: relative; color: var(--notch-dim); }
-.n-bell:hover { color: var(--notch-fg); }
-.n-bell .icon { font-size: 17px; }
+.n-bell, .n-gear { position: relative; color: var(--notch-dim); }
+.n-bell:hover, .n-gear:hover { color: var(--notch-fg); }
+.n-bell .icon, .n-gear .icon { font-size: 17px; }
 .n-badge {
   position: absolute;
   top: -6px;
@@ -413,23 +413,27 @@ body.pos-bottom .notch[data-size=card] { border-radius: 24px 24px 0 0; }
 .n-vol b { min-width: 3ch; text-align: right; }
 
 /* Slow approach: the island tucks itself into the screen edge (and lets clicks through, see the
-   engine), then springs back once the cursor moves away. Beats the inline size of the view. */
+   engine), then springs back once the cursor moves away. Beats the inline size of the view.
+   A thin strip, a bit taller when it has eyes. */
 .notch.dodged {
-  width: 54px !important;
-  height: 13px !important;
-  --notch-ear: 5px;
-  border-radius: 0 0 6px 6px;
+  width: 56px !important;
+  height: 5px !important;
+  --notch-ear: 4px;
+  border-radius: 0 0 5px 5px;
   box-shadow: 0 0 0 1px var(--notch-outline);
   transition: width .35s cubic-bezier(.4, 0, .2, 1), height .35s cubic-bezier(.4, 0, .2, 1), border-radius .35s ease,
     box-shadow .3s ease, --notch-outline .4s ease, --notch-ear .35s ease;
 }
-body.pos-bottom .notch.dodged { border-radius: 6px 6px 0 0; }
+body.pos-bottom .notch.dodged { border-radius: 5px 5px 0 0; }
+.notch.dodged.eyes { width: 54px !important; height: 13px !important; --notch-ear: 5px; border-radius: 0 0 6px 6px; }
+body.pos-bottom .notch.dodged.eyes { border-radius: 6px 6px 0 0; }
 .notch-inner { transition: opacity .3s ease .08s; }
 .notch.dodged .notch-inner { opacity: 0; transition: opacity .12s ease; }
 
 /* Eyes of the hidden island: follow the cursor (--gx / --gy), turn (--sl / --sr), blink (--lid). */
 .notch-eyes {
-  --gx: 0px; --gy: 0px; --sl: 1; --sr: 1; --lid: 1;
+  --gx: 0px; --gy: 0px; --sl: 1; --sr: 1; --lid: 1; --ex: 0px; --ey: 0px;
+  translate: var(--ex) var(--ey); /* where the pair stands (roaming) */
   position: absolute;
   inset: 0;
   display: flex;
@@ -438,7 +442,7 @@ body.pos-bottom .notch.dodged { border-radius: 6px 6px 0 0; }
   gap: 7px;
   pointer-events: none;
   opacity: 0;
-  transition: opacity .12s ease;
+  transition: opacity .12s ease, translate .5s cubic-bezier(.3, 1.25, .5, 1);
 }
 .notch-eyes i {
   width: 6px;
@@ -447,10 +451,23 @@ body.pos-bottom .notch.dodged { border-radius: 6px 6px 0 0; }
   background: var(--notch-fg);
   translate: var(--gx) var(--gy);
   scale: var(--sl) calc(var(--sl) * var(--lid));
-  transition: translate 80ms cubic-bezier(.2, .8, .3, 1), scale 90ms ease;
+  transition: translate 80ms cubic-bezier(.2, .8, .3, 1), scale 90ms ease, width .4s ease, height .4s ease, border-radius .4s ease;
 }
 .notch-eyes i + i { scale: var(--sr) calc(var(--sr) * var(--lid)); }
 .notch-eyes.blink { --lid: .12; }
-.notch.dodged .notch-eyes { opacity: 1; transition: opacity .2s ease .2s; }
-.notch.dodged .notch-eyes i { animation: eyes-open .32s cubic-bezier(.3, 1.4, .5, 1) .22s backwards; }
+.notch.dodged.eyes .notch-eyes { opacity: 1; transition: opacity .2s ease .2s, translate .5s cubic-bezier(.3, 1.25, .5, 1); }
+.notch.dodged.eyes .notch-eyes i { animation: eyes-open .32s cubic-bezier(.3, 1.4, .5, 1) .22s backwards; }
 @keyframes eyes-open { from { scale: 1 0; } }
+
+/* Cursor still close after a while: the hidden island grows and its eyes roam around (island.js). */
+.notch.dodged.eyes.roaming {
+  width: 210px !important;
+  height: 38px !important;
+  --notch-ear: 9px;
+  border-radius: 0 0 16px 16px;
+  transition: width .6s var(--spring), height .6s var(--spring), border-radius .6s var(--spring), --notch-ear .6s var(--spring),
+    box-shadow .3s ease, --notch-outline .4s ease;
+}
+body.pos-bottom .notch.dodged.eyes.roaming { border-radius: 16px 16px 0 0; }
+.notch.roaming .notch-eyes { gap: 10px; }
+.notch.roaming .notch-eyes i { width: 9px; height: 11px; border-radius: 3.5px; }

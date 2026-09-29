@@ -57,6 +57,8 @@ struct Shared {
     hide_osd: bool,
     /// Approaches slower than this (CSS px/s) hide the island; `None`: option turned off.
     dodge_speed: Option<f64>,
+    /// Eyes in the hidden island (they need the cursor position).
+    dodge_eyes: bool,
     wallpaper: Option<String>,
     autostart_on: bool,
 }
@@ -84,10 +86,29 @@ fn island_message(text: &str, icon: &str) {
 
 // --- Windows (one per screen) -----------------------------------------------------------------------
 
-fn create_bars(app: &AppHandle, cfg: &Value) {
+/// Screens in the order used by "monitors" (left to right), and the main screen's position.
+fn sorted_monitors(app: &AppHandle) -> (Vec<tauri::Monitor>, Option<(i32, i32)>) {
     let mut monitors = app.available_monitors().unwrap_or_default();
     monitors.sort_by_key(|m| (m.position().x, m.position().y));
-    let primary = app.primary_monitor().ok().flatten().map(|m| (m.position().x, m.position().y));
+    (monitors, app.primary_monitor().ok().flatten().map(|m| (m.position().x, m.position().y)))
+}
+
+/// Screens for the menu and the settings: index, readable name, size, main screen or not.
+fn screen_list(app: &AppHandle) -> Vec<Value> {
+    let (monitors, primary) = sorted_monitors(app);
+    let names = win32::monitor_names();
+    monitors.iter().enumerate().map(|(i, m)| {
+        let gdi = m.name().cloned().unwrap_or_default();
+        let name = names.get(&gdi).filter(|n| !n.is_empty()).cloned().unwrap_or_else(|| gdi.trim_start_matches(r"\\.\").to_owned());
+        json!({
+            "index": i, "name": name, "width": m.size().width, "height": m.size().height,
+            "primary": Some((m.position().x, m.position().y)) == primary,
+        })
+    }).collect()
+}
+
+fn create_bars(app: &AppHandle, cfg: &Value) {
+    let (monitors, primary) = sorted_monitors(app);
     let chosen: Vec<(usize, &tauri::Monitor)> = match &cfg["monitors"] {
         Value::Array(list) => list.iter().filter_map(|i| i.as_u64()).filter_map(|i| monitors.get(i as usize).map(|m| (i as usize, m))).collect(),
         Value::String(s) if s == "all" => monitors.iter().enumerate().collect(),
@@ -169,6 +190,7 @@ fn reload(app: &AppHandle, force_layout: bool) {
     start_pollers(&cfg);
     apply_system(&cfg);
     update_tray(app);
+    settings_changed(app);
 }
 
 fn apply_system(cfg: &Value) {
@@ -176,7 +198,8 @@ fn apply_system(cfg: &Value) {
     let hide_osd = config::island_name(cfg).is_some() && island["hide-windows-osd"] != false;
     let dodge_speed = (config::island_name(cfg).is_some() && island["dodge"] != false)
         .then(|| island["dodge-speed"].as_f64().unwrap_or(450.0));
-    with(|s| { s.hide_osd = hide_osd; s.dodge_speed = dodge_speed; });
+    let dodge_eyes = island["dodge-eyes"] != false;
+    with(|s| { s.hide_osd = hide_osd; s.dodge_speed = dodge_speed; s.dodge_eyes = dodge_eyes; });
     if hide_osd { win32::hide_volume_osd(); } else { win32::restore_volume_osd(); }
     audio::set_key_hook(hide_osd.then(|| island["volume-step"].as_u64().unwrap_or(2) as u32));
     if let Some(w) = cfg["wallpaper"].as_str() {
@@ -266,7 +289,7 @@ fn background_loop(app: AppHandle) {
             let mut gazes: Vec<(String, f64, f64)> = Vec::new();
             let moved = trail.len() < 2 || trail[trail.len() - 2].1 != cx || trail[trail.len() - 2].2 != cy;
             with(|s| {
-                let dodge_speed = s.dodge_speed;
+                let (dodge_speed, eyes) = (s.dodge_speed, s.dodge_eyes);
                 for bar in &mut s.bars {
                     let Some(rc) = win32::window_rect(bar.hwnd) else { continue };
                     // Cursor in CSS pixels of the window.
@@ -274,7 +297,7 @@ fn background_loop(app: AppHandle) {
                     let change = dodge_step(bar, dodge_speed, px, py, speed / bar.scale);
                     if let Some(on) = change { dodges.push((bar.label.clone(), on)); }
                     // The hidden island no longer gets mouse events: its eyes follow the cursor through the engine.
-                    if bar.dodge.is_some() && (moved || change.is_some()) { gazes.push((bar.label.clone(), px, py)); }
+                    if eyes && bar.dodge.is_some() && (moved || change.is_some()) { gazes.push((bar.label.clone(), px, py)); }
                     // A hidden island lets clicks through to what's behind it.
                     let inside = !bar.fullscreen && bar.rects.iter()
                         .filter(|r| bar.dodge.is_none() || Some(**r) != bar.notch)
@@ -464,6 +487,73 @@ fn set_hit_rects(window: WebviewWindow, rects: Vec<Rect>, notch: Option<Rect>, d
     });
 }
 
+// --- Settings window ---------------------------------------------------------------------------------
+
+/// The settings window: the menu's options with more room. Created on the next turn of the event
+/// loop (building a window from inside a command or a menu handler can deadlock on Windows).
+fn open_settings(app: &AppHandle) {
+    let a = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if let Some(w) = a.get_webview_window("settings") {
+            let _ = w.unminimize();
+            let _ = w.show();
+            let _ = w.set_focus();
+            return;
+        }
+        let built = WebviewWindowBuilder::new(&a, "settings", WebviewUrl::App("settings.html".into()))
+            .title(t("settings.title"))
+            .inner_size(600.0, 780.0)
+            .min_inner_size(460.0, 520.0)
+            .center()
+            .theme(Some(tauri::Theme::Dark))
+            .build();
+        if let Err(e) = built { eprintln!("[kysland] settings window: {e}"); }
+    });
+}
+
+/// The config (or start with Windows) changed: the settings window reads everything again.
+fn settings_changed(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("settings") { let _ = w.set_title(t("settings.title")); }
+    let _ = app.emit_to("settings", "settings-changed", ());
+}
+
+#[tauri::command]
+fn settings_state(app: AppHandle) -> Value {
+    let cfg = with(|s| s.cfg.clone());
+    json!({
+        "lang": i18n::lang(),
+        "version": app.package_info().version.to_string(),
+        "language": cfg["language"], "monitors": cfg["monitors"], "hideOnFullscreen": cfg["hide-on-fullscreen"] != false,
+        "screens": screen_list(&app),
+        "autostart": with(|s| s.autostart_on),
+        "claudeInstalled": system::claude_installed(),
+        "island": config::island_conf(&cfg),
+    })
+}
+
+/// Writes one option to config.jsonc (the reload that follows applies it and notifies the window).
+#[tauri::command]
+fn set_setting(app: AppHandle, key: String, value: Value) -> Result<(), String> {
+    let island = with(|s| config::island_name(&s.cfg)).unwrap_or_else(|| "island".into());
+    match key.as_str() {
+        "language" | "monitors" | "hide-on-fullscreen" => config::set_value(&[&key], value),
+        "dodge" | "dodge-eyes" | "dodge-roam" | "dodge-roam-delay" | "dodge-speed" | "outline" | "claude" | "notifications"
+        | "hide-windows-osd" | "expand-on-hover" => {
+            config::set_value(&[&island, &key], value)
+        }
+        "autostart" => { set_autostart(&app, value == true); Ok(()) }
+        _ => Err(format!("unknown setting: {key}")),
+    }
+}
+
+/// Buttons of the settings window, same as the menu entries.
+#[tauri::command]
+fn settings_action(app: AppHandle, name: String) {
+    if !matches!(name.as_str(), "reload" | "open-config" | "edit-config" | "edit-style" | "devtools") { return; }
+    let a = app.clone();
+    let _ = app.run_on_main_thread(move || on_menu(&a, &name));
+}
+
 #[tauri::command]
 fn action(window: WebviewWindow, name: String, arg: Value, extra: Value) {
     let app = window.app_handle().clone();
@@ -510,11 +600,15 @@ fn action(window: WebviewWindow, name: String, arg: Value, extra: Value) {
         "notif-open" => notifs::open(arg["aumid"].as_str(), arg["launch"].as_str()),
         "claude-refresh" => system::claude_refresh(),
         "menu" => show_menu(&app, Some(window.label().to_owned())),
+        "settings" => open_settings(&app),
         _ => {}
     }
 }
 
 // --- Menu (tray icon, right-click on the island, Ctrl+Alt+W) -------------------------------------------
+
+/// Hiding sensitivity choices: approaches slower than this many px/s hide the island.
+const DODGE_SPEEDS: [(u32, &str); 3] = [(300, "menu.dodge_speed_low"), (450, "menu.dodge_speed_medium"), (650, "menu.dodge_speed_high")];
 
 fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let cfg = with(|s| s.cfg.clone());
@@ -526,9 +620,49 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         languages.push(CheckMenuItem::with_id(app, format!("lang:{code}"), *name, true, chosen == *code, None::<&str>)?);
     }
     let language_items: Vec<&dyn IsMenuItem<tauri::Wry>> = languages.iter().map(|i| i as &dyn IsMenuItem<tauri::Wry>).collect();
+    // Screens: the main one, all of them, or a given one.
+    let screens = screen_list(app);
+    let chosen_screens: Vec<u64> = match &cfg["monitors"] { Value::Array(l) => l.iter().filter_map(Value::as_u64).collect(), _ => vec![] };
+    let mut screen_entries = vec![
+        CheckMenuItem::with_id(app, "screen:primary", t("menu.screen_primary"), true, cfg["monitors"] != "all" && chosen_screens.is_empty(), None::<&str>)?,
+        CheckMenuItem::with_id(app, "screen:all", t("menu.screen_all"), true, cfg["monitors"] == "all", None::<&str>)?,
+    ];
+    for s in &screens {
+        let i = s["index"].as_u64().unwrap_or(0);
+        let label = format!("{} · {} ({}×{})", i + 1, s["name"].as_str().unwrap_or(""), s["width"], s["height"]);
+        screen_entries.push(CheckMenuItem::with_id(app, format!("screen:{i}"), label, true, chosen_screens.contains(&i), None::<&str>)?);
+    }
+    let screen_items: Vec<&dyn IsMenuItem<tauri::Wry>> = screen_entries.iter().map(|i| i as &dyn IsMenuItem<tauri::Wry>).collect();
+    // Island behavior: hiding from a slow cursor (with its eyes and sensitivity), fullscreen, outline, Claude.
+    let dodge = island["dodge"] != false;
+    let speed = island["dodge-speed"].as_f64().unwrap_or(450.0);
+    let mut speeds = Vec::new();
+    for (value, key) in DODGE_SPEEDS {
+        speeds.push(CheckMenuItem::with_id(app, format!("dodge-speed:{value}"), t(key), dodge, speed == value as f64, None::<&str>)?);
+    }
+    let speed_items: Vec<&dyn IsMenuItem<tauri::Wry>> = speeds.iter().map(|i| i as &dyn IsMenuItem<tauri::Wry>).collect();
+    let outline = match &island["outline"] { Value::Bool(true) => "on", Value::Bool(false) => "off", _ => "auto" };
+    let outline_menu = Submenu::with_items(app, t("menu.outline"), true, &[
+        &CheckMenuItem::with_id(app, "outline:auto", t("menu.outline_auto"), true, outline == "auto", None::<&str>)?,
+        &CheckMenuItem::with_id(app, "outline:on", t("menu.outline_on"), true, outline == "on", None::<&str>)?,
+        &CheckMenuItem::with_id(app, "outline:off", t("menu.outline_off"), true, outline == "off", None::<&str>)?,
+    ])?;
+    let island_menu = Submenu::with_items(app, t("menu.island"), true, &[
+        &CheckMenuItem::with_id(app, "dodge", t("menu.dodge"), true, dodge, None::<&str>)?,
+        &CheckMenuItem::with_id(app, "dodge-eyes", t("menu.dodge_eyes"), dodge, island["dodge-eyes"] != false, None::<&str>)?,
+        &CheckMenuItem::with_id(app, "dodge-roam", t("menu.dodge_roam"), dodge && island["dodge-eyes"] != false,
+            island["dodge-roam"] != false, None::<&str>)?,
+        &Submenu::with_items(app, t("menu.dodge_speed"), dodge, &speed_items)?,
+        &PredefinedMenuItem::separator(app)?,
+        &CheckMenuItem::with_id(app, "fullscreen", t("menu.fullscreen"), true, cfg["hide-on-fullscreen"] != false, None::<&str>)?,
+        &outline_menu,
+        &CheckMenuItem::with_id(app, "claude", t(if claude { "menu.claude" } else { "menu.claude_missing" }),
+            claude, claude && island["claude"] == true, None::<&str>)?,
+    ])?;
     Menu::with_items(app, &[
         &MenuItem::with_id(app, "title", "Kysland", false, None::<&str>)?,
         &PredefinedMenuItem::separator(app)?,
+        &MenuItem::with_id(app, "settings", t("menu.settings"), true, None::<&str>)?,
         &MenuItem::with_id(app, "reload", t("menu.reload"), true, None::<&str>)?,
         &MenuItem::with_id(app, "open-config", t("menu.open_config"), true, None::<&str>)?,
         &MenuItem::with_id(app, "edit-config", t("menu.edit_config"), true, None::<&str>)?,
@@ -536,9 +670,8 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         &MenuItem::with_id(app, "devtools", t("menu.devtools"), true, None::<&str>)?,
         &Submenu::with_items(app, t("menu.language"), true, &language_items)?,
         &PredefinedMenuItem::separator(app)?,
-        &CheckMenuItem::with_id(app, "fullscreen", t("menu.fullscreen"), true, cfg["hide-on-fullscreen"] != false, None::<&str>)?,
-        &CheckMenuItem::with_id(app, "claude", t(if claude { "menu.claude" } else { "menu.claude_missing" }),
-            claude, claude && island["claude"] == true, None::<&str>)?,
+        &Submenu::with_items(app, t("menu.screen"), true, &screen_items)?,
+        &island_menu,
         &CheckMenuItem::with_id(app, "autostart", t("menu.autostart"), true, with(|s| s.autostart_on), None::<&str>)?,
         &PredefinedMenuItem::separator(app)?,
         &MenuItem::with_id(app, "quit", t("menu.quit"), true, None::<&str>)?,
@@ -549,6 +682,7 @@ fn on_menu(app: &AppHandle, id: &str) {
     let cfg = with(|s| s.cfg.clone());
     let island = config::island_name(&cfg).unwrap_or_else(|| "island".into());
     let result = match id {
+        "settings" => { open_settings(app); Ok(()) }
         "reload" => { reload(app, true); Ok(()) }
         "open-config" => { win32::shell_open(&config::config_dir().to_string_lossy()); Ok(()) }
         "edit-config" => { win32::shell_open(&config::config_file().to_string_lossy()); Ok(()) }
@@ -559,9 +693,16 @@ fn on_menu(app: &AppHandle, id: &str) {
         }
         "fullscreen" => config::set_value(&["hide-on-fullscreen"], json!(cfg["hide-on-fullscreen"] == false)),
         "claude" => config::set_value(&[&island, "claude"], json!(config::island_conf(&cfg)["claude"] != true)),
+        "dodge" | "dodge-eyes" | "dodge-roam" => config::set_value(&[&island, id], json!(config::island_conf(&cfg)[id] == false)),
+        "outline:auto" => config::set_value(&[&island, "outline"], json!("auto")),
+        "outline:on" | "outline:off" => config::set_value(&[&island, "outline"], json!(id == "outline:on")),
+        s if s.starts_with("dodge-speed:") => config::set_value(&[&island, "dodge-speed"], json!(s[12..].parse::<u32>().unwrap_or(450))),
         "autostart" => { set_autostart(app, !with(|s| s.autostart_on)); Ok(()) }
         "quit" => { app.exit(0); Ok(()) }
         l if l.starts_with("lang:") => config::set_value(&["language"], json!(&l[5..])),
+        "screen:primary" => config::set_value(&["monitors"], json!("primary")),
+        "screen:all" => config::set_value(&["monitors"], json!("all")),
+        s if s.starts_with("screen:") => config::set_value(&["monitors"], json!([s[7..].parse::<u64>().unwrap_or(0)])),
         _ => Ok(()),
     };
     if let Err(e) = result { island_message(&tf("msg.config_write", &[("error", &e)]), "triangle-alert"); }
@@ -575,9 +716,9 @@ fn update_tray(app: &AppHandle) {
         .tooltip("Kysland")
         .menu(&menu)
         .show_menu_on_left_click(false)
-        .on_tray_icon_event(|_, e| {
+        .on_tray_icon_event(|tray, e| {
             if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = e {
-                win32::shell_open(&config::config_dir().to_string_lossy());
+                open_settings(tray.app_handle());
             }
         })
         .build(app);
@@ -608,6 +749,7 @@ fn set_autostart(app: &AppHandle, on: bool) {
         Err(e) => island_message(&tf("msg.autostart_failed", &[("error", &e)]), "triangle-alert"),
     }
     update_tray(app);
+    settings_changed(app);
 }
 
 /// Installed build: on by default, then follows the saved choice (recreated if the task went
@@ -631,6 +773,7 @@ fn opt(argv: &[String], name: &str) -> Option<String> {
 /// Arguments of a second instance, forwarded to the running one.
 fn handle_args(app: &AppHandle, argv: Vec<String>) {
     if argv.iter().any(|a| a == "--quit") { return app.exit(0); }
+    if argv.iter().any(|a| a == "--settings") { return open_settings(app); }
     if let Some(text) = opt(&argv, "island") {
         return hub::emit("island", json!({ "text": text, "icon": opt(&argv, "icon").unwrap_or_else(|| "bell".into()) }));
     }
@@ -668,7 +811,7 @@ pub fn run() {
                 })
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![init, run_command, notifications, set_hit_rects, action])
+        .invoke_handler(tauri::generate_handler![init, run_command, notifications, set_hit_rects, action, settings_state, set_setting, settings_action])
         .on_menu_event(|app, e| on_menu(app, e.id().as_ref()))
         .setup(move |app| {
             let handle = app.handle().clone();

@@ -164,6 +164,7 @@
   // --- Eyes of the hidden island ----------------------------------------------------------
   // While the island hides from a slow cursor, two small eyes in what's left of it keep watch:
   // quick glances at the cursor, a blink now and then, a look elsewhere before checking back.
+  // If the cursor stays close long enough, the island grows a little and the eyes roam around it.
   const rand = (min, max) => min + Math.random() * (max - min);
 
   class Eyes {
@@ -172,12 +173,16 @@
       this.el.className = 'notch-eyes';
       this.el.innerHTML = '<i></i><i></i>';
       notch.appendChild(this.el);
+      this.notch = notch;
       this.cursor = null;
       this.elsewhere = false;
+      this.roaming = false;
     }
 
-    start() {
+    /** `roamAfter`: seconds before the eyes start roaming (0: never). */
+    start(roamAfter = 0) {
       this.stop();
+      if (roamAfter > 0) this.roamT = setTimeout(() => this.roam(), roamAfter * 1000);
       const blink = () => {
         this.el.classList.add('blink');
         setTimeout(() => this.el.classList.remove('blink'), 110);
@@ -198,10 +203,32 @@
     }
 
     stop() {
-      clearTimeout(this.blinkT);
-      clearTimeout(this.glanceT);
-      clearTimeout(this.backT);
+      for (const timer of [this.blinkT, this.glanceT, this.backT, this.roamT, this.wanderT]) clearTimeout(timer);
       this.elsewhere = false;
+      this.roaming = false;
+      this.notch.classList.remove('roaming');
+      this.el.style.setProperty('--ex', '0px');
+      this.el.style.setProperty('--ey', '0px');
+    }
+
+    // The island grows and the eyes wander: mostly toward the cursor, sometimes anywhere.
+    roam() {
+      this.roaming = true;
+      this.notch.classList.add('roaming');
+      const wander = () => {
+        const r = this.notch.getBoundingClientRect();
+        const maxX = Math.max(0, r.width / 2 - 26), maxY = Math.max(0, r.height / 2 - 10);
+        const clamp = (v, max) => Math.max(-max, Math.min(max, v));
+        const toCursor = this.cursor && Math.random() < 0.6;
+        const x = toCursor ? clamp(this.cursor.x - (r.left + r.width / 2) + rand(-14, 14), maxX) : rand(-maxX, maxX);
+        const y = rand(-maxY, maxY) * (toCursor ? 0.5 : 1);
+        this.el.style.setProperty('--ex', `${x.toFixed(1)}px`);
+        this.el.style.setProperty('--ey', `${y.toFixed(1)}px`);
+        // Once there, look at the cursor again (unless busy looking elsewhere).
+        this.backT = setTimeout(() => { if (this.cursor && !this.elsewhere) this.aim(this.cursor.x, this.cursor.y); }, 450);
+        this.wanderT = setTimeout(wander, rand(700, 2200));
+      };
+      this.wanderT = setTimeout(wander, 600); // after the island has grown
     }
 
     look(x, y) {
@@ -220,9 +247,10 @@
       const len = Math.hypot(dx, dy) || 1;
       const k = Math.min(1, len / 40); // a close cursor doesn't pull the eyes all the way
       const gx = (dx / len) * k, gy = (dy / len) * k;
+      const [rx, ry] = this.roaming ? [5, 3.5] : [4, 2]; // bigger eyes, more room
       const s = this.el.style;
-      s.setProperty('--gx', `${(gx * 4).toFixed(2)}px`);
-      s.setProperty('--gy', `${(gy * 2).toFixed(2)}px`);
+      s.setProperty('--gx', `${(gx * rx).toFixed(2)}px`);
+      s.setProperty('--gy', `${(gy * ry).toFixed(2)}px`);
       // The eye on the far side looks a bit smaller, as if the head turned.
       s.setProperty('--sl', (1 - Math.max(0, gx) * 0.18).toFixed(3));
       s.setProperty('--sr', (1 + Math.min(0, gx) * 0.18).toFixed(3));
@@ -243,6 +271,9 @@
       'scroll-step': 5,
       outline: 'auto',               // 'auto' (on dark backgrounds) | true | false
       dodge: true,                   // hides when the cursor approaches slowly (read by the engine)
+      'dodge-eyes': true,            // two little eyes watch the cursor while it's hidden
+      'dodge-roam': true,            // ...and roam around a grown island if the cursor stays close
+      'dodge-roam-delay': 20,        // seconds
       notifications: true,           // Windows notifications in the island
       claude: false,                 // Claude plan usage (if Claude Code is installed)
       'notification-duration': 6,    // seconds
@@ -259,6 +290,7 @@
       });
       const notch = S.notch.el;
       S.eyes = new Eyes(notch);
+      notch.classList.toggle('eyes', m.conf['dodge-eyes'] !== false);
       applyOutline(m, state.backdropDark);
       let enterT = 0, leaveT = 0;
       if (m.conf['expand-on-hover']) {
@@ -347,7 +379,8 @@
       const S = m.island;
       if (!S) return;
       S.notch.el.classList.toggle('dodged', on);
-      if (on) S.eyes.start(); else S.eyes.stop();
+      if (on && m.conf['dodge-eyes'] !== false) S.eyes.start(m.conf['dodge-roam'] !== false ? m.conf['dodge-roam-delay'] : 0);
+      else S.eyes.stop();
     },
 
     onGaze(m, x, y) {
@@ -463,6 +496,7 @@
       size: 'expanded',
       html: `<div class="n-expanded">
         <div class="n-head"><span class="n-date-long" data-morph="date"></span><div class="n-head-right">
+          <button class="n-gear" title="${t('island.settings')}">${icon('settings')}</button>
           <button class="n-bell" title="${t('island.notifications')}">${icon('bell')}<span class="n-badge"></span></button>
           <span class="n-time-big" data-morph="time"></span></div></div>
         ${md ? `<div class="n-media">
@@ -485,6 +519,7 @@
       </div>`,
       mount(el) {
         el.querySelector('.n-bell').onclick = () => openHistory(m);
+        el.querySelector('.n-gear').onclick = () => { setExpanded(m, false); api.action('settings'); };
         el.querySelector('.n-date-long').onclick = () => openCalendar(m);
         el.querySelectorAll('.n-claude-refresh').forEach((b) => {
           b.onclick = () => {

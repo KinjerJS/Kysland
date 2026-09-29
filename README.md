@@ -18,7 +18,7 @@ It can also be a full **Waybar / Hyprland-style status bar**.
 - **Script messages**: `kysland.exe --island="Build finished" --icon=check-circle`.
 - **Calendar**: click the date to open a month calendar (today highlighted, arrows or mouse wheel to change month).
 - **Mouse**: the wheel changes the volume. Right-click opens the Kysland menu.
-- **Gets out of the way**: move the cursor to the island quickly and it expands as usual; approach it slowly (aiming at something behind it) and it tucks itself into the screen edge and lets clicks through, with two little eyes that keep glancing at the cursor (and blink), then comes back once the cursor moves away.
+- **Gets out of the way**: move the cursor to the island quickly and it expands as usual; approach it slowly (aiming at something behind it) and it tucks itself into the screen edge and lets clicks through, with two little eyes that keep glancing at the cursor (and blink), then comes back once the cursor moves away. If the cursor stays close for a while (20 s by default), the island grows a little and the eyes roam around it.
 - **Outline on dark backgrounds**: when what's around the island is mostly black, a thin outline keeps it visible.
 
 ### Windows notifications
@@ -62,10 +62,13 @@ If something is left in a bad state after a crash, `kysland.exe --repair` restor
 
 ## Usage
 
-Right-click the island, press **`Ctrl+Alt+W`** anywhere, or use the tray icon to open the menu. From there you can reload, open or edit the configuration, pick the language (automatic = Windows display language, English or French), toggle fullscreen hiding, Claude usage and start with Windows, and open the **CSS inspector** (DevTools).
+Right-click the island, press **`Ctrl+Alt+W`** anywhere, or right-click the tray icon to open the menu: reload, edit the configuration, language (automatic = Windows display language, English or French), screen (main, all, or a given one), a **Dynamic Island** submenu (hiding from a slow cursor, eyes, sensitivity, fullscreen hiding, outline, Claude usage), start with Windows, and the **CSS inspector** (DevTools).
+
+**Settings window**: the same options with more room, a screen picker (several screens at once) and a few extra switches. Open it from the menu (**Settings…**), the ⚙ button of the expanded island, a left click on the tray icon, or `kysland.exe --settings`.
 
 | Option | Effect |
 |---|---|
+| `--settings` | Open the settings window |
 | `--quit` | Quit cleanly |
 | `--repair` | Restore the volume flyout, the taskbar and the screen space, then exit |
 | `--island="text" --icon=name` | Show a message in the island |
@@ -90,6 +93,8 @@ Island options (in the `"island"` section):
 | `media-linger` | `15` | Seconds a paused track stays displayed |
 | `outline` | `"auto"` | Thin outline when it's mostly black around the island; `true` / `false` to force it (color: `--notch-outline-color`) |
 | `dodge` / `dodge-speed` | `true` / `450` | Hide when the cursor approaches slower than this many px/s |
+| `dodge-eyes` | `true` | Eyes watching the cursor while hidden |
+| `dodge-roam` / `dodge-roam-delay` | `true` / `20` | Cursor still close after this many seconds: the island grows and the eyes roam |
 | `kemhome` | `http://localhost:8080` | KemHome agent URL, `false` to disable |
 | `hide-windows-osd` | `true` | Handle the volume keys and hide the Windows volume flyout |
 | `volume-step` | `2` | Percent per volume key press |
@@ -98,7 +103,7 @@ Island options (in the `"island"` section):
 | `claude` | `false` | Show Claude plan usage |
 | `transients` | all `true` | Which events stretch the island: `volume`, `media`, `battery`, `network`, `workspace` |
 
-Top-level options include `language` (`"auto"`, `"en"`, `"fr"`), `reserve`, `hide-on-fullscreen`, `monitors` and `wallpaper`. Status bar modules (`workspaces`, `window`, `clock`, `cpu`, `memory`, `disk`, `network`, `audio`, `battery`, `launcher`, `power`, `media`, `custom/<name>`…) are listed in the comments of `config.jsonc`.
+Top-level options include `language` (`"auto"`, `"en"`, `"fr"`), `monitors` (`"primary"`, `"all"` or screen numbers from left to right starting at 0, e.g. `[0, 2]`), `reserve`, `hide-on-fullscreen` and `wallpaper`. Status bar modules (`workspaces`, `window`, `clock`, `cpu`, `memory`, `disk`, `network`, `audio`, `battery`, `launcher`, `power`, `media`, `custom/<name>`…) are listed in the comments of `config.jsonc`.
 
 ## Privacy
 
@@ -122,7 +127,7 @@ npm run build      # build the NSIS installer into src-tauri/target/release/bund
 
 Layout:
 
-- `ui/`: the interface (HTML, CSS, JS), served by the WebView. `api.js` bridges it to the Rust commands and events, `i18n.js` holds the displayed strings.
+- `ui/`: the interface (HTML, CSS, JS), served by the WebView. `settings.*` is the settings window. `api.js` bridges it to the Rust commands and events, `i18n.js` holds the displayed strings.
 - `src-tauri/src/`: the engine. `lib.rs` (windows, menu, commands, background loop), `audio.rs`, `media.rs`, `notifs.rs`, `system.rs`, `glaze.rs`, `win32.rs`, `config.rs`, `autostart.rs`, `i18n.rs` (menu strings).
 - Code, comments and commits are in English; only displayed text is translated (`ui/i18n.js`, `src-tauri/src/i18n.rs`).
 - `defaults/`: default configuration, bundled as a resource.

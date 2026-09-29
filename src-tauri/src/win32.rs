@@ -279,6 +279,38 @@ pub fn exe_icon_png(exe: &str) -> Option<String> {
     }
 }
 
+// --- Screens ---------------------------------------------------------------------------------------
+
+/// Friendly monitor names ("SyncMaster") by GDI device name ("\\.\DISPLAY1").
+pub fn monitor_names() -> std::collections::HashMap<String, String> {
+    use windows::Win32::Devices::Display::*;
+    let mut names = std::collections::HashMap::new();
+    let from_wide = |w: &[u16]| String::from_utf16_lossy(&w[..w.iter().position(|&c| c == 0).unwrap_or(w.len())]);
+    unsafe {
+        let (mut n_paths, mut n_modes) = (0u32, 0u32);
+        if GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &mut n_paths, &mut n_modes).is_err() { return names; }
+        let mut paths = vec![DISPLAYCONFIG_PATH_INFO::default(); n_paths as usize];
+        let mut modes = vec![DISPLAYCONFIG_MODE_INFO::default(); n_modes as usize];
+        if QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &mut n_paths, paths.as_mut_ptr(), &mut n_modes, modes.as_mut_ptr(), None).is_err() { return names; }
+        for path in &paths[..n_paths as usize] {
+            let mut target = DISPLAYCONFIG_TARGET_DEVICE_NAME::default();
+            target.header = DISPLAYCONFIG_DEVICE_INFO_HEADER {
+                r#type: DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME, size: std::mem::size_of::<DISPLAYCONFIG_TARGET_DEVICE_NAME>() as u32,
+                adapterId: path.targetInfo.adapterId, id: path.targetInfo.id,
+            };
+            let mut source = DISPLAYCONFIG_SOURCE_DEVICE_NAME::default();
+            source.header = DISPLAYCONFIG_DEVICE_INFO_HEADER {
+                r#type: DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME, size: std::mem::size_of::<DISPLAYCONFIG_SOURCE_DEVICE_NAME>() as u32,
+                adapterId: path.sourceInfo.adapterId, id: path.sourceInfo.id,
+            };
+            if DisplayConfigGetDeviceInfo(&mut target.header) == 0 && DisplayConfigGetDeviceInfo(&mut source.header) == 0 {
+                names.insert(from_wide(&source.viewGdiDeviceName), from_wide(&target.monitorFriendlyDeviceName));
+            }
+        }
+    }
+    names
+}
+
 // --- Screen sampling -------------------------------------------------------------------------------
 
 /// Share of dark pixels (luma <= `max_luma`) in `outer` minus `inner`, read from the composed

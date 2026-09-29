@@ -88,14 +88,14 @@ pub fn set_value(path: &[&str], value: Value) -> Result<(), String> {
     let text = fs::read_to_string(&file).map_err(|e| e.to_string())?;
     let key = path.last().ok_or("empty path")?;
     let rendered = serde_json::to_string(&value).unwrap();
-    // Simple value (true / false / number / "text" / null) of the key, inside the right section.
+    // Simple value (true / false / number / "text" / null / flat array) of the key, inside the right section.
     let scope_start = if path.len() > 1 {
         let re = Regex::new(&format!(r#""{}"\s*:\s*\{{"#, regex::escape(path[0]))).unwrap();
         re.find(&text).map(|m| m.end()).ok_or("section not found")?
     } else {
         0
     };
-    let re = Regex::new(&format!(r#"("{}"\s*:\s*)(true|false|null|-?[\d.]+|"(?:[^"\\]|\\.)*")"#, regex::escape(key))).unwrap();
+    let re = Regex::new(&format!(r#"("{}"\s*:\s*)(true|false|null|-?[\d.]+|"(?:[^"\\]|\\.)*"|\[[^\[\]]*\])"#, regex::escape(key))).unwrap();
     let new_text = if let Some(c) = re.captures(&text[scope_start..]) {
         let m = c.get(2).unwrap();
         let (a, b) = (scope_start + m.start(), scope_start + m.end());
@@ -128,4 +128,30 @@ pub fn all_modules(cfg: &Value) -> Vec<String> {
 
 pub fn island_conf(cfg: &Value) -> Value {
     island_name(cfg).and_then(|n| cfg.get(&n).cloned()).unwrap_or_else(|| json!({}))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn set_value_keeps_comments_and_handles_arrays() {
+        let dir = std::env::temp_dir().join(format!("kysland-test-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        unsafe { std::env::set_var("KYSLAND_CONFIG", &dir) };
+        fs::write(config_file(), "{\n  \"monitors\": \"primary\", // where\n  \"island\": {\n    \"dodge\": true\n  }\n}\n").unwrap();
+
+        set_value(&["monitors"], json!([1])).unwrap();
+        set_value(&["monitors"], json!([0, 2])).unwrap(); // replaces an array, no duplicate key
+        set_value(&["island", "dodge"], json!(false)).unwrap();
+        set_value(&["island", "dodge-roam-delay"], json!(40)).unwrap(); // missing: added to the section
+
+        let text = fs::read_to_string(config_file()).unwrap();
+        assert!(text.contains("\"monitors\": [0,2], // where"), "{text}");
+        assert_eq!(text.matches("\"monitors\"").count(), 1, "{text}");
+        let cfg = load().unwrap();
+        assert_eq!(cfg["island"]["dodge"], json!(false));
+        assert_eq!(cfg["island"]["dodge-roam-delay"], json!(40));
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

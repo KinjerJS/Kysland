@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Island / bar windows: Kysland commands and events",
-  "windows": ["bar-*"],
+  "description": "Island / bar windows and the settings window: Kysland commands and events",
+  "windows": ["bar-*", "settings"],
   "permissions": ["core:default"]
 }

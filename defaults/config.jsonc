@@ -33,6 +33,9 @@
     "outline": "auto",                   // thin outline when it's mostly black around the notch; true / false to force it
     "dodge": true,                       // approach slowly and the notch tucks itself away (to reach what's behind); fast = hover as usual
     "dodge-speed": 450,                  // px/s: approaches slower than this count as slow
+    "dodge-eyes": true,                  // two little eyes watch the cursor while it's hidden
+    "dodge-roam": true,                  // cursor still close after a while: the notch grows and the eyes roam around
+    "dodge-roam-delay": 20,              // seconds
     "hide-windows-osd": true,           // volume keys no longer show the Windows flyout (Kysland handles them)
     "volume-step": 2,                   // % per volume key press
     "notifications": true,              // Windows notifications shown in the notch
