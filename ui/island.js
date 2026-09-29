@@ -164,17 +164,23 @@
   // --- Eyes of the hidden island ----------------------------------------------------------
   // While the island hides from a slow cursor, two small eyes in what's left of it keep watch:
   // quick glances at the cursor, a blink now and then, a look elsewhere before checking back.
-  // If the cursor stays close long enough, the island grows a little and the eyes roam around it.
+  // If the cursor stays close long enough, the island grows tall and the eyes come alive: they
+  // look around as if wondering where they are, circle, sneak up next to the cursor a few hops at
+  // a time (never right under it), stare at it, doze off when nothing happens, jump away when it
+  // gets too close, and show moods with their brows.
   const rand = (min, max) => min + Math.random() * (max - min);
+  const pick = (list) => list[Math.floor(Math.random() * list.length)];
+  const clamp = (v, max) => Math.max(-max, Math.min(max, v));
 
   class Eyes {
     constructor(notch) {
       this.el = document.createElement('div');
       this.el.className = 'notch-eyes';
-      this.el.innerHTML = '<i></i><i></i>';
+      this.el.innerHTML = '<span class="eye l"><b></b><i></i></span><span class="eye r"><b></b><i></i></span>';
       notch.appendChild(this.el);
       this.notch = notch;
       this.cursor = null;
+      this.cursorAt = 0; // last time the cursor moved
       this.elsewhere = false;
       this.roaming = false;
     }
@@ -194,7 +200,7 @@
         this.aim(c.x + (Math.random() < 0.5 ? -1 : 1) * rand(30, 70), c.y + rand(-10, 30));
         this.backT = setTimeout(() => {
           this.elsewhere = false;
-          if (this.cursor) this.aim(this.cursor.x, this.cursor.y);
+          if (this.cursor && !this.roaming) this.aim(this.cursor.x, this.cursor.y);
         }, rand(260, 480));
         this.glanceT = setTimeout(glance, rand(3000, 7000));
       };
@@ -203,72 +209,28 @@
     }
 
     stop() {
-      for (const timer of [this.blinkT, this.glanceT, this.backT, this.roamT, this.growT]) clearTimeout(timer);
+      for (const timer of [this.blinkT, this.glanceT, this.backT, this.roamT, this.growT, this.moodT]) clearTimeout(timer);
       cancelAnimationFrame(this.raf);
       this.elsewhere = false;
       this.roaming = false;
       this.notch.classList.remove('roaming');
+      this.setMood('neutral');
       this.el.style.setProperty('--ex', '0px');
       this.el.style.setProperty('--ey', '0px');
     }
 
-    // The island grows tall and the eyes roam all over it: full turns around it, darts from one
-    // spot to another, a stay near the cursor, while mostly keeping an eye on the cursor.
-    roam() {
-      this.roaming = true;
-      this.notch.classList.add('roaming');
-      this.pos = { x: 0, y: 0 }; // offset of the pair from the island's center
-      this.move = null;
-      let last = 0;
-      const tick = (now) => {
-        const dt = last ? Math.min(0.05, (now - last) / 1000) : 0;
-        last = now;
-        const r = this.notch.getBoundingClientRect();
-        const box = { x: Math.max(0, r.width / 2 - 30), y: Math.max(0, r.height / 2 - 16) }; // room left for the pair
-        if (!this.move || now > this.move.until) this.move = this.nextMove(now, r, box);
-        const target = this.move.target(now);
-        const k = 1 - Math.exp(-dt * this.move.pull); // eased chase of the moving target
-        const clamp = (v, max) => Math.max(-max, Math.min(max, v));
-        this.pos.x = clamp(this.pos.x + (target.x - this.pos.x) * k, box.x);
-        this.pos.y = clamp(this.pos.y + (target.y - this.pos.y) * k, box.y);
-        this.el.style.setProperty('--ex', `${this.pos.x.toFixed(1)}px`);
-        this.el.style.setProperty('--ey', `${this.pos.y.toFixed(1)}px`);
-        if (this.cursor && !this.elsewhere) this.aim(this.cursor.x, this.cursor.y);
-        this.raf = requestAnimationFrame(tick);
-      };
-      this.growT = setTimeout(() => { this.raf = requestAnimationFrame(tick); }, 450); // once the island has grown
-    }
-
-    nextMove(now, r, box) {
-      const roll = Math.random();
-      if (roll < 0.45) {
-        // One or more full turns along an ellipse filling the island.
-        const f = rand(0.55, 1);
-        const speed = rand(2.2, 3.6) * (Math.random() < 0.5 ? -1 : 1); // rad/s
-        const start = Math.atan2(this.pos.y / (box.y || 1), this.pos.x / (box.x || 1));
-        return {
-          until: now + rand(2600, 4800), pull: 7,
-          target: (t) => {
-            const a = start + (speed * (t - now)) / 1000;
-            return { x: Math.cos(a) * box.x * f, y: Math.sin(a) * box.y * f };
-          },
-        };
-      }
-      if (roll < 0.75 || !this.cursor) {
-        // Darts somewhere and stays a moment.
-        const spot = { x: rand(-box.x, box.x), y: rand(-box.y, box.y) };
-        return { until: now + rand(700, 1600), pull: 10, target: () => spot };
-      }
-      // Comes close to the cursor and lazily follows it.
-      return {
-        until: now + rand(1200, 2400), pull: 4,
-        target: () => ({ x: this.cursor.x - (r.left + r.width / 2), y: this.cursor.y - (r.top + r.height / 2) }),
-      };
+    /** Shows a mood (brows, lids); back to neutral after `ms`, or on to `then` = [mood, ms]. */
+    setMood(mood, ms = 0, then = null) {
+      clearTimeout(this.moodT);
+      this.el.dataset.mood = mood;
+      if (ms) this.moodT = setTimeout(() => (then ? this.setMood(...then) : this.setMood('neutral')), ms);
     }
 
     look(x, y) {
+      if (!this.cursor || Math.hypot(x - this.cursor.x, y - this.cursor.y) > 1) this.cursorAt = performance.now();
       this.cursor = { x, y };
-      if (!this.elsewhere) this.aim(x, y);
+      // While roaming, the animation loop decides where to look.
+      if (!this.elsewhere && !this.roaming) this.aim(x, y);
     }
 
     center() {
@@ -289,6 +251,138 @@
       // The eye on the far side looks a bit smaller, as if the head turned.
       s.setProperty('--sl', (1 - Math.max(0, gx) * 0.18).toFixed(3));
       s.setProperty('--sr', (1 + Math.min(0, gx) * 0.18).toFixed(3));
+    }
+
+    // --- Roaming: positions are offsets from the island's center, in CSS pixels. ---
+    roam() {
+      this.roaming = true;
+      this.notch.classList.add('roaming');
+      this.pos = { x: 0, y: 0 };
+      this.move = null;
+      this.fledAt = 0;
+      this.setMood('surprised', 900, ['curious', 1600]); // "oh? where am I?"
+      let last = 0;
+      const tick = (now) => {
+        const dt = last ? Math.min(0.05, (now - last) / 1000) : 0;
+        last = now;
+        const r = this.notch.getBoundingClientRect();
+        const mid = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+        const box = { x: Math.max(0, r.width / 2 - 30), y: Math.max(0, r.height / 2 - 20) }; // room for the pair
+        const c = this.cursor && { x: this.cursor.x - mid.x, y: this.cursor.y - mid.y };
+        const fresh = now - this.cursorAt < 400;
+        // Cursor right on the eyes: they jump away (not too often).
+        if (c && fresh && now - this.fledAt > 1800 && Math.hypot(c.x - this.pos.x, c.y - this.pos.y) < 28) {
+          this.fledAt = now;
+          this.move = this.flee(now, c, box);
+        }
+        // Woken up by the cursor moving.
+        if (this.move?.kind === 'doze' && fresh) {
+          this.setMood('surprised', 700, ['grumpy', 1400]);
+          this.move = null;
+        }
+        if (!this.move || now > this.move.until) this.move = this.nextMove(now, c, box);
+        const target = this.move.target(now, c, box);
+        const k = 1 - Math.exp(-dt * this.move.pull); // eased chase of the target
+        this.pos.x = clamp(this.pos.x + (target.x - this.pos.x) * k, box.x);
+        this.pos.y = clamp(this.pos.y + (target.y - this.pos.y) * k, box.y);
+        const breath = Math.sin(now / 700) * 1.2;
+        this.el.style.setProperty('--ex', `${this.pos.x.toFixed(1)}px`);
+        this.el.style.setProperty('--ey', `${(this.pos.y + breath).toFixed(1)}px`);
+        if (!this.elsewhere) {
+          const spot = this.move.look?.(now); // somewhere else than the cursor
+          if (spot) this.aim(mid.x + spot.x, mid.y + spot.y);
+          else if (this.cursor) this.aim(this.cursor.x, this.cursor.y);
+        }
+        this.raf = requestAnimationFrame(tick);
+      };
+      this.growT = setTimeout(() => { this.raf = requestAnimationFrame(tick); }, 450); // once the island has grown
+    }
+
+    nextMove(now, c, box) {
+      if (c && now - this.cursorAt > 9000) return this.doze(now);
+      const roll = Math.random();
+      if (c && roll < 0.35) return this.approach(now, c, box);
+      if (roll < 0.6) return this.explore(now, box);
+      if (roll < 0.78) return this.circle(now, box);
+      return this.watch(now);
+    }
+
+    // Sneaks up next to the cursor (beside it, never right under it), a few hops at a time.
+    approach(now, c, box) {
+      let side = Math.sign(this.pos.x - c.x) || pick([-1, 1]);
+      let spot = { ...this.pos }, hops = 0, hopAt = now;
+      const total = Math.round(rand(2, 4));
+      this.setMood(pick(['curious', 'neutral', 'suspicious']));
+      return {
+        kind: 'approach', pull: 8, until: now + total * 650 + rand(1400, 2600),
+        target: (t, cur) => {
+          if (cur && hops < total && t >= hopAt) {
+            let gx = clamp(cur.x + side * rand(36, 50), box.x);
+            if (Math.abs(gx - cur.x) < 26) { side = -side; gx = clamp(cur.x + side * rand(36, 50), box.x); } // no room there
+            const gy = clamp(cur.y + rand(-12, 6), box.y);
+            const step = hops === total - 1 ? 1 : rand(0.35, 0.55);
+            spot = { x: spot.x + (gx - spot.x) * step, y: spot.y + (gy - spot.y) * step };
+            hops++;
+            hopAt = t + rand(420, 850);
+            if (hops === total) this.setMood(pick(['happy', 'curious', 'suspicious']), 2200);
+          }
+          return spot;
+        },
+      };
+    }
+
+    // Goes somewhere, then looks left, right and up, as if wondering where it is.
+    explore(now, box) {
+      const spot = { x: rand(-box.x, box.x), y: rand(-box.y, box.y) };
+      const arrive = now + rand(600, 900);
+      const around = [{ x: spot.x - 90, y: spot.y + rand(-20, 20) }, { x: spot.x + 90, y: spot.y + rand(-20, 20) }, { x: spot.x, y: spot.y - 70 }];
+      if (Math.random() < 0.3) this.setMood(pick(['curious', 'worried']), 2400);
+      return {
+        kind: 'explore', pull: 6, until: now + rand(2200, 3600),
+        target: () => spot,
+        look: (t) => (t < arrive ? null : around[Math.floor((t - arrive) / 550) % around.length]),
+      };
+    }
+
+    // One or more turns along an ellipse filling the island.
+    circle(now, box) {
+      const f = rand(0.55, 1);
+      const speed = rand(2.2, 3.6) * pick([-1, 1]); // rad/s
+      const start = Math.atan2(this.pos.y / (box.y || 1), this.pos.x / (box.x || 1));
+      if (Math.random() < 0.3) this.setMood('happy', 2000);
+      return {
+        kind: 'circle', pull: 7, until: now + rand(2600, 4800),
+        target: (t) => {
+          const a = start + (speed * (t - now)) / 1000;
+          return { x: Math.cos(a) * box.x * f, y: Math.sin(a) * box.y * f };
+        },
+      };
+    }
+
+    // Stays put and stares at the cursor, leaning toward it a little.
+    watch(now) {
+      const base = { ...this.pos };
+      this.setMood(pick(['suspicious', 'neutral', 'curious']), 2200);
+      return {
+        kind: 'watch', pull: 4, until: now + rand(1600, 3000),
+        target: (t, cur) => (cur ? { x: base.x + clamp((cur.x - base.x) * 0.08, 6), y: base.y + clamp((cur.y - base.y) * 0.08, 4) } : base),
+      };
+    }
+
+    // Nothing happening: heavy eyelids, a slow drift down (until the cursor moves).
+    doze(now) {
+      this.setMood('sleepy');
+      return { kind: 'doze', pull: 1.2, until: now + 60000, target: (t, cur, box) => ({ x: 0, y: box.y * 0.5 }) };
+    }
+
+    // Jumps to the other side, startled, then sulks a little.
+    flee(now, c, box) {
+      const away = {
+        x: clamp(this.pos.x + (Math.sign(this.pos.x - c.x) || pick([-1, 1])) * box.x, box.x),
+        y: clamp(this.pos.y + (Math.sign(this.pos.y - c.y) || 1) * box.y * 0.6, box.y),
+      };
+      this.setMood('surprised', 600, ['grumpy', 1800]);
+      return { kind: 'flee', pull: 14, until: now + 1100, target: () => away };
     }
   }
 
@@ -373,7 +467,7 @@
         if (m.conf.notifications === false) return;
         S.unread++;
         S.queue.push(data);
-        if (!S.notif && !S.expanded) showNextNotif(m);
+        if (!S.notif && !S.expanded && !S.dodged) showNextNotif(m); // hidden: shown when it comes back
         return;
       }
       const prev = S.data[topic];
@@ -413,9 +507,21 @@
     onDodge(m, on) {
       const S = m.island;
       if (!S) return;
+      S.dodged = on;
       S.notch.el.classList.toggle('dodged', on);
       if (on && m.conf['dodge-eyes'] !== false) S.eyes.start(m.conf['dodge-roam'] !== false ? m.conf['dodge-roam-delay'] : 0);
       else S.eyes.stop();
+      if (on) {
+        // Hidden: the view stays as it is (see render), without an event in progress or elements
+        // in flight, which would show up outside the hidden island.
+        S.notch.finishFlights();
+        clearTimeout(S.transientTimer);
+        S.transient = null;
+      } else if (!S.notif && S.queue.length) {
+        showNextNotif(m); // notifications that arrived meanwhile
+      } else {
+        render(m);
+      }
     },
 
     onGaze(m, x, y) {
@@ -465,7 +571,7 @@
 
   function pushTransient(m, view, ms) {
     const S = m.island;
-    if (S.expanded) return; // the expanded view already shows everything
+    if (S.expanded || S.dodged) return; // the expanded view already shows everything; hidden: skipped
     S.transient = view;
     clearTimeout(S.transientTimer);
     S.transientTimer = setTimeout(() => { S.transient = null; render(m); }, ms);
@@ -495,7 +601,7 @@
 
   function render(m) {
     const S = m.island;
-    if (!S) return;
+    if (!S || S.dodged) return; // hidden: nothing changes until it comes back
     // Only a resting island hides from the cursor (not while open or showing a notification).
     S.notch.el.dataset.dodgeable = !S.expanded && !S.notif ? '1' : '0';
     S.notch.show(S.expanded ? expandedView(m) : S.notif || S.transient || compactView(m));

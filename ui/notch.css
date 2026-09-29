@@ -430,9 +430,11 @@ body.pos-bottom .notch.dodged.eyes { border-radius: 6px 6px 0 0; }
 .notch-inner { transition: opacity .3s ease .08s; }
 .notch.dodged .notch-inner { opacity: 0; transition: opacity .12s ease; }
 
-/* Eyes of the hidden island: follow the cursor (--gx / --gy), turn (--sl / --sr), blink (--lid). */
+/* Eyes of the hidden island: follow the cursor (--gx / --gy), turn (--sl / --sr), blink (--lid).
+   Moods (data-mood, set by island.js while roaming) move the brows and the eyelids. */
 .notch-eyes {
   --gx: 0px; --gy: 0px; --sl: 1; --sr: 1; --lid: 1; --ex: 0px; --ey: 0px;
+  --brow: 0; --bl-y: 0px; --br-y: 0px; --bl-r: 0deg; --br-r: 0deg; --lid-l: 1; --lid-r: 1;
   translate: var(--ex) var(--ey); /* where the pair stands (roaming) */
   position: absolute;
   inset: 0;
@@ -444,22 +446,48 @@ body.pos-bottom .notch.dodged.eyes { border-radius: 6px 6px 0 0; }
   opacity: 0;
   transition: opacity .12s ease, translate .5s cubic-bezier(.3, 1.25, .5, 1);
 }
+.notch-eyes .eye { position: relative; display: flex; align-items: center; justify-content: center; }
 .notch-eyes i {
+  display: block;
   width: 6px;
   height: 7px;
   border-radius: 2.5px;
   background: var(--notch-fg);
   translate: var(--gx) var(--gy);
-  scale: var(--sl) calc(var(--sl) * var(--lid));
-  transition: translate 80ms cubic-bezier(.2, .8, .3, 1), scale 90ms ease, width .4s ease, height .4s ease, border-radius .4s ease;
+  transition: translate 80ms cubic-bezier(.2, .8, .3, 1), scale 90ms ease, width .4s ease, height .4s ease, border-radius .3s ease;
 }
-.notch-eyes i + i { scale: var(--sr) calc(var(--sr) * var(--lid)); }
+.notch-eyes .l i { scale: var(--sl) calc(var(--sl) * var(--lid) * var(--lid-l)); }
+.notch-eyes .r i { scale: var(--sr) calc(var(--sr) * var(--lid) * var(--lid-r)); }
 .notch-eyes.blink { --lid: .12; }
+/* Brows: only on the grown island, shown by moods; they follow the gaze a little. */
+.notch-eyes b {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  width: 14px;
+  height: 2.5px;
+  margin-bottom: 4px;
+  border-radius: 2px;
+  background: var(--notch-fg);
+  opacity: 0;
+  transition: opacity .2s ease, translate .3s var(--spring), rotate .3s var(--spring);
+}
+.notch-eyes .l b { translate: calc(-50% + var(--gx) * .5) calc(var(--bl-y) + var(--gy) * .4); rotate: var(--bl-r); }
+.notch-eyes .r b { translate: calc(-50% + var(--gx) * .5) calc(var(--br-y) + var(--gy) * .4); rotate: var(--br-r); }
+.notch.roaming .notch-eyes b { opacity: var(--brow); }
+.notch-eyes[data-mood=curious]    { --brow: 1; --bl-y: -1px; --br-y: -5px; --br-r: -10deg; }
+.notch-eyes[data-mood=surprised]  { --brow: 1; --bl-y: -6px; --br-y: -6px; --lid-l: 1.15; --lid-r: 1.15; }
+.notch-eyes[data-mood=suspicious] { --brow: 1; --bl-y: 1px; --br-y: -2px; --bl-r: 14deg; --br-r: -4deg; --lid-l: .55; --lid-r: .75; }
+.notch-eyes[data-mood=grumpy]     { --brow: 1; --bl-y: 2px; --br-y: 2px; --bl-r: 22deg; --br-r: -22deg; --lid-l: .7; --lid-r: .7; }
+.notch-eyes[data-mood=worried]    { --brow: 1; --bl-y: -3px; --br-y: -3px; --bl-r: -18deg; --br-r: 18deg; }
+.notch-eyes[data-mood=happy]      { --brow: 1; --bl-y: -4px; --br-y: -4px; --lid-l: .45; --lid-r: .45; }
+.notch-eyes[data-mood=happy] i    { border-radius: 50% 50% 2px 2px / 90% 90% 2px 2px; } /* ^ ^ */
+.notch-eyes[data-mood=sleepy]     { --lid-l: .3; --lid-r: .3; }
 .notch.dodged.eyes .notch-eyes { opacity: 1; transition: opacity .2s ease .2s, translate .5s cubic-bezier(.3, 1.25, .5, 1); }
 .notch.dodged.eyes .notch-eyes i { animation: eyes-open .32s cubic-bezier(.3, 1.4, .5, 1) .22s backwards; }
 @keyframes eyes-open { from { scale: 1 0; } }
 
-/* Cursor still close after a while: the hidden island grows and its eyes roam around (island.js). */
+/* Cursor still close after a while: the hidden island grows tall and its eyes roam (island.js). */
 .notch.dodged.eyes.roaming {
   width: 220px !important;
   height: 130px !important;
