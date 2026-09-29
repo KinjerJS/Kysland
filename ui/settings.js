@@ -169,6 +169,242 @@
     }, 2000 + Math.random() * 3500);
   })();
 
+  // --- Buddy: when the header scrolls out of view, its little island comes along ---------------
+  // It drops from the top of the window and keeps you company: wanders, comes next to the cursor
+  // now and then (a few hops, never on it), stares, dozes off (Zzz) when nothing moves, hops away
+  // when the cursor gets onto it. A calmer cousin of the hidden island's eyes. Scroll back up
+  // and it flies home to the header. It never catches the mouse.
+  const rand = (min, max) => min + Math.random() * (max - min);
+  const pick = (list) => list[Math.floor(Math.random() * list.length)];
+
+  class Buddy {
+    constructor() {
+      this.el = document.createElement('div');
+      this.el.className = 'buddy';
+      this.el.setAttribute('aria-hidden', 'true');
+      this.el.innerHTML = '<div class="buddy-eyes"><span class="eye l"><b></b><i></i></span><span class="eye r"><b></b><i></i></span></div>';
+      document.body.appendChild(this.el);
+      this.eyes = this.el.firstElementChild;
+      this.pos = { x: 0, y: 0 };
+      this.cursor = null;
+      this.cursorAt = 0;
+      this.trail = [];
+      this.move = null;
+      this.on = false;
+      document.addEventListener('mousemove', (e) => this.track(e.clientX, e.clientY));
+      document.documentElement.addEventListener('mouseleave', () => { this.cursor = null; });
+    }
+
+    track(x, y) {
+      const now = performance.now();
+      this.cursor = { x, y };
+      this.cursorAt = now;
+      this.trail.push({ t: now, x, y });
+      while (this.trail.length && now - this.trail[0].t > 400) this.trail.shift();
+    }
+
+    /** Distance the cursor covered in the last 400 ms (a slow sneak doesn't wake it). */
+    travel() {
+      let d = 0;
+      for (let i = 1; i < this.trail.length; i++) d += Math.hypot(this.trail[i].x - this.trail[i - 1].x, this.trail[i].y - this.trail[i - 1].y);
+      return d;
+    }
+
+    /** Drops in from the top of the window. */
+    show() {
+      clearTimeout(this.dockT);
+      if (this.on) { // was flying home: stays out
+        if (this.move?.kind === 'dock') this.setMove(null);
+        return;
+      }
+      this.on = true;
+      this.pos = { x: innerWidth / 2, y: -30 };
+      this.setMove({ kind: 'drop', pull: 5, until: performance.now() + 1200, target: () => ({ x: innerWidth / 2, y: 70 }) });
+      this.setMood('curious', 1500);
+      this.el.classList.add('on');
+      const blink = () => {
+        this.eyes.classList.add('blink');
+        setTimeout(() => this.eyes.classList.remove('blink'), 120);
+        this.blinkT = setTimeout(blink, rand(2500, 5500));
+      };
+      this.blinkT = setTimeout(blink, rand(1500, 3000));
+      let last = 0;
+      const tick = (now) => {
+        const dt = last ? Math.min(0.05, (now - last) / 1000) : 0;
+        last = now;
+        this.step(now, dt);
+        this.raf = requestAnimationFrame(tick);
+      };
+      cancelAnimationFrame(this.raf);
+      this.raf = requestAnimationFrame(tick);
+    }
+
+    /** Flies back to the header, then fades there. */
+    dock(home) {
+      if (!this.on) return;
+      this.setMove({ kind: 'dock', pull: 7, until: Infinity, target: () => home, look: () => home });
+      this.setMood('happy', 700);
+      this.dockT = setTimeout(() => {
+        this.on = false;
+        this.el.classList.remove('on');
+        clearTimeout(this.blinkT);
+        this.setMove(null);
+        setTimeout(() => { if (!this.on) cancelAnimationFrame(this.raf); }, 400);
+      }, 450);
+    }
+
+    step(now, dt) {
+      const c = this.cursor;
+      const fresh = now - this.cursorAt < 400;
+      const asleep = this.move?.kind === 'doze';
+      const busy = this.move?.kind === 'drop' || this.move?.kind === 'dock';
+      // Cursor onto it: hops away (not in its sleep, not too often).
+      if (c && fresh && !asleep && !busy && now - (this.fledAt || 0) > 2200 && Math.hypot(c.x - this.pos.x, c.y - this.pos.y) < 40) {
+        this.fledAt = now;
+        this.setMove(this.flee(now, c));
+      }
+      if (asleep && this.travel() > 45) {
+        this.setMood('surprised', 700, ['grumpy', 1400]);
+        this.setMove(null);
+      }
+      if (!this.move || now > this.move.until) this.setMove(this.nextMove(now));
+      const t = this.move.target(now);
+      const k = 1 - Math.exp(-dt * this.move.pull);
+      this.pos.x = this.clampX(this.pos.x + (t.x - this.pos.x) * k);
+      this.pos.y = this.move.kind === 'drop' || this.move.kind === 'dock' ? this.pos.y + (t.y - this.pos.y) * k : this.clampY(this.pos.y + (t.y - this.pos.y) * k);
+      const breath = Math.sin(now / 800) * 1.5;
+      this.el.style.setProperty('--x', `${this.pos.x.toFixed(1)}px`);
+      this.el.style.setProperty('--y', `${(this.pos.y + breath).toFixed(1)}px`);
+      const spot = this.move.look?.(now) ?? c;
+      if (spot) this.aim(spot.x, spot.y);
+    }
+
+    clampX(x) { return Math.max(48, Math.min(innerWidth - 48, x)); }
+    clampY(y) { return Math.max(40, Math.min(innerHeight - 40, y)); }
+
+    aim(x, y) {
+      const dx = x - this.pos.x, dy = y - this.pos.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const k = Math.min(1, len / 80);
+      const gx = (dx / len) * k, gy = (dy / len) * k;
+      const s = this.eyes.style;
+      s.setProperty('--gx', `${(gx * 4).toFixed(2)}px`);
+      s.setProperty('--gy', `${(gy * 3).toFixed(2)}px`);
+      s.setProperty('--sl', (1 - Math.max(0, gx) * 0.18).toFixed(3));
+      s.setProperty('--sr', (1 + Math.min(0, gx) * 0.18).toFixed(3));
+    }
+
+    setMood(mood, ms = 0, then = null) {
+      clearTimeout(this.moodT);
+      this.eyes.dataset.mood = mood;
+      if (ms) this.moodT = setTimeout(() => (then ? this.setMood(...then) : this.setMood('neutral')), ms);
+    }
+
+    setMove(move) {
+      this.move?.end?.();
+      this.move = move;
+    }
+
+    nextMove(now) {
+      const c = this.cursor;
+      if (c && now - this.cursorAt > 12000) return this.doze(now);
+      const roll = Math.random();
+      if (c && roll < 0.3) return this.approach(now);
+      if (roll < 0.7) return this.wander(now);
+      return this.watch(now);
+    }
+
+    // Comes next to the cursor in two or three hops.
+    approach(now) {
+      let side = Math.sign(this.pos.x - this.cursor.x) || pick([-1, 1]);
+      let spot = { ...this.pos }, hops = 0, hopAt = now;
+      const total = pick([2, 3]);
+      return {
+        kind: 'approach', pull: 4, until: now + total * 850 + rand(1800, 3000),
+        target: (t) => {
+          const c = this.cursor;
+          if (c && hops < total && t >= hopAt) {
+            let gx = this.clampX(c.x + side * rand(64, 86));
+            if (Math.abs(gx - c.x) < 50) { side = -side; gx = this.clampX(c.x + side * rand(64, 86)); }
+            const gy = this.clampY(c.y + rand(-24, 16));
+            const step = hops === total - 1 ? 1 : rand(0.4, 0.6);
+            spot = { x: spot.x + (gx - spot.x) * step, y: spot.y + (gy - spot.y) * step };
+            hops++;
+            hopAt = t + rand(600, 1100);
+            if (hops === total) this.setMood(pick(['happy', 'curious', 'neutral']), 2000);
+          }
+          return spot;
+        },
+      };
+    }
+
+    // Floats somewhere and sometimes looks around.
+    wander(now) {
+      const spot = { x: this.clampX(rand(0, innerWidth)), y: this.clampY(rand(0, innerHeight)) };
+      const arrive = now + 1600;
+      const around = Math.random() < 0.5 && [{ x: spot.x - 200, y: spot.y }, { x: spot.x + 200, y: spot.y + rand(-60, 60) }];
+      if (Math.random() < 0.2) this.setMood('curious', 2000);
+      return {
+        kind: 'wander', pull: 1.8, until: now + rand(3000, 6000),
+        target: () => spot,
+        look: (t) => (around && t > arrive ? around[Math.floor((t - arrive) / 700) % 2] : null),
+      };
+    }
+
+    // Stays put and watches the cursor.
+    watch(now) {
+      const base = { ...this.pos };
+      if (Math.random() < 0.35) this.setMood('suspicious', 2000);
+      return { kind: 'watch', pull: 3, until: now + rand(2000, 3500), target: () => base };
+    }
+
+    // Nothing moving for a while: falls asleep, z's floating up.
+    doze(now) {
+      this.setMood('sleepy');
+      const base = { ...this.pos };
+      let n = 0;
+      const snore = () => {
+        const z = document.createElement('span');
+        z.className = 'zzz';
+        z.textContent = ['z', 'Z', 'z'][n % 3];
+        z.style.setProperty('--zs', ['10px', '13px', '11px'][n++ % 3]);
+        z.style.setProperty('--zx', `${rand(12, 26).toFixed(0)}px`);
+        z.addEventListener('animationend', () => z.remove());
+        this.el.appendChild(z);
+      };
+      snore();
+      const timer = setInterval(snore, 950);
+      return {
+        kind: 'doze', pull: 1, until: now + 60000,
+        target: () => base,
+        look: () => ({ x: this.pos.x, y: this.pos.y + 100 }),
+        end: () => { clearInterval(timer); this.el.querySelectorAll('.zzz').forEach((z) => z.remove()); },
+      };
+    }
+
+    // Hops away from the cursor, startled, then a bit cross.
+    flee(now, c) {
+      const len = Math.hypot(this.pos.x - c.x, this.pos.y - c.y) || 1;
+      const away = { x: this.clampX(this.pos.x + ((this.pos.x - c.x) / len) * 130), y: this.clampY(this.pos.y + ((this.pos.y - c.y) / len) * 90) };
+      this.setMood('surprised', 600, ['grumpy', 1600]);
+      return { kind: 'flee', pull: 9, until: now + 1200, target: () => away };
+    }
+  }
+
+  // The buddy follows the header's little island out of view (not with reduced motion).
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const buddy = new Buddy();
+    const pill = $('.hero .pill');
+    new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        const r = pill.getBoundingClientRect();
+        buddy.dock({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
+      } else {
+        buddy.show();
+      }
+    }).observe(pill);
+  }
+
   listen('settings-changed', load);
   load();
 })();

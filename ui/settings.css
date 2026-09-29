@@ -205,3 +205,81 @@ h2 {
   transition: opacity .2s ease, translate .3s var(--spring);
 }
 .toast.show { opacity: 1; translate: -50% 0; }
+
+/* --- Buddy: the header's little island, following along once the header is out of view -------- */
+.buddy {
+  --x: 50vw; --y: -40px;
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 20;
+  width: 64px;
+  height: 36px;
+  margin: -18px 0 0 -32px;
+  border-radius: 18px;
+  background: #000;
+  box-shadow: 0 0 0 1px #2c2c30, 0 10px 30px rgba(0, 0, 0, 0.55);
+  translate: var(--x) var(--y);
+  pointer-events: none;
+  opacity: 0;
+  scale: .5;
+  transition: opacity .3s ease, scale .4s var(--spring);
+}
+.buddy.on { opacity: 1; scale: 1; }
+.buddy-eyes {
+  --gx: 0px; --gy: 0px; --sl: 1; --sr: 1; --lid: 1;
+  --brow: 0; --bl-y: 0px; --br-y: 0px; --bl-r: 0deg; --br-r: 0deg; --lid-l: 1; --lid-r: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 100%;
+}
+.buddy-eyes .eye { position: relative; display: flex; }
+.buddy-eyes i {
+  display: block;
+  width: 9px;
+  height: 11px;
+  border-radius: 3.5px;
+  background: var(--fg);
+  translate: var(--gx) var(--gy);
+  transition: translate 90ms cubic-bezier(.2, .8, .3, 1), scale 90ms ease, border-radius .3s ease;
+}
+.buddy-eyes .l i { scale: var(--sl) calc(var(--sl) * var(--lid) * var(--lid-l)); }
+.buddy-eyes .r i { scale: var(--sr) calc(var(--sr) * var(--lid) * var(--lid-r)); }
+.buddy-eyes.blink { --lid: .1; }
+.buddy-eyes b {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  width: 11px;
+  height: 2px;
+  margin-bottom: 3px;
+  border-radius: 2px;
+  background: var(--fg);
+  opacity: var(--brow);
+  transition: opacity .2s ease, translate .3s var(--spring), rotate .3s var(--spring);
+}
+.buddy-eyes .l b { translate: calc(-50% + var(--gx) * .5) calc(var(--bl-y) + var(--gy) * .4); rotate: var(--bl-r); }
+.buddy-eyes .r b { translate: calc(-50% + var(--gx) * .5) calc(var(--br-y) + var(--gy) * .4); rotate: var(--br-r); }
+/* Moods, as on the hidden island (smaller brows). */
+.buddy-eyes[data-mood=curious]    { --brow: 1; --bl-y: -1px; --br-y: -4px; --br-r: -10deg; }
+.buddy-eyes[data-mood=surprised]  { --brow: 1; --bl-y: -4px; --br-y: -4px; --lid-l: 1.12; --lid-r: 1.12; }
+.buddy-eyes[data-mood=suspicious] { --brow: 1; --bl-y: 1px; --br-y: -1px; --bl-r: 14deg; --br-r: -4deg; --lid-l: .55; --lid-r: .75; }
+.buddy-eyes[data-mood=grumpy]     { --brow: 1; --bl-y: 1px; --br-y: 1px; --bl-r: 22deg; --br-r: -22deg; --lid-l: .7; --lid-r: .7; }
+.buddy-eyes[data-mood=happy]      { --brow: 1; --bl-y: -3px; --br-y: -3px; --lid-l: .45; --lid-r: .45; }
+.buddy-eyes[data-mood=happy] i    { border-radius: 50% 50% 2px 2px / 90% 90% 2px 2px; }
+.buddy-eyes[data-mood=sleepy]     { --lid-l: .3; --lid-r: .3; }
+.buddy .zzz {
+  position: absolute;
+  left: calc(50% + 12px);
+  top: -6px;
+  color: var(--fg);
+  font: italic 700 var(--zs, 11px) 'Segoe UI Variable Display', 'Segoe UI', sans-serif;
+  animation: zzz 2.6s ease-out forwards;
+}
+@keyframes zzz {
+  0% { translate: 0 0; opacity: 0; scale: .5; }
+  20% { opacity: .9; }
+  100% { translate: var(--zx, 20px) -40px; opacity: 0; scale: 1.3; }
+}
