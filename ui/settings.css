@@ -29,34 +29,15 @@ body { padding: 0 20px 36px; }
 button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; }
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-/* --- Header: a little island that watches the cursor ------------------------------------------ */
+/* --- Header: the buddy's spot, the name and the version ---------------------------------------- */
 .hero {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 14px;
-  padding: 0 0 26px;
+  padding: 28px 0 26px;
 }
-.pill {
-  width: 150px;
-  height: 40px;
-  background: #000;
-  border-radius: 0 0 20px 20px;
-  box-shadow: 0 0 0 1px #2c2c30, 0 16px 40px rgba(0, 0, 0, 0.55);
-  display: grid;
-  place-items: center;
-}
-.eyes { --gx: 0px; --gy: 0px; --lid: 1; display: flex; gap: 12px; }
-.eyes i {
-  width: 10px;
-  height: 12px;
-  border-radius: 4px;
-  background: var(--fg);
-  translate: var(--gx) var(--gy);
-  scale: 1 var(--lid);
-  transition: translate 90ms cubic-bezier(.2, .8, .3, 1), scale 90ms ease;
-}
-.eyes.blink { --lid: .1; }
+.home { width: 72px; height: 40px; }
 .hero-text { text-align: center; }
 h1 { margin: 0; font: 600 22px 'Segoe UI Variable Display', 'Segoe UI', sans-serif; letter-spacing: -.01em; }
 .version { margin: 2px 0 0; color: var(--faint); font-size: 12px; }
@@ -206,41 +187,39 @@ h2 {
 }
 .toast.show { opacity: 1; translate: -50% 0; }
 
-/* --- Buddy: the header's little island, following along once the header is out of view -------- */
+/* --- Buddy: the little island of the header, coming along when the page scrolls (settings.js) --- */
 .buddy {
   --x: 50vw; --y: -40px;
   position: fixed;
   left: 0;
   top: 0;
   z-index: 20;
-  width: 64px;
-  height: 36px;
-  margin: -18px 0 0 -32px;
-  border-radius: 18px;
+  width: 72px;
+  height: 40px;
+  margin: -20px 0 0 -36px;
+  border-radius: 20px;
   background: #000;
   box-shadow: 0 0 0 1px #2c2c30, 0 10px 30px rgba(0, 0, 0, 0.55);
   translate: var(--x) var(--y);
   pointer-events: none;
-  opacity: 0;
-  scale: .5;
-  transition: opacity .3s ease, scale .4s var(--spring);
+  animation: buddy-in .5s var(--spring) .1s backwards;
 }
-.buddy.on { opacity: 1; scale: 1; }
+@keyframes buddy-in { from { opacity: 0; scale: .5; } }
 .buddy-eyes {
   --gx: 0px; --gy: 0px; --sl: 1; --sr: 1; --lid: 1;
   --brow: 0; --bl-y: 0px; --br-y: 0px; --bl-r: 0deg; --br-r: 0deg; --lid-l: 1; --lid-r: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 12px;
   height: 100%;
 }
 .buddy-eyes .eye { position: relative; display: flex; }
 .buddy-eyes i {
   display: block;
-  width: 9px;
-  height: 11px;
-  border-radius: 3.5px;
+  width: 10px;
+  height: 12px;
+  border-radius: 4px;
   background: var(--fg);
   translate: var(--gx) var(--gy);
   transition: translate 90ms cubic-bezier(.2, .8, .3, 1), scale 90ms ease, border-radius .3s ease;

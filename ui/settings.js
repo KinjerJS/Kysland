@@ -152,47 +152,55 @@
     if (d.action) invoke('settings_action', { name: d.action });
   });
 
-  // The little island in the header watches the cursor and blinks now and then.
-  const eyes = $('.hero .eyes');
-  document.addEventListener('mousemove', (e) => {
-    const r = eyes.getBoundingClientRect();
-    const dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
-    const len = Math.hypot(dx, dy) || 1, k = Math.min(1, len / 120);
-    eyes.style.setProperty('--gx', `${((dx / len) * k * 6).toFixed(2)}px`);
-    eyes.style.setProperty('--gy', `${((dy / len) * k * 4).toFixed(2)}px`);
-  });
-  (function blink() {
-    setTimeout(() => {
-      eyes.classList.add('blink');
-      setTimeout(() => eyes.classList.remove('blink'), 120);
-      blink();
-    }, 2000 + Math.random() * 3500);
-  })();
-
-  // --- Buddy: when the header scrolls out of view, its little island comes along ---------------
-  // It drops from the top of the window and keeps you company: wanders, comes next to the cursor
-  // now and then (a few hops, never on it), stares, dozes off (Zzz) when nothing moves, hops away
-  // when the cursor gets onto it. A calmer cousin of the hidden island's eyes. Scroll back up
-  // and it flies home to the header. It never catches the mouse.
+  // --- Buddy: the little island of the header --------------------------------------------------
+  // At the top of the page it sits in the header and only follows the cursor with its eyes (it
+  // blinks, and dozes off with z's when the mouse stays still). Scroll down and it comes along: it
+  // sticks to the top of the window, then keeps you company: wanders and looks around, comes next
+  // to the cursor in two or three hops (never onto it), stares, hops away when the cursor gets onto
+  // it. A calmer cousin of the hidden island's eyes. Back at the top, it goes home. It never catches
+  // the mouse; with reduced motion it stays home.
   const rand = (min, max) => min + Math.random() * (max - min);
   const pick = (list) => list[Math.floor(Math.random() * list.length)];
+  const STICK = 44; // px from the top of the window where it stays when the page scrolls
 
   class Buddy {
-    constructor() {
+    constructor(home, calm) {
+      this.home = home;
+      this.calm = calm;
       this.el = document.createElement('div');
       this.el.className = 'buddy';
       this.el.setAttribute('aria-hidden', 'true');
       this.el.innerHTML = '<div class="buddy-eyes"><span class="eye l"><b></b><i></i></span><span class="eye r"><b></b><i></i></span></div>';
       document.body.appendChild(this.el);
       this.eyes = this.el.firstElementChild;
-      this.pos = { x: 0, y: 0 };
+      this.mode = 'home';
+      this.settled = true;
+      this.pos = this.homeSpot();
       this.cursor = null;
-      this.cursorAt = 0;
+      this.cursorAt = performance.now();
       this.trail = [];
       this.move = null;
-      this.on = false;
       document.addEventListener('mousemove', (e) => this.track(e.clientX, e.clientY));
       document.documentElement.addEventListener('mouseleave', () => { this.cursor = null; });
+      const blink = () => {
+        this.eyes.classList.add('blink');
+        setTimeout(() => this.eyes.classList.remove('blink'), 120);
+        setTimeout(blink, rand(2200, 5500));
+      };
+      setTimeout(blink, rand(1500, 3000));
+      let last = 0;
+      const tick = (now) => {
+        const dt = last ? Math.min(0.05, (now - last) / 1000) : 0;
+        last = now;
+        this.step(now, dt);
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }
+
+    homeSpot() {
+      const r = this.home.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
     }
 
     track(x, y) {
@@ -210,56 +218,24 @@
       return d;
     }
 
-    /** Drops in from the top of the window. */
-    show() {
-      clearTimeout(this.dockT);
-      if (this.on) { // was flying home: stays out
-        if (this.move?.kind === 'dock') this.setMove(null);
-        return;
-      }
-      this.on = true;
-      this.pos = { x: innerWidth / 2, y: -30 };
-      this.setMove({ kind: 'drop', pull: 5, until: performance.now() + 1200, target: () => ({ x: innerWidth / 2, y: 70 }) });
-      this.setMood('curious', 1500);
-      this.el.classList.add('on');
-      const blink = () => {
-        this.eyes.classList.add('blink');
-        setTimeout(() => this.eyes.classList.remove('blink'), 120);
-        this.blinkT = setTimeout(blink, rand(2500, 5500));
-      };
-      this.blinkT = setTimeout(blink, rand(1500, 3000));
-      let last = 0;
-      const tick = (now) => {
-        const dt = last ? Math.min(0.05, (now - last) / 1000) : 0;
-        last = now;
-        this.step(now, dt);
-        this.raf = requestAnimationFrame(tick);
-      };
-      cancelAnimationFrame(this.raf);
-      this.raf = requestAnimationFrame(tick);
-    }
-
-    /** Flies back to the header, then fades there. */
-    dock(home) {
-      if (!this.on) return;
-      this.setMove({ kind: 'dock', pull: 7, until: Infinity, target: () => home, look: () => home });
-      this.setMood('happy', 700);
-      this.dockT = setTimeout(() => {
-        this.on = false;
-        this.el.classList.remove('on');
-        clearTimeout(this.blinkT);
-        this.setMove(null);
-        setTimeout(() => { if (!this.on) cancelAnimationFrame(this.raf); }, 400);
-      }, 450);
-    }
-
     step(now, dt) {
+      const home = this.homeSpot();
+      // Leaves home when the header scrolls past the top, comes back when it's there again.
+      if (this.mode === 'home' && home.y < STICK && !this.calm) {
+        this.mode = 'out';
+        this.setMove(this.stick(now));
+      } else if (this.mode === 'out' && home.y >= STICK) {
+        this.mode = 'home';
+        this.settled = false;
+        this.setMove(this.rest(now));
+        this.setMood('happy', 800);
+      }
       const c = this.cursor;
-      const fresh = now - this.cursorAt < 400;
+      const out = this.mode === 'out';
       const asleep = this.move?.kind === 'doze';
-      const busy = this.move?.kind === 'drop' || this.move?.kind === 'dock';
-      // Cursor onto it: hops away (not in its sleep, not too often).
-      if (c && fresh && !asleep && !busy && now - (this.fledAt || 0) > 2200 && Math.hypot(c.x - this.pos.x, c.y - this.pos.y) < 40) {
+      // Cursor onto it: hops away (out and about only, not in its sleep, not too often).
+      if (out && c && now - this.cursorAt < 400 && !asleep && this.move?.kind !== 'stick'
+          && now - (this.fledAt || 0) > 2200 && Math.hypot(c.x - this.pos.x, c.y - this.pos.y) < 42) {
         this.fledAt = now;
         this.setMove(this.flee(now, c));
       }
@@ -268,28 +244,33 @@
         this.setMove(null);
       }
       if (!this.move || now > this.move.until) this.setMove(this.nextMove(now));
-      const t = this.move.target(now);
-      const k = 1 - Math.exp(-dt * this.move.pull);
-      this.pos.x = this.clampX(this.pos.x + (t.x - this.pos.x) * k);
-      this.pos.y = this.move.kind === 'drop' || this.move.kind === 'dock' ? this.pos.y + (t.y - this.pos.y) * k : this.clampY(this.pos.y + (t.y - this.pos.y) * k);
-      const breath = Math.sin(now / 800) * 1.5;
+      if (!out && this.settled) {
+        this.pos = home; // sits in the header, scrolling with it
+      } else {
+        const t = this.move.target(now);
+        const k = 1 - Math.exp(-dt * this.move.pull);
+        this.pos = { x: this.pos.x + (t.x - this.pos.x) * k, y: this.pos.y + (t.y - this.pos.y) * k };
+        if (out) this.pos = { x: this.clampX(this.pos.x), y: this.clampY(this.pos.y) };
+        else if (Math.hypot(home.x - this.pos.x, home.y - this.pos.y) < 0.5) this.settled = true;
+      }
+      const breath = out ? Math.sin(now / 800) * 1.5 : 0;
       this.el.style.setProperty('--x', `${this.pos.x.toFixed(1)}px`);
       this.el.style.setProperty('--y', `${(this.pos.y + breath).toFixed(1)}px`);
       const spot = this.move.look?.(now) ?? c;
       if (spot) this.aim(spot.x, spot.y);
     }
 
-    clampX(x) { return Math.max(48, Math.min(innerWidth - 48, x)); }
-    clampY(y) { return Math.max(40, Math.min(innerHeight - 40, y)); }
+    clampX(x) { return Math.max(52, Math.min(innerWidth - 52, x)); }
+    clampY(y) { return Math.max(STICK, Math.min(innerHeight - 40, y)); }
 
     aim(x, y) {
       const dx = x - this.pos.x, dy = y - this.pos.y;
       const len = Math.hypot(dx, dy) || 1;
-      const k = Math.min(1, len / 80);
+      const k = Math.min(1, len / 90);
       const gx = (dx / len) * k, gy = (dy / len) * k;
       const s = this.eyes.style;
-      s.setProperty('--gx', `${(gx * 4).toFixed(2)}px`);
-      s.setProperty('--gy', `${(gy * 3).toFixed(2)}px`);
+      s.setProperty('--gx', `${(gx * 5).toFixed(2)}px`);
+      s.setProperty('--gy', `${(gy * 3.5).toFixed(2)}px`);
       s.setProperty('--sl', (1 - Math.max(0, gx) * 0.18).toFixed(3));
       s.setProperty('--sr', (1 + Math.min(0, gx) * 0.18).toFixed(3));
     }
@@ -307,11 +288,23 @@
 
     nextMove(now) {
       const c = this.cursor;
-      if (c && now - this.cursorAt > 12000) return this.doze(now);
+      if (now - this.cursorAt > 12000) return this.doze(now);
+      if (this.mode === 'home') return this.rest(now);
       const roll = Math.random();
       if (c && roll < 0.3) return this.approach(now);
       if (roll < 0.7) return this.wander(now);
       return this.watch(now);
+    }
+
+    // At home: stays in its spot in the header.
+    rest(now) {
+      return { kind: 'rest', pull: 9, until: now + 2000, target: () => this.homeSpot() };
+    }
+
+    // The header just scrolled away: stays at the top of the window for a moment.
+    stick(now) {
+      const x = this.pos.x;
+      return { kind: 'stick', pull: 16, until: now + 900, target: () => ({ x, y: STICK }) };
     }
 
     // Comes next to the cursor in two or three hops.
@@ -324,8 +317,8 @@
         target: (t) => {
           const c = this.cursor;
           if (c && hops < total && t >= hopAt) {
-            let gx = this.clampX(c.x + side * rand(64, 86));
-            if (Math.abs(gx - c.x) < 50) { side = -side; gx = this.clampX(c.x + side * rand(64, 86)); }
+            let gx = this.clampX(c.x + side * rand(66, 88));
+            if (Math.abs(gx - c.x) < 52) { side = -side; gx = this.clampX(c.x + side * rand(66, 88)); }
             const gy = this.clampY(c.y + rand(-24, 16));
             const step = hops === total - 1 ? 1 : rand(0.4, 0.6);
             spot = { x: spot.x + (gx - spot.x) * step, y: spot.y + (gy - spot.y) * step };
@@ -376,7 +369,7 @@
       const timer = setInterval(snore, 950);
       return {
         kind: 'doze', pull: 1, until: now + 60000,
-        target: () => base,
+        target: () => (this.mode === 'home' ? this.homeSpot() : base),
         look: () => ({ x: this.pos.x, y: this.pos.y + 100 }),
         end: () => { clearInterval(timer); this.el.querySelectorAll('.zzz').forEach((z) => z.remove()); },
       };
@@ -391,19 +384,7 @@
     }
   }
 
-  // The buddy follows the header's little island out of view (not with reduced motion).
-  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    const buddy = new Buddy();
-    const pill = $('.hero .pill');
-    new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) {
-        const r = pill.getBoundingClientRect();
-        buddy.dock({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
-      } else {
-        buddy.show();
-      }
-    }).observe(pill);
-  }
+  new Buddy($('.hero .home'), matchMedia('(prefers-reduced-motion: reduce)').matches);
 
   listen('settings-changed', load);
   load();
