@@ -177,16 +177,24 @@
     constructor(notch) {
       this.el = document.createElement('div');
       this.el.className = 'notch-eyes';
-      const pair = '<span class="eye l"><b></b><i></i></span><span class="eye r"><b></b><i></i></span>';
-      this.el.innerHTML = pair;
+      this.el.innerHTML = '<span class="eye l"><b></b><i></i></span><span class="eye r"><b></b><i></i></span>';
       notch.appendChild(this.el);
       this.notch = notch;
-      // The same eyes in a little bubble, when they get thrown out of the grown island.
-      this.bubble = document.createElement('div');
-      this.bubble.className = 'eye-bubble';
-      this.bubble.innerHTML = `<div class="notch-eyes">${pair}</div>`;
-      document.body.appendChild(this.bubble);
-      this.bubbleEyes = this.bubble.firstElementChild;
+      // Thrown out of the grown island, these same eyes fly in a drop of island: they move to a
+      // flyer above everything, and the drop is drawn in a gooey layer below the island, next to a
+      // copy of the island's shape, so it stretches out of the island and merges back into it.
+      this.flyer = document.createElement('div');
+      this.flyer.className = 'eye-flyer';
+      this.goo = document.createElement('div');
+      this.goo.className = 'eye-goo';
+      this.goo.innerHTML = '<div class="goo-island"></div><div class="goo-drop"></div>';
+      document.body.append(this.goo, this.flyer);
+      [this.gooIsland, this.gooDrop] = this.goo.children;
+      if (!document.getElementById('kysland-goo')) {
+        document.body.insertAdjacentHTML('beforeend', '<svg width="0" height="0" style="position:absolute" aria-hidden="true">'
+          + '<filter id="kysland-goo"><feGaussianBlur in="SourceGraphic" stdDeviation="6"/>'
+          + '<feColorMatrix values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -8"/></filter></svg>');
+      }
       this.flight = null;
       this.cursor = null;
       this.cursorAt = 0; // last time the cursor moved
@@ -199,6 +207,7 @@
     /** `roamAfter`: seconds before the eyes start roaming (0: never). */
     start(roamAfter = 0) {
       this.stop();
+      this.openT = setTimeout(() => this.el.classList.add('opened'), 700); // don't open again when coming back in
       if (roamAfter > 0) this.roamT = setTimeout(() => this.roam(), roamAfter * 1000);
       const blink = () => {
         this.el.classList.add('blink');
@@ -220,12 +229,13 @@
     }
 
     stop() {
-      for (const timer of [this.blinkT, this.glanceT, this.backT, this.roamT, this.growT, this.moodT, this.shakeT]) clearTimeout(timer);
+      for (const timer of [this.blinkT, this.glanceT, this.backT, this.roamT, this.growT, this.moodT, this.shakeT, this.openT]) clearTimeout(timer);
       cancelAnimationFrame(this.raf);
       this.setMove(null);
       this.flight = null;
-      this.bubble.classList.remove('on');
-      this.el.classList.remove('ejected', 'shake');
+      if (this.el.parentElement !== this.notch) this.notch.appendChild(this.el); // was flying
+      this.goo.classList.remove('on');
+      this.el.classList.remove('shake', 'opened');
       this.elsewhere = false;
       this.roaming = false;
       this.notch.classList.remove('roaming');
@@ -238,7 +248,6 @@
     setMood(mood, ms = 0, then = null) {
       clearTimeout(this.moodT);
       this.el.dataset.mood = mood;
-      this.bubbleEyes.dataset.mood = mood;
       if (ms) this.moodT = setTimeout(() => (then ? this.setMood(...then) : this.setMood('neutral')), ms);
     }
 
@@ -371,7 +380,7 @@
       this.el.classList.add('jolt');
     }
 
-    // Thrown out of the island: a little bubble flying off, then pulled back like by a gravity well.
+    // Thrown out of the island: a drop of island flying off, then pulled back like by a gravity well.
     // It circles around the island through the bottom (the top is the screen edge), a little closer
     // as it goes, spinning, then gets sucked back in on the other side. Screen positions, CSS px.
     eject(now, dir) {
@@ -386,10 +395,43 @@
         if (a0 < 0) a0 += 2 * Math.PI;
         end = -rand(0, 0.35); // out on the left: around the bottom to the right
       }
-      this.flight = { from, a0, sweep: end - a0, orbit: rand(1.8, 2.4), since: now, spin: 0, spinDir: Math.sign(end - a0) };
-      this.el.classList.add('ejected');
-      this.bubble.classList.add('on');
+      this.flight = { from, p: from, a0, sweep: end - a0, orbit: rand(1.8, 2.4), since: now, spin: 0, spinDir: Math.sign(end - a0) || 1 };
+      // Same eyes, same spot: they only change container.
+      this.place(from, 0);
+      this.shapeIsland(r);
+      this.flyer.appendChild(this.el);
+      this.goo.classList.add('on');
+      this.splash();
       this.setMood('surprised');
+    }
+
+    /**
+     * The eyes at a screen position, turned by `spin` degrees, and their drop there too, stretched
+     * along its motion (`angle`, `stretch`) and jiggling (`jiggle`) like water.
+     */
+    place(p, spin, angle = 0, stretch = 0, jiggle = 0) {
+      const x = `${p.x.toFixed(1)}px`, y = `${p.y.toFixed(1)}px`;
+      const f = this.flyer.style, d = this.gooDrop.style;
+      f.setProperty('--fx', x);
+      f.setProperty('--fy', y);
+      f.setProperty('--fspin', `${spin.toFixed(1)}deg`);
+      d.setProperty('--fx', x);
+      d.setProperty('--fy', y);
+      d.setProperty('--dangle', `${angle.toFixed(1)}deg`);
+      d.setProperty('--dsx', ((1 + stretch) * (1 + jiggle)).toFixed(3));
+      d.setProperty('--dsy', ((1 - jiggle) / (1 + stretch)).toFixed(3));
+    }
+
+    /** A ripple through the island (a drop leaving or coming back). */
+    splash() {
+      this.notch.classList.remove('splash');
+      void this.notch.offsetWidth; // restart the animation
+      this.notch.classList.add('splash');
+    }
+
+    /** The copy of the island the drop merges with. */
+    shapeIsland(r) {
+      Object.assign(this.gooIsland.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
     }
 
     fly(now, dt, r, mid, box) {
@@ -397,7 +439,7 @@
       const t = (now - f.since) / 1000;
       const OUT = 0.45, BACK = 0.5;
       const ellipse = (a, k) => ({ x: mid.x + Math.cos(a) * (r.width / 2 + 46) * k, y: mid.y + Math.sin(a) * (r.height / 2 + 40) * k });
-      let p;
+      let p, spin;
       if (t < OUT) {
         // Thrown out, slowing down.
         const u = 1 - (1 - t / OUT) ** 3;
@@ -409,29 +451,39 @@
         const ease = u < 0.5 ? 2 * u * u : 1 - (-2 * u + 2) ** 2 / 2;
         p = ellipse(f.a0 + f.sweep * ease, 1.25 - 0.3 * u + Math.sin(u * Math.PI * 3) * 0.05);
       } else {
-        // Sucked back in.
+        // Sucked back in, straightening up on the way.
         const u = Math.min(1, (t - OUT - f.orbit) / BACK);
+        f.spinFrom ??= f.spin;
+        f.spinTo ??= Math.round(f.spin / 360) * 360;
+        spin = f.spinFrom + (f.spinTo - f.spinFrom) * (1 - (1 - u) ** 2);
         const a = f.a0 + f.sweep;
         const start = ellipse(a, 0.95);
         const spot = { x: mid.x + Math.cos(a) * box.x * 0.6, y: mid.y + Math.sin(a) * box.y * 0.6 };
         p = { x: start.x + (spot.x - start.x) * u * u, y: start.y + (spot.y - start.y) * u * u };
         if (u >= 1) {
           f.p = p;
+          this.place(p, 0);
           return this.land(now, mid, box);
         }
       }
+      if (spin === undefined) {
+        f.spin += dt * (900 - Math.min(1, t / (OUT + f.orbit)) * 650) * f.spinDir; // deg/s, slowing down
+        spin = f.spin;
+      }
       p.y = Math.max(22, p.y);
+      // Like water: stretched along its motion, jiggling after it tears off and as it merges back.
+      const vx = dt ? (p.x - f.p.x) / dt : 0, vy = dt ? (p.y - f.p.y) / dt : 0;
+      const stretch = Math.min(0.4, Math.hypot(vx, vy) / 1500);
+      const settle = Math.max(0, 1 - t / 0.9) + Math.max(0, 1 - (OUT + f.orbit + BACK - t) / 0.35);
+      const jiggle = Math.sin(t * 24) * 0.08 * Math.min(1, settle);
       f.p = p;
-      f.spin += dt * (900 - Math.min(1, t / (OUT + f.orbit)) * 650) * f.spinDir; // deg/s, slowing down
-      const s = this.bubble.style;
-      s.setProperty('--bx', `${p.x.toFixed(1)}px`);
-      s.setProperty('--by', `${p.y.toFixed(1)}px`);
-      s.setProperty('--bspin', `${(f.spin % 360).toFixed(1)}deg`);
+      this.place(p, spin, (Math.atan2(vy, vx) * 180) / Math.PI, stretch, jiggle);
+      this.shapeIsland(r);
       // Rolling eyes: completely lost.
-      const e = this.bubbleEyes.style;
+      const e = this.el.style;
       e.setProperty('--gx', `${(Math.cos(now / 70) * 3).toFixed(2)}px`);
       e.setProperty('--gy', `${(Math.sin(now / 70) * 2.5).toFixed(2)}px`);
-      if (t > 0.7 && this.bubbleEyes.dataset.mood === 'surprised') this.setMood('worried');
+      if (t > 0.7 && this.el.dataset.mood === 'surprised') this.setMood('worried');
     }
 
     // Back in: eyes shut, shaking its head, then a bit dizzy.
@@ -439,11 +491,13 @@
       const p = this.flight.p;
       this.flight = null;
       this.ejectedAt = now;
+      // Back into the island at the very same spot (upright by now, breathing as the loop does).
       this.pos = { x: clamp(p.x - mid.x, box.x), y: clamp(p.y - mid.y, box.y) };
       this.el.style.setProperty('--ex', `${this.pos.x.toFixed(1)}px`);
-      this.el.style.setProperty('--ey', `${this.pos.y.toFixed(1)}px`);
-      this.bubble.classList.remove('on');
-      this.el.classList.remove('ejected');
+      this.el.style.setProperty('--ey', `${(this.pos.y + Math.sin(now / 700) * 1.2).toFixed(1)}px`);
+      this.notch.appendChild(this.el);
+      this.goo.classList.remove('on');
+      this.splash();
       this.el.classList.add('shake');
       this.shakeT = setTimeout(() => this.el.classList.remove('shake'), 950);
       this.setMood('dazed', 1100, ['dizzy', 1500]);

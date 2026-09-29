@@ -484,7 +484,7 @@ body.pos-bottom .notch.dodged.eyes { border-radius: 6px 6px 0 0; }
 .notch-eyes[data-mood=happy] i    { border-radius: 50% 50% 2px 2px / 90% 90% 2px 2px; } /* ^ ^ */
 .notch-eyes[data-mood=sleepy]     { --lid-l: .3; --lid-r: .3; }
 .notch.dodged.eyes .notch-eyes { opacity: 1; transition: opacity .2s ease .2s, translate .5s cubic-bezier(.3, 1.25, .5, 1); }
-.notch.dodged.eyes .notch-eyes i { animation: eyes-open .32s cubic-bezier(.3, 1.4, .5, 1) .22s backwards; }
+.notch.dodged.eyes .notch-eyes:not(.opened) i { animation: eyes-open .32s cubic-bezier(.3, 1.4, .5, 1) .22s backwards; }
 @keyframes eyes-open { from { scale: 1 0; } }
 
 /* Cursor still close after a while: the hidden island grows tall and its eyes roam (island.js). */
@@ -525,31 +525,45 @@ body.pos-bottom .notch.dodged.eyes.roaming { border-radius: 46px 46px 0 0; }
   100% { scale: 1; }
 }
 
-/* Thrown out of the grown island: the eyes fly around in a little bubble (island.js). */
-.notch.dodged.eyes.roaming .notch-eyes.ejected { opacity: 0; transition: none; }
-.eye-bubble {
-  --bx: 0px; --by: 0px; --bspin: 0deg;
+/* Thrown out of the grown island, the same eyes fly in a drop of island (island.js). The drop and a
+   copy of the island's shape go through a gooey filter below the island: the drop stretches out of
+   it and merges back into it. The eyes fly above everything. */
+.eye-goo { display: none; position: fixed; inset: 0; z-index: 9; pointer-events: none; filter: url(#kysland-goo); }
+.eye-goo.on { display: block; }
+.goo-island { position: absolute; background: var(--notch-bg); border-radius: 0 0 46px 46px; }
+body.pos-bottom .goo-island { border-radius: 46px 46px 0 0; }
+.eye-flyer {
+  --fx: 0px; --fy: 0px; --fspin: 0deg;
   position: fixed;
   left: 0;
   top: 0;
   z-index: 12;
-  width: 58px;
-  height: 34px;
-  margin: -17px 0 0 -29px;
-  border-radius: 17px;
-  background: var(--notch-bg);
-  box-shadow: 0 0 0 1px var(--notch-outline-color), 0 8px 24px rgba(0, 0, 0, 0.45);
-  translate: var(--bx) var(--by);
-  rotate: var(--bspin);
+  width: 64px;
+  height: 40px;
+  margin: -20px 0 0 -32px;
+  translate: var(--fx) var(--fy);
+  rotate: var(--fspin);
   pointer-events: none;
-  opacity: 0;
-  scale: .4;
-  transition: opacity .15s ease, scale .25s var(--spring);
 }
-.eye-bubble.on { opacity: 1; scale: 1; }
-.eye-bubble .notch-eyes { position: static; height: 100%; opacity: 1; gap: 9px; translate: none; transition: none; }
-.eye-bubble .notch-eyes i { width: 9px; height: 11px; border-radius: 3.5px; }
-.eye-bubble .notch-eyes b { opacity: var(--brow); width: 10px; height: 2px; margin-bottom: 3px; }
+/* The drop doesn't spin: it stretches along its motion (--dangle, --dsx / --dsy). */
+.goo-drop {
+  --fx: 0px; --fy: 0px; --dangle: 0deg; --dsx: 1; --dsy: 1;
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 54px;
+  height: 46px;
+  margin: -23px 0 0 -27px;
+  border-radius: 50%;
+  background: var(--notch-bg);
+  translate: var(--fx) var(--fy);
+  rotate: var(--dangle);
+  scale: var(--dsx) var(--dsy);
+}
+/* Flying, the eyes keep their roaming look. */
+.eye-flyer .notch-eyes { opacity: 1; gap: 13px; translate: none; transition: none; }
+.eye-flyer .notch-eyes i { width: 12px; height: 15px; border-radius: 5px; }
+.eye-flyer .notch-eyes b { opacity: var(--brow); }
 /* Back in: eyes shut, shaking its head, then dizzy. */
 .notch-eyes[data-mood=dazed] { --brow: 1; --bl-y: -2px; --br-y: -2px; --bl-r: -14deg; --br-r: 14deg; --lid-l: .1; --lid-r: .1; }
 .notch-eyes[data-mood=dizzy] { --brow: 1; --bl-y: -3px; --br-y: 1px; --bl-r: -8deg; --br-r: 10deg; --lid-l: .65; --lid-r: 1.1; }
@@ -562,4 +576,14 @@ body.pos-bottom .notch.dodged.eyes.roaming { border-radius: 46px 46px 0 0; }
   60% { translate: 4px 0; }
   75% { translate: -2px 0; }
   90% { translate: 2px 0; }
+}
+
+/* A drop leaving or merging back: a ripple through the island, anchored at the screen edge. */
+.notch.splash { transform-origin: 50% 0; animation: notch-splash .6s ease-out; }
+body.pos-bottom .notch.splash { transform-origin: 50% 100%; }
+@keyframes notch-splash {
+  0%, 100% { scale: 1; }
+  25% { scale: 1.035 .95; }
+  50% { scale: .985 1.03; }
+  75% { scale: 1.01 .99; }
 }
