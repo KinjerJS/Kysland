@@ -2,7 +2,6 @@
 //! (Kysland sets the volume itself, so the Windows volume flyout no longer shows up).
 use crate::hub;
 use serde_json::json;
-use std::cell::RefCell;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc::{channel, Sender};
 use std::sync::{Mutex, Once};
@@ -71,6 +70,8 @@ pub fn start() {
             let cb: IAudioEndpointVolumeCallback = VolumeCallback.into();
             let mut current: Option<(String, IAudioEndpointVolume)> = None;
             loop {
+                // Same device but its interface went stale (device re-created): subscribe again.
+                if current.as_ref().is_some_and(|(_, v)| unsafe { v.GetMute() }.is_err()) { current = None; }
                 if let Ok((dev, vol)) = endpoint() {
                     let id = unsafe {
                         dev.GetId().map(|p| { let s = p.to_string().unwrap_or_default(); CoTaskMemFree(Some(p.0 as _)); s }).unwrap_or_default()
@@ -87,7 +88,8 @@ pub fn start() {
                 std::thread::sleep(Duration::from_secs(2));
             }
         });
-        // Commands (mouse wheel, slider, mute click).
+        // Commands (mouse wheel, slider, mute click, volume keys). The default device is looked up for
+        // each one: it changes when a headset is plugged in, turned off, reconnects...
         let (tx, rx) = channel::<Command>();
         *COMMANDS.lock().unwrap() = Some(tx);
         std::thread::spawn(move || {
@@ -127,10 +129,6 @@ static HOOK_ENABLED: AtomicBool = AtomicBool::new(false);
 static HOOK_STEP: AtomicU32 = AtomicU32::new(2);
 static HOOK_STARTED: Once = Once::new();
 
-thread_local! {
-    static HOOK_VOL: RefCell<Option<IAudioEndpointVolume>> = const { RefCell::new(None) };
-}
-
 unsafe extern "system" fn keyboard_proc(code: i32, w: WPARAM, l: LPARAM) -> LRESULT {
     if code >= 0 && HOOK_ENABLED.load(Ordering::Relaxed) {
         let k = unsafe { &*(l.0 as *const KBDLLHOOKSTRUCT) };
@@ -138,15 +136,9 @@ unsafe extern "system" fn keyboard_proc(code: i32, w: WPARAM, l: LPARAM) -> LRES
             let msg = w.0 as u32;
             if msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN {
                 let step = HOOK_STEP.load(Ordering::Relaxed);
-                let cmd = match k.vkCode { 0xAD => Command::ToggleMute, 0xAE => Command::Down(step), _ => Command::Up(step) };
-                HOOK_VOL.with(|slot| {
-                    let mut slot = slot.borrow_mut();
-                    if slot.is_none() { *slot = endpoint().ok().map(|(_, v)| v); }
-                    match slot.as_ref() {
-                        Some(vol) => apply(vol, cmd),
-                        None => {}
-                    }
-                });
+                // Handed over to the command thread: a low-level hook has to return right away
+                // (Windows silently removes slow ones), and it must not keep a device of its own.
+                command(match k.vkCode { 0xAD => Command::ToggleMute, 0xAE => Command::Down(step), _ => Command::Up(step) });
             }
             return LRESULT(1); // key swallowed: Windows won't show its flyout
         }
@@ -161,7 +153,6 @@ pub fn set_key_hook(step: Option<u32>) {
     if step.is_none() { return; }
     HOOK_STARTED.call_once(|| {
         std::thread::spawn(|| unsafe {
-            com_init();
             let module = GetModuleHandleW(None).ok().map(|m| m.into());
             if SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard_proc), module, 0).is_err() { return; }
             let mut msg = MSG::default();
