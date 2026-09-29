@@ -161,6 +161,74 @@
     }
   }
 
+  // --- Eyes of the hidden island ----------------------------------------------------------
+  // While the island hides from a slow cursor, two small eyes in what's left of it keep watch:
+  // quick glances at the cursor, a blink now and then, a look elsewhere before checking back.
+  const rand = (min, max) => min + Math.random() * (max - min);
+
+  class Eyes {
+    constructor(notch) {
+      this.el = document.createElement('div');
+      this.el.className = 'notch-eyes';
+      this.el.innerHTML = '<i></i><i></i>';
+      notch.appendChild(this.el);
+      this.cursor = null;
+      this.elsewhere = false;
+    }
+
+    start() {
+      this.stop();
+      const blink = () => {
+        this.el.classList.add('blink');
+        setTimeout(() => this.el.classList.remove('blink'), 110);
+        this.blinkT = setTimeout(blink, rand(2200, 5000));
+      };
+      const glance = () => {
+        const c = this.center();
+        this.elsewhere = true;
+        this.aim(c.x + (Math.random() < 0.5 ? -1 : 1) * rand(30, 70), c.y + rand(-10, 30));
+        this.backT = setTimeout(() => {
+          this.elsewhere = false;
+          if (this.cursor) this.aim(this.cursor.x, this.cursor.y);
+        }, rand(260, 480));
+        this.glanceT = setTimeout(glance, rand(3000, 7000));
+      };
+      this.blinkT = setTimeout(blink, rand(1200, 3000));
+      this.glanceT = setTimeout(glance, rand(2500, 5000));
+    }
+
+    stop() {
+      clearTimeout(this.blinkT);
+      clearTimeout(this.glanceT);
+      clearTimeout(this.backT);
+      this.elsewhere = false;
+    }
+
+    look(x, y) {
+      this.cursor = { x, y };
+      if (!this.elsewhere) this.aim(x, y);
+    }
+
+    center() {
+      const r = this.el.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }
+
+    aim(x, y) {
+      const c = this.center();
+      const dx = x - c.x, dy = y - c.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const k = Math.min(1, len / 40); // a close cursor doesn't pull the eyes all the way
+      const gx = (dx / len) * k, gy = (dy / len) * k;
+      const s = this.el.style;
+      s.setProperty('--gx', `${(gx * 4).toFixed(2)}px`);
+      s.setProperty('--gy', `${(gy * 2).toFixed(2)}px`);
+      // The eye on the far side looks a bit smaller, as if the head turned.
+      s.setProperty('--sl', (1 - Math.max(0, gx) * 0.18).toFixed(3));
+      s.setProperty('--sr', (1 + Math.min(0, gx) * 0.18).toFixed(3));
+    }
+  }
+
   // --- Module ----------------------------------------------------------------------------
   TYPES.island = {
     topics: ['media', 'audio', 'battery', 'network', 'cpu', 'memory', 'notification', 'claude'],
@@ -185,11 +253,12 @@
       m.el.remove(); // the island lives outside the bar, stuck to the edge
       if (m.conf.monitor === 'primary' && !state.monitor.primary) return;
       const S = (m.island = {
-        notch: new Notch(), expanded: false, transient: null, transientTimer: 0,
+        notch: new Notch(), eyes: null, expanded: false, transient: null, transientTimer: 0,
         data: { ...state.data }, pausedAt: 0, tint: null, tintKey: null, workspace: null, dragging: false,
         queue: [], notif: null, notifTimer: 0, claudeOn: m.conf.claude === true, unread: 0, page: 'main', history: null,
       });
       const notch = S.notch.el;
+      S.eyes = new Eyes(notch);
       applyOutline(m, state.backdropDark);
       let enterT = 0, leaveT = 0;
       if (m.conf['expand-on-hover']) {
@@ -275,7 +344,14 @@
     },
 
     onDodge(m, on) {
-      if (m.island) m.island.notch.el.classList.toggle('dodged', on);
+      const S = m.island;
+      if (!S) return;
+      S.notch.el.classList.toggle('dodged', on);
+      if (on) S.eyes.start(); else S.eyes.stop();
+    },
+
+    onGaze(m, x, y) {
+      m.island?.eyes.look(x, y);
     },
 
     onMessage(m, msg) {

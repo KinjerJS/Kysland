@@ -18,7 +18,7 @@ It can also be a full **Waybar / Hyprland-style status bar**.
 - **Script messages**: `kysland.exe --island="Build finished" --icon=check-circle`.
 - **Calendar**: click the date to open a month calendar (today highlighted, arrows or mouse wheel to change month).
 - **Mouse**: the wheel changes the volume. Right-click opens the Kysland menu.
-- **Gets out of the way**: move the cursor to the island quickly and it expands as usual; approach it slowly (aiming at something behind it) and it tucks itself into the screen edge and lets clicks through, then comes back once the cursor moves away.
+- **Gets out of the way**: move the cursor to the island quickly and it expands as usual; approach it slowly (aiming at something behind it) and it tucks itself into the screen edge and lets clicks through, with two little eyes that keep glancing at the cursor (and blink), then comes back once the cursor moves away.
 - **Outline on dark backgrounds**: when what's around the island is mostly black, a thin outline keeps it visible.
 
 ### Windows notifications

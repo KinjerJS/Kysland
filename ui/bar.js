@@ -646,6 +646,8 @@ api.on('backdrop', ({ dark }) => {
 });
 // Slow approach: the island hides until the cursor moves away.
 api.on('dodge', ({ on }) => modules.forEach((m) => m.def.onDodge?.(m, on)));
+// Meanwhile, where the cursor is (CSS pixels of the window).
+api.on('gaze', ({ x, y }) => modules.forEach((m) => m.def.onGaze?.(m, x, y)));
 api.on('reload', () => location.reload());
 
 // island.js (and other modules) register themselves in TYPES before boot.

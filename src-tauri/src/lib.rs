@@ -263,13 +263,18 @@ fn background_loop(app: AppHandle) {
             let speed = trail_speed(&trail);
             let mut toggles: Vec<(String, bool)> = Vec::new();
             let mut dodges: Vec<(String, bool)> = Vec::new();
+            let mut gazes: Vec<(String, f64, f64)> = Vec::new();
+            let moved = trail.len() < 2 || trail[trail.len() - 2].1 != cx || trail[trail.len() - 2].2 != cy;
             with(|s| {
                 let dodge_speed = s.dodge_speed;
                 for bar in &mut s.bars {
                     let Some(rc) = win32::window_rect(bar.hwnd) else { continue };
                     // Cursor in CSS pixels of the window.
                     let (px, py) = ((cx - rc.left) as f64 / bar.scale, (cy - rc.top) as f64 / bar.scale);
-                    if let Some(on) = dodge_step(bar, dodge_speed, px, py, speed / bar.scale) { dodges.push((bar.label.clone(), on)); }
+                    let change = dodge_step(bar, dodge_speed, px, py, speed / bar.scale);
+                    if let Some(on) = change { dodges.push((bar.label.clone(), on)); }
+                    // The hidden island no longer gets mouse events: its eyes follow the cursor through the engine.
+                    if bar.dodge.is_some() && (moved || change.is_some()) { gazes.push((bar.label.clone(), px, py)); }
                     // A hidden island lets clicks through to what's behind it.
                     let inside = !bar.fullscreen && bar.rects.iter()
                         .filter(|r| bar.dodge.is_none() || Some(**r) != bar.notch)
@@ -286,6 +291,7 @@ fn background_loop(app: AppHandle) {
                 if !inside { let _ = app.emit("pointer-left", json!({ "label": label })); }
             }
             for (label, on) in dodges { let _ = app.emit("dodge", json!({ "label": label, "on": on })); }
+            for (label, x, y) in gazes { let _ = app.emit("gaze", json!({ "label": label, "x": x, "y": y })); }
             // Fullscreen: the foreground window exactly matches the screen (within 1 px).
             if fs_at.elapsed() >= Duration::from_millis(400) {
                 fs_at = Instant::now();

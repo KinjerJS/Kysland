@@ -415,14 +415,42 @@ body.pos-bottom .notch[data-size=card] { border-radius: 24px 24px 0 0; }
 /* Slow approach: the island tucks itself into the screen edge (and lets clicks through, see the
    engine), then springs back once the cursor moves away. Beats the inline size of the view. */
 .notch.dodged {
-  width: 56px !important;
-  height: 5px !important;
-  --notch-ear: 4px;
-  border-radius: 0 0 5px 5px;
+  width: 54px !important;
+  height: 13px !important;
+  --notch-ear: 5px;
+  border-radius: 0 0 6px 6px;
   box-shadow: 0 0 0 1px var(--notch-outline);
   transition: width .35s cubic-bezier(.4, 0, .2, 1), height .35s cubic-bezier(.4, 0, .2, 1), border-radius .35s ease,
     box-shadow .3s ease, --notch-outline .4s ease, --notch-ear .35s ease;
 }
-body.pos-bottom .notch.dodged { border-radius: 5px 5px 0 0; }
+body.pos-bottom .notch.dodged { border-radius: 6px 6px 0 0; }
 .notch-inner { transition: opacity .3s ease .08s; }
 .notch.dodged .notch-inner { opacity: 0; transition: opacity .12s ease; }
+
+/* Eyes of the hidden island: follow the cursor (--gx / --gy), turn (--sl / --sr), blink (--lid). */
+.notch-eyes {
+  --gx: 0px; --gy: 0px; --sl: 1; --sr: 1; --lid: 1;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .12s ease;
+}
+.notch-eyes i {
+  width: 6px;
+  height: 7px;
+  border-radius: 2.5px;
+  background: var(--notch-fg);
+  translate: var(--gx) var(--gy);
+  scale: var(--sl) calc(var(--sl) * var(--lid));
+  transition: translate 80ms cubic-bezier(.2, .8, .3, 1), scale 90ms ease;
+}
+.notch-eyes i + i { scale: var(--sr) calc(var(--sr) * var(--lid)); }
+.notch-eyes.blink { --lid: .12; }
+.notch.dodged .notch-eyes { opacity: 1; transition: opacity .2s ease .2s; }
+.notch.dodged .notch-eyes i { animation: eyes-open .32s cubic-bezier(.3, 1.4, .5, 1) .22s backwards; }
+@keyframes eyes-open { from { scale: 1 0; } }
