@@ -30,6 +30,7 @@
     "hover-delay": 120,                  // ms before expanding
     "collapse-delay": 350,               // ms before collapsing
     "media-linger": 15,                  // seconds a paused track stays visible
+    "outline": "auto",                   // thin outline when it's mostly black around the notch; true / false to force it
     "hide-windows-osd": true,           // volume keys no longer show the Windows flyout (Kysland handles them)
     "volume-step": 2,                   // % per volume key press
     "notifications": true,              // Windows notifications shown in the notch

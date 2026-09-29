@@ -126,14 +126,18 @@ popup.el.addEventListener('mouseleave', () => { popup.hideTimer = setTimeout(() 
 // Clickable areas are sent to the engine, which makes the window clickable above them only:
 // anywhere else, clicks reach the windows below.
 const HIT_SELECTOR = '.modules-left, .modules-center, .modules-right, #popup.visible, .notch';
+// The island's own rect also goes along: the engine looks at the screen around it (outline).
 let lastHitRects = '';
 function reportHitRects() {
+  const box = (r) => ({ x: Math.floor(r.left), y: Math.floor(r.top), w: Math.ceil(r.width), h: Math.ceil(r.height) });
   const rects = [...document.querySelectorAll(HIT_SELECTOR)]
     .map((el) => el.getBoundingClientRect())
     .filter((r) => r.width > 0 && r.height > 0)
-    .map((r) => ({ x: Math.floor(r.left), y: Math.floor(r.top), w: Math.ceil(r.width), h: Math.ceil(r.height) }));
-  const json = JSON.stringify(rects);
-  if (json !== lastHitRects) { lastHitRects = json; api.setHitRects(rects); }
+    .map(box);
+  const notchEl = document.querySelector('.notch');
+  const notch = notchEl ? box(notchEl.getBoundingClientRect()) : null;
+  const json = JSON.stringify([rects, notch]);
+  if (json !== lastHitRects) { lastHitRects = json; api.setHitRects(rects, notch); }
 }
 setInterval(reportHitRects, 100); // also follows animations (notch expanding, popups)
 
@@ -633,6 +637,11 @@ api.on('glaze', (g) => {
 });
 api.on('island', (msg) => modules.forEach((m) => m.def.onMessage?.(m, msg)));
 api.on('style', applyStyles);
+// What's around the island turned mostly black (or not anymore).
+api.on('backdrop', ({ dark }) => {
+  state.backdropDark = dark;
+  modules.forEach((m) => m.def.onBackdrop?.(m, dark));
+});
 api.on('reload', () => location.reload());
 
 // island.js (and other modules) register themselves in TYPES before boot.

@@ -12,7 +12,7 @@
     run: (cmd) => invoke('run_command', { cmd }),
     notifications: () => invoke('notifications'),
     action: (name, arg, extra) => invoke('action', { name, arg: arg ?? null, extra: extra ?? null }),
-    setHitRects: (rects) => invoke('set_hit_rects', { rects }),
+    setHitRects: (rects, notch) => invoke('set_hit_rects', { rects, notch: notch ?? null }),
     fileUrl: (file) => convertFileSrc(file),
     // Events meant for a single window carry its label ("pointer-left").
     on: (channel, cb) => listen(channel, (e) => {

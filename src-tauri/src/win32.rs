@@ -6,7 +6,8 @@ use windows::core::{PCWSTR, PWSTR};
 use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, POINT, RECT};
 use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED};
 use windows::Win32::Graphics::Gdi::{
-    DeleteObject, GetDC, GetDIBits, ReleaseDC, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HGDIOBJ,
+    BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetDC, GetDIBits, ReleaseDC, SelectObject,
+    BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HGDIOBJ, SRCCOPY,
 };
 use windows::Win32::System::Threading::{OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION};
 use windows::Win32::UI::Input::KeyboardAndMouse::{keybd_event, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP};
@@ -276,6 +277,46 @@ pub fn exe_icon_png(exe: &str) -> Option<String> {
         let _ = DestroyIcon(icon);
         result
     }
+}
+
+// --- Screen sampling -------------------------------------------------------------------------------
+
+/// Share of dark pixels (luma <= `max_luma`) in `outer` minus `inner`, read from the composed
+/// screen (physical pixels). Used to tell whether the island blends into what's around it.
+pub fn dark_ratio(outer: RECT, inner: RECT, max_luma: u32) -> Option<f32> {
+    let (w, h) = (outer.right - outer.left, outer.bottom - outer.top);
+    if w <= 0 || h <= 0 { return None; }
+    let mut px = vec![0u8; (w * h * 4) as usize];
+    unsafe {
+        let screen = GetDC(None);
+        let mem = CreateCompatibleDC(Some(screen));
+        let bmp = CreateCompatibleBitmap(screen, w, h);
+        let old = SelectObject(mem, bmp.into());
+        let copied = BitBlt(mem, 0, 0, w, h, Some(screen), outer.left, outer.top, SRCCOPY).is_ok();
+        SelectObject(mem, old); // GetDIBits needs the bitmap out of the DC
+        let mut bmi = BITMAPINFO::default();
+        bmi.bmiHeader = BITMAPINFOHEADER {
+            biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32, biWidth: w, biHeight: -h, biPlanes: 1,
+            biBitCount: 32, biCompression: BI_RGB.0, ..Default::default()
+        };
+        let lines = if copied { GetDIBits(mem, bmp, 0, h as u32, Some(px.as_mut_ptr() as *mut c_void), &mut bmi, DIB_RGB_COLORS) } else { 0 };
+        let _ = DeleteObject(bmp.into());
+        let _ = DeleteDC(mem);
+        ReleaseDC(None, screen);
+        if lines != h { return None; }
+    }
+    let (mut dark, mut total) = (0u32, 0u32);
+    for y in 0..h {
+        for x in 0..w {
+            let (sx, sy) = (outer.left + x, outer.top + y);
+            if sx >= inner.left && sx < inner.right && sy >= inner.top && sy < inner.bottom { continue; }
+            let i = ((y * w + x) * 4) as usize;
+            let (b, g, r) = (px[i] as u32, px[i + 1] as u32, px[i + 2] as u32);
+            total += 1;
+            if (r * 54 + g * 183 + b * 19) >> 8 <= max_luma { dark += 1; } // Rec. 709 luma
+        }
+    }
+    (total > 0).then(|| dark as f32 / total as f32)
 }
 
 // --- Keys, misc ------------------------------------------------------------------------------------

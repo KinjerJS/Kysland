@@ -173,6 +173,7 @@
       'collapse-delay': 350,
       'media-linger': 15, // seconds shown after a pause
       'scroll-step': 5,
+      outline: 'auto',               // 'auto' (on dark backgrounds) | true | false
       notifications: true,           // Windows notifications in the island
       claude: false,                 // Claude plan usage (if Claude Code is installed)
       'notification-duration': 6,    // seconds
@@ -188,6 +189,7 @@
         queue: [], notif: null, notifTimer: 0, claudeOn: m.conf.claude === true, unread: 0, page: 'main', history: null,
       });
       const notch = S.notch.el;
+      applyOutline(m, state.backdropDark);
       let enterT = 0, leaveT = 0;
       if (m.conf['expand-on-hover']) {
         notch.addEventListener('mouseenter', () => {
@@ -267,6 +269,10 @@
       S.workspace = ws.name;
     },
 
+    onBackdrop(m, dark) {
+      if (m.island) applyOutline(m, dark);
+    },
+
     onMessage(m, msg) {
       if (!m.island) return;
       pushTransient(m, messageView(msg), 4500);
@@ -275,6 +281,12 @@
     render() {},
     popup() { return null; },
   };
+
+  // Thin outline so the black island stays visible over a black background.
+  function applyOutline(m, dark) {
+    const o = m.conf.outline;
+    m.island.notch.el.classList.toggle('outlined', o === true || (o !== false && dark === true));
+  }
 
   function setExpanded(m, v) {
     const S = m.island;

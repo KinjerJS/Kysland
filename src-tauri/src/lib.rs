@@ -23,7 +23,7 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{AppHandle, Emitter, Manager, RunEvent, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 /// Clickable area reported by the page, in CSS pixels relative to the window.
-#[derive(Clone, Copy, Deserialize)]
+#[derive(Clone, Copy, PartialEq, Deserialize)]
 struct Rect { x: f64, y: f64, w: f64, h: f64 }
 
 /// One transparent window per screen, holding the island (and the bar modules, if any).
@@ -36,8 +36,11 @@ struct Bar {
     scale: f64,
     appbar: Option<win32::AppBar>,
     rects: Vec<Rect>,
+    notch: Option<Rect>,
     interactive: bool,
     fullscreen: bool,
+    /// What's around the island is mostly black: the page draws an outline.
+    dark: bool,
 }
 
 #[derive(Default)]
@@ -104,7 +107,7 @@ fn create_bars(app: &AppHandle, cfg: &Value) {
             label, hwnd, index, primary: Some((p.x, p.y)) == primary,
             monitor: (p.x, p.y, s.width as i32, s.height as i32), scale: m.scale_factor(),
             appbar: (cfg["reserve"] == true).then(|| win32::AppBar::register(hwnd)),
-            rects: vec![], interactive: false, fullscreen: false,
+            rects: vec![], notch: None, interactive: false, fullscreen: false, dark: false,
         };
         position_bar(&mut bar, cfg);
         let _ = win.set_ignore_cursor_events(true);
@@ -237,7 +240,8 @@ fn start_pollers(cfg: &Value) {
 /// by the page (island, popups, modules): anywhere else, clicks go through to the windows below.
 fn background_loop(app: AppHandle) {
     std::thread::spawn(move || {
-        let (mut fs_at, mut top_at, mut shell_at) = (Instant::now(), Instant::now(), Instant::now());
+        let (mut fs_at, mut top_at, mut shell_at, mut backdrop_at) = (Instant::now(), Instant::now(), Instant::now(), Instant::now());
+        let mut last_notch: std::collections::HashMap<String, Rect> = std::collections::HashMap::new();
         loop {
             std::thread::sleep(Duration::from_millis(30));
             let (cx, cy) = win32::cursor_pos();
@@ -278,6 +282,28 @@ fn background_loop(app: AppHandle) {
                     if win32::is_buried(hwnd) { win32::raise_topmost(hwnd); }
                 }
             }
+            // Outline ("outline": "auto"): on when at least 80% of the area around the island is black,
+            // off below 70% so it doesn't flicker over moving content.
+            if backdrop_at.elapsed() >= Duration::from_millis(400) {
+                backdrop_at = Instant::now();
+                let bars: Vec<(String, isize, (i32, i32, i32, i32), f64, Rect, bool)> = with(|s| {
+                    if config::island_conf(&s.cfg)["outline"].is_boolean() { return vec![]; }
+                    s.bars.iter().filter(|b| !b.fullscreen)
+                        .filter_map(|b| Some((b.label.clone(), b.hwnd, b.monitor, b.scale, b.notch?, b.dark))).collect()
+                });
+                last_notch.retain(|label, _| bars.iter().any(|b| &b.0 == label));
+                for (label, hwnd, monitor, scale, notch, dark) in bars {
+                    // Only judged once the island stopped moving (hover, events...): mid-animation,
+                    // the reported rect lags behind and the island itself would be sampled.
+                    let steady = last_notch.insert(label.clone(), notch) == Some(notch);
+                    if !steady { continue; }
+                    let Some(ratio) = win32::window_rect(hwnd).and_then(|rc| backdrop_ratio(rc, monitor, scale, notch)) else { continue };
+                    let now_dark = ratio >= if dark { 0.7 } else { 0.8 };
+                    if now_dark == dark { continue; }
+                    with(|s| if let Some(b) = s.bars.iter_mut().find(|b| b.label == label) { b.dark = now_dark; });
+                    let _ = app.emit("backdrop", json!({ "label": label, "dark": now_dark }));
+                }
+            }
             // Explorer may recreate the volume flyout.
             if shell_at.elapsed() >= Duration::from_millis(1500) {
                 shell_at = Instant::now();
@@ -285,6 +311,22 @@ fn background_loop(app: AppHandle) {
             }
         }
     });
+}
+
+/// Share of dark pixels in a band around the island (past its ears, outline and the edge of its
+/// shadow), clipped to its screen. `win` in physical pixels, `notch` in CSS pixels of the window.
+fn backdrop_ratio(win: windows::Win32::Foundation::RECT, monitor: (i32, i32, i32, i32), scale: f64, notch: Rect) -> Option<f32> {
+    let px = |v: f64| (v * scale).round() as i32;
+    let (left, top) = (win.left + px(notch.x), win.top + px(notch.y));
+    let (right, bottom) = (left + px(notch.w), top + px(notch.h));
+    let (side, gap, band) = (px(14.0), px(3.0), px(12.0));
+    let inner = windows::Win32::Foundation::RECT { left: left - side, top: top - gap, right: right + side, bottom: bottom + gap };
+    let (mx, my, mw, mh) = monitor;
+    let outer = windows::Win32::Foundation::RECT {
+        left: (inner.left - band).max(mx), top: (inner.top - band).max(my),
+        right: (inner.right + band).min(mx + mw), bottom: (inner.bottom + band).min(my + mh),
+    };
+    win32::dark_ratio(outer, inner, 48)
 }
 
 /// Hot reload: style.css → styles only; config.jsonc → full reload.
@@ -313,15 +355,15 @@ fn watch_config(app: AppHandle) {
 
 #[tauri::command]
 fn init(window: WebviewWindow) -> Value {
-    let (cfg, monitor) = with(|s| {
+    let (cfg, monitor, dark) = with(|s| {
         let bar = s.bars.iter().find(|b| b.label == window.label());
         (s.cfg.clone(), bar.map(|b| json!({
             "index": b.index, "primary": b.primary, "scaleFactor": b.scale,
             "physical": { "x": b.monitor.0, "y": b.monitor.1, "width": b.monitor.2, "height": b.monitor.3 },
-        })))
+        })), bar.is_some_and(|b| b.dark))
     });
     json!({
-        "config": cfg, "lang": i18n::lang(), "styles": styles(), "monitor": monitor,
+        "config": cfg, "lang": i18n::lang(), "styles": styles(), "monitor": monitor, "backdropDark": dark,
         "glaze": glaze::state(), "data": hub::snapshot(),
     })
 }
@@ -338,8 +380,8 @@ async fn notifications() -> Vec<Value> {
 }
 
 #[tauri::command]
-fn set_hit_rects(window: WebviewWindow, rects: Vec<Rect>) {
-    with(|s| if let Some(b) = s.bars.iter_mut().find(|b| b.label == window.label()) { b.rects = rects; });
+fn set_hit_rects(window: WebviewWindow, rects: Vec<Rect>, notch: Option<Rect>) {
+    with(|s| if let Some(b) = s.bars.iter_mut().find(|b| b.label == window.label()) { b.rects = rects; b.notch = notch; });
 }
 
 #[tauri::command]
