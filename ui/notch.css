@@ -461,13 +461,14 @@ body.pos-bottom .notch.dodged.eyes { border-radius: 6px 6px 0 0; }
 
 /* Cursor still close after a while: the hidden island grows and its eyes roam around (island.js). */
 .notch.dodged.eyes.roaming {
-  width: 210px !important;
-  height: 38px !important;
-  --notch-ear: 9px;
-  border-radius: 0 0 16px 16px;
+  width: 220px !important;
+  height: 130px !important;
+  --notch-ear: 12px;
+  border-radius: 0 0 46px 46px;
   transition: width .6s var(--spring), height .6s var(--spring), border-radius .6s var(--spring), --notch-ear .6s var(--spring),
     box-shadow .3s ease, --notch-outline .4s ease;
 }
-body.pos-bottom .notch.dodged.eyes.roaming { border-radius: 16px 16px 0 0; }
-.notch.roaming .notch-eyes { gap: 10px; }
-.notch.roaming .notch-eyes i { width: 9px; height: 11px; border-radius: 3.5px; }
+body.pos-bottom .notch.dodged.eyes.roaming { border-radius: 46px 46px 0 0; }
+/* The pair is moved frame by frame (island.js): no transition on its position. */
+.notch.dodged.eyes.roaming .notch-eyes { gap: 13px; transition: opacity .2s ease .2s; }
+.notch.roaming .notch-eyes i { width: 12px; height: 15px; border-radius: 5px; }

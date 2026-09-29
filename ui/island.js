@@ -203,7 +203,8 @@
     }
 
     stop() {
-      for (const timer of [this.blinkT, this.glanceT, this.backT, this.roamT, this.wanderT]) clearTimeout(timer);
+      for (const timer of [this.blinkT, this.glanceT, this.backT, this.roamT, this.growT]) clearTimeout(timer);
+      cancelAnimationFrame(this.raf);
       this.elsewhere = false;
       this.roaming = false;
       this.notch.classList.remove('roaming');
@@ -211,24 +212,58 @@
       this.el.style.setProperty('--ey', '0px');
     }
 
-    // The island grows and the eyes wander: mostly toward the cursor, sometimes anywhere.
+    // The island grows tall and the eyes roam all over it: full turns around it, darts from one
+    // spot to another, a stay near the cursor, while mostly keeping an eye on the cursor.
     roam() {
       this.roaming = true;
       this.notch.classList.add('roaming');
-      const wander = () => {
+      this.pos = { x: 0, y: 0 }; // offset of the pair from the island's center
+      this.move = null;
+      let last = 0;
+      const tick = (now) => {
+        const dt = last ? Math.min(0.05, (now - last) / 1000) : 0;
+        last = now;
         const r = this.notch.getBoundingClientRect();
-        const maxX = Math.max(0, r.width / 2 - 26), maxY = Math.max(0, r.height / 2 - 10);
+        const box = { x: Math.max(0, r.width / 2 - 30), y: Math.max(0, r.height / 2 - 16) }; // room left for the pair
+        if (!this.move || now > this.move.until) this.move = this.nextMove(now, r, box);
+        const target = this.move.target(now);
+        const k = 1 - Math.exp(-dt * this.move.pull); // eased chase of the moving target
         const clamp = (v, max) => Math.max(-max, Math.min(max, v));
-        const toCursor = this.cursor && Math.random() < 0.6;
-        const x = toCursor ? clamp(this.cursor.x - (r.left + r.width / 2) + rand(-14, 14), maxX) : rand(-maxX, maxX);
-        const y = rand(-maxY, maxY) * (toCursor ? 0.5 : 1);
-        this.el.style.setProperty('--ex', `${x.toFixed(1)}px`);
-        this.el.style.setProperty('--ey', `${y.toFixed(1)}px`);
-        // Once there, look at the cursor again (unless busy looking elsewhere).
-        this.backT = setTimeout(() => { if (this.cursor && !this.elsewhere) this.aim(this.cursor.x, this.cursor.y); }, 450);
-        this.wanderT = setTimeout(wander, rand(700, 2200));
+        this.pos.x = clamp(this.pos.x + (target.x - this.pos.x) * k, box.x);
+        this.pos.y = clamp(this.pos.y + (target.y - this.pos.y) * k, box.y);
+        this.el.style.setProperty('--ex', `${this.pos.x.toFixed(1)}px`);
+        this.el.style.setProperty('--ey', `${this.pos.y.toFixed(1)}px`);
+        if (this.cursor && !this.elsewhere) this.aim(this.cursor.x, this.cursor.y);
+        this.raf = requestAnimationFrame(tick);
       };
-      this.wanderT = setTimeout(wander, 600); // after the island has grown
+      this.growT = setTimeout(() => { this.raf = requestAnimationFrame(tick); }, 450); // once the island has grown
+    }
+
+    nextMove(now, r, box) {
+      const roll = Math.random();
+      if (roll < 0.45) {
+        // One or more full turns along an ellipse filling the island.
+        const f = rand(0.55, 1);
+        const speed = rand(2.2, 3.6) * (Math.random() < 0.5 ? -1 : 1); // rad/s
+        const start = Math.atan2(this.pos.y / (box.y || 1), this.pos.x / (box.x || 1));
+        return {
+          until: now + rand(2600, 4800), pull: 7,
+          target: (t) => {
+            const a = start + (speed * (t - now)) / 1000;
+            return { x: Math.cos(a) * box.x * f, y: Math.sin(a) * box.y * f };
+          },
+        };
+      }
+      if (roll < 0.75 || !this.cursor) {
+        // Darts somewhere and stays a moment.
+        const spot = { x: rand(-box.x, box.x), y: rand(-box.y, box.y) };
+        return { until: now + rand(700, 1600), pull: 10, target: () => spot };
+      }
+      // Comes close to the cursor and lazily follows it.
+      return {
+        until: now + rand(1200, 2400), pull: 4,
+        target: () => ({ x: this.cursor.x - (r.left + r.width / 2), y: this.cursor.y - (r.top + r.height / 2) }),
+      };
     }
 
     look(x, y) {
@@ -247,7 +282,7 @@
       const len = Math.hypot(dx, dy) || 1;
       const k = Math.min(1, len / 40); // a close cursor doesn't pull the eyes all the way
       const gx = (dx / len) * k, gy = (dy / len) * k;
-      const [rx, ry] = this.roaming ? [5, 3.5] : [4, 2]; // bigger eyes, more room
+      const [rx, ry] = this.roaming ? [6, 5] : [4, 2]; // bigger eyes, more room
       const s = this.el.style;
       s.setProperty('--gx', `${(gx * rx).toFixed(2)}px`);
       s.setProperty('--gy', `${(gy * ry).toFixed(2)}px`);

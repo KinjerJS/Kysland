@@ -18,7 +18,7 @@ It can also be a full **Waybar / Hyprland-style status bar**.
 - **Script messages**: `kysland.exe --island="Build finished" --icon=check-circle`.
 - **Calendar**: click the date to open a month calendar (today highlighted, arrows or mouse wheel to change month).
 - **Mouse**: the wheel changes the volume. Right-click opens the Kysland menu.
-- **Gets out of the way**: move the cursor to the island quickly and it expands as usual; approach it slowly (aiming at something behind it) and it tucks itself into the screen edge and lets clicks through, with two little eyes that keep glancing at the cursor (and blink), then comes back once the cursor moves away. If the cursor stays close for a while (20 s by default), the island grows a little and the eyes roam around it.
+- **Gets out of the way**: move the cursor to the island quickly and it expands as usual; approach it slowly (aiming at something behind it) and it tucks itself into the screen edge and lets clicks through, with two little eyes that keep glancing at the cursor (and blink), then comes back once the cursor moves away. If the cursor stays close for a while (20 s by default), the island grows tall and the eyes roam all over it: full turns, darts, a stay near the cursor, always keeping an eye on it.
 - **Outline on dark backgrounds**: when what's around the island is mostly black, a thin outline keeps it visible.
 
 ### Windows notifications
@@ -64,7 +64,7 @@ If something is left in a bad state after a crash, `kysland.exe --repair` restor
 
 Right-click the island, press **`Ctrl+Alt+W`** anywhere, or right-click the tray icon to open the menu: reload, edit the configuration, language (automatic = Windows display language, English or French), screen (main, all, or a given one), a **Dynamic Island** submenu (hiding from a slow cursor, eyes, sensitivity, fullscreen hiding, outline, Claude usage), start with Windows, and the **CSS inspector** (DevTools).
 
-**Settings window**: the same options with more room, a screen picker (several screens at once) and a few extra switches. Open it from the menu (**Settings…**), the ⚙ button of the expanded island, a left click on the tray icon, or `kysland.exe --settings`.
+**Settings window**: the same options with more room, a screen picker (several screens at once) and a few extra switches. Open it from the menu (**Kysland** at the top, or **Settings…**), the ⚙ button of the expanded island, a left click on the tray icon, or `kysland.exe --settings`.
 
 | Option | Effect |
 |---|---|

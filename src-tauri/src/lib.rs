@@ -395,7 +395,13 @@ fn dodge_step(bar: &mut Bar, slow_below: Option<f64>, px: f64, py: f64, speed: f
     let notch = bar.notch?;
     let off = bar.fullscreen || slow_below.is_none();
     if let Some(from) = bar.dodge {
-        let away = distance(px, py, from) >= AWAY; // from its full size, not the hidden one
+        // From its full size, not the hidden one; from its grown size while the eyes roam.
+        let area = Rect {
+            x: from.x.min(notch.x), y: from.y.min(notch.y),
+            w: (from.x + from.w).max(notch.x + notch.w) - from.x.min(notch.x),
+            h: (from.y + from.h).max(notch.y + notch.h) - from.y.min(notch.y),
+        };
+        let away = distance(px, py, area) >= AWAY;
         if !off && !away { return None; }
         bar.dodge = None;
         bar.dodge_armed = !off && away;
@@ -660,7 +666,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
             claude, claude && island["claude"] == true, None::<&str>)?,
     ])?;
     Menu::with_items(app, &[
-        &MenuItem::with_id(app, "title", "Kysland", false, None::<&str>)?,
+        &MenuItem::with_id(app, "title", "Kysland", true, None::<&str>)?, // opens the settings too
         &PredefinedMenuItem::separator(app)?,
         &MenuItem::with_id(app, "settings", t("menu.settings"), true, None::<&str>)?,
         &MenuItem::with_id(app, "reload", t("menu.reload"), true, None::<&str>)?,
@@ -682,7 +688,7 @@ fn on_menu(app: &AppHandle, id: &str) {
     let cfg = with(|s| s.cfg.clone());
     let island = config::island_name(&cfg).unwrap_or_else(|| "island".into());
     let result = match id {
-        "settings" => { open_settings(app); Ok(()) }
+        "title" | "settings" => { open_settings(app); Ok(()) }
         "reload" => { reload(app, true); Ok(()) }
         "open-config" => { win32::shell_open(&config::config_dir().to_string_lossy()); Ok(()) }
         "edit-config" => { win32::shell_open(&config::config_file().to_string_lossy()); Ok(()) }
