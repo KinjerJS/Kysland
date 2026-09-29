@@ -174,6 +174,7 @@
       'media-linger': 15, // seconds shown after a pause
       'scroll-step': 5,
       outline: 'auto',               // 'auto' (on dark backgrounds) | true | false
+      dodge: true,                   // hides when the cursor approaches slowly (read by the engine)
       notifications: true,           // Windows notifications in the island
       claude: false,                 // Claude plan usage (if Claude Code is installed)
       'notification-duration': 6,    // seconds
@@ -273,6 +274,10 @@
       if (m.island) applyOutline(m, dark);
     },
 
+    onDodge(m, on) {
+      if (m.island) m.island.notch.el.classList.toggle('dodged', on);
+    },
+
     onMessage(m, msg) {
       if (!m.island) return;
       pushTransient(m, messageView(msg), 4500);
@@ -347,6 +352,8 @@
   function render(m) {
     const S = m.island;
     if (!S) return;
+    // Only a resting island hides from the cursor (not while open or showing a notification).
+    S.notch.el.dataset.dodgeable = !S.expanded && !S.notif ? '1' : '0';
     S.notch.show(S.expanded ? expandedView(m) : S.notif || S.transient || compactView(m));
   }
 

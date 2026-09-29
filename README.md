@@ -18,6 +18,8 @@ It can also be a full **Waybar / Hyprland-style status bar**.
 - **Script messages**: `kysland.exe --island="Build finished" --icon=check-circle`.
 - **Calendar**: click the date to open a month calendar (today highlighted, arrows or mouse wheel to change month).
 - **Mouse**: the wheel changes the volume. Right-click opens the Kysland menu.
+- **Gets out of the way**: move the cursor to the island quickly and it expands as usual; approach it slowly (aiming at something behind it) and it tucks itself into the screen edge and lets clicks through, then comes back once the cursor moves away.
+- **Outline on dark backgrounds**: when what's around the island is mostly black, a thin outline keeps it visible.
 
 ### Windows notifications
 
@@ -86,6 +88,8 @@ Island options (in the `"island"` section):
 | `expand-on-hover` | `true` | Expand when hovered |
 | `hover-delay` / `collapse-delay` | `120` / `350` | Milliseconds before expanding / collapsing |
 | `media-linger` | `15` | Seconds a paused track stays displayed |
+| `outline` | `"auto"` | Thin outline when it's mostly black around the island; `true` / `false` to force it (color: `--notch-outline-color`) |
+| `dodge` / `dodge-speed` | `true` / `450` | Hide when the cursor approaches slower than this many px/s |
 | `kemhome` | `http://localhost:8080` | KemHome agent URL, `false` to disable |
 | `hide-windows-osd` | `true` | Handle the volume keys and hide the Windows volume flyout |
 | `volume-step` | `2` | Percent per volume key press |

@@ -126,7 +126,8 @@ popup.el.addEventListener('mouseleave', () => { popup.hideTimer = setTimeout(() 
 // Clickable areas are sent to the engine, which makes the window clickable above them only:
 // anywhere else, clicks reach the windows below.
 const HIT_SELECTOR = '.modules-left, .modules-center, .modules-right, #popup.visible, .notch';
-// The island's own rect also goes along: the engine looks at the screen around it (outline).
+// The island's own rect also goes along: the engine looks at the screen around it (outline)
+// and at how the cursor approaches it (dodging).
 let lastHitRects = '';
 function reportHitRects() {
   const box = (r) => ({ x: Math.floor(r.left), y: Math.floor(r.top), w: Math.ceil(r.width), h: Math.ceil(r.height) });
@@ -136,8 +137,9 @@ function reportHitRects() {
     .map(box);
   const notchEl = document.querySelector('.notch');
   const notch = notchEl ? box(notchEl.getBoundingClientRect()) : null;
-  const json = JSON.stringify([rects, notch]);
-  if (json !== lastHitRects) { lastHitRects = json; api.setHitRects(rects, notch); }
+  const dodgeable = notchEl?.dataset.dodgeable === '1';
+  const json = JSON.stringify([rects, notch, dodgeable]);
+  if (json !== lastHitRects) { lastHitRects = json; api.setHitRects(rects, notch, dodgeable); }
 }
 setInterval(reportHitRects, 100); // also follows animations (notch expanding, popups)
 
@@ -642,6 +644,8 @@ api.on('backdrop', ({ dark }) => {
   state.backdropDark = dark;
   modules.forEach((m) => m.def.onBackdrop?.(m, dark));
 });
+// Slow approach: the island hides until the cursor moves away.
+api.on('dodge', ({ on }) => modules.forEach((m) => m.def.onDodge?.(m, on)));
 api.on('reload', () => location.reload());
 
 // island.js (and other modules) register themselves in TYPES before boot.

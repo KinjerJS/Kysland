@@ -41,6 +41,12 @@ struct Bar {
     fullscreen: bool,
     /// What's around the island is mostly black: the page draws an outline.
     dark: bool,
+    /// The island can hide right now (compact, not showing a notification...).
+    dodgeable: bool,
+    /// Hidden after a slow approach: the island's rect at that moment.
+    dodge: Option<Rect>,
+    /// The next approach will be judged (the cursor went far enough away since the last one).
+    dodge_armed: bool,
 }
 
 #[derive(Default)]
@@ -49,6 +55,8 @@ struct Shared {
     bars: Vec<Bar>,
     layout: String,
     hide_osd: bool,
+    /// Approaches slower than this (CSS px/s) hide the island; `None`: option turned off.
+    dodge_speed: Option<f64>,
     wallpaper: Option<String>,
     autostart_on: bool,
 }
@@ -108,6 +116,7 @@ fn create_bars(app: &AppHandle, cfg: &Value) {
             monitor: (p.x, p.y, s.width as i32, s.height as i32), scale: m.scale_factor(),
             appbar: (cfg["reserve"] == true).then(|| win32::AppBar::register(hwnd)),
             rects: vec![], notch: None, interactive: false, fullscreen: false, dark: false,
+            dodgeable: false, dodge: None, dodge_armed: false,
         };
         position_bar(&mut bar, cfg);
         let _ = win.set_ignore_cursor_events(true);
@@ -165,7 +174,9 @@ fn reload(app: &AppHandle, force_layout: bool) {
 fn apply_system(cfg: &Value) {
     let island = config::island_conf(cfg);
     let hide_osd = config::island_name(cfg).is_some() && island["hide-windows-osd"] != false;
-    with(|s| s.hide_osd = hide_osd);
+    let dodge_speed = (config::island_name(cfg).is_some() && island["dodge"] != false)
+        .then(|| island["dodge-speed"].as_f64().unwrap_or(450.0));
+    with(|s| { s.hide_osd = hide_osd; s.dodge_speed = dodge_speed; });
     if hide_osd { win32::hide_volume_osd(); } else { win32::restore_volume_osd(); }
     audio::set_key_hook(hide_osd.then(|| island["volume-step"].as_u64().unwrap_or(2) as u32));
     if let Some(w) = cfg["wallpaper"].as_str() {
@@ -242,22 +253,39 @@ fn background_loop(app: AppHandle) {
     std::thread::spawn(move || {
         let (mut fs_at, mut top_at, mut shell_at, mut backdrop_at) = (Instant::now(), Instant::now(), Instant::now(), Instant::now());
         let mut last_notch: std::collections::HashMap<String, Rect> = std::collections::HashMap::new();
+        let mut trail: std::collections::VecDeque<(Instant, i32, i32)> = std::collections::VecDeque::new();
         loop {
             std::thread::sleep(Duration::from_millis(30));
             let (cx, cy) = win32::cursor_pos();
+            let now = Instant::now();
+            trail.push_back((now, cx, cy));
+            while trail.front().is_some_and(|p| now - p.0 > Duration::from_millis(250)) { trail.pop_front(); }
+            let speed = trail_speed(&trail);
             let mut toggles: Vec<(String, bool)> = Vec::new();
-            with(|s| for bar in &mut s.bars {
-                let Some(rc) = win32::window_rect(bar.hwnd) else { continue };
-                let inside = !bar.fullscreen && bar.rects.iter().any(|r| {
-                    let (x, y) = (rc.left as f64 + r.x * bar.scale, rc.top as f64 + r.y * bar.scale);
-                    (cx as f64) >= x && (cx as f64) < x + r.w * bar.scale && (cy as f64) >= y && (cy as f64) < y + r.h * bar.scale
-                });
-                if inside != bar.interactive { bar.interactive = inside; toggles.push((bar.label.clone(), inside)); }
+            let mut dodges: Vec<(String, bool)> = Vec::new();
+            with(|s| {
+                let dodge_speed = s.dodge_speed;
+                for bar in &mut s.bars {
+                    let Some(rc) = win32::window_rect(bar.hwnd) else { continue };
+                    // Cursor in CSS pixels of the window.
+                    let (px, py) = ((cx - rc.left) as f64 / bar.scale, (cy - rc.top) as f64 / bar.scale);
+                    if let Some(on) = dodge_step(bar, dodge_speed, px, py, speed / bar.scale) { dodges.push((bar.label.clone(), on)); }
+                    // A hidden island lets clicks through to what's behind it.
+                    let inside = !bar.fullscreen && bar.rects.iter()
+                        .filter(|r| bar.dodge.is_none() || Some(**r) != bar.notch)
+                        .any(|r| px >= r.x && px < r.x + r.w && py >= r.y && py < r.y + r.h);
+                    if inside != bar.interactive {
+                        bar.interactive = inside;
+                        if inside { bar.dodge_armed = false; } // reached normally: no dodging on the way out
+                        toggles.push((bar.label.clone(), inside));
+                    }
+                }
             });
             for (label, inside) in toggles {
                 if let Some(w) = app.get_webview_window(&label) { let _ = w.set_ignore_cursor_events(!inside); }
                 if !inside { let _ = app.emit("pointer-left", json!({ "label": label })); }
             }
+            for (label, on) in dodges { let _ = app.emit("dodge", json!({ "label": label, "on": on })); }
             // Fullscreen: the foreground window exactly matches the screen (within 1 px).
             if fs_at.elapsed() >= Duration::from_millis(400) {
                 fs_at = Instant::now();
@@ -313,6 +341,47 @@ fn background_loop(app: AppHandle) {
     });
 }
 
+/// Cursor speed over the recent trail, in physical pixels per second.
+fn trail_speed(trail: &std::collections::VecDeque<(Instant, i32, i32)>) -> f64 {
+    let (Some(first), Some(last)) = (trail.front(), trail.back()) else { return 0.0 };
+    let path: f64 = trail.iter().zip(trail.iter().skip(1))
+        .map(|(a, b)| ((b.1 - a.1) as f64).hypot((b.2 - a.2) as f64))
+        .sum();
+    path / (last.0 - first.0).as_secs_f64().max(0.03)
+}
+
+/// Distance from a point to a rect (0 inside).
+fn distance(px: f64, py: f64, r: Rect) -> f64 {
+    let dx = (r.x - px).max(px - (r.x + r.w)).max(0.0);
+    let dy = (r.y - py).max(py - (r.y + r.h)).max(0.0);
+    dx.hypot(dy)
+}
+
+/// Island dodging. Each approach is judged once, when the cursor gets near the island after
+/// having been away: slow (aiming at something behind it) hides the island until the cursor
+/// moves away again; fast is left to the usual hover. Returns the new state when it changes.
+fn dodge_step(bar: &mut Bar, slow_below: Option<f64>, px: f64, py: f64, speed: f64) -> Option<bool> {
+    const NEAR: f64 = 24.0; // CSS px around the island where an approach is judged
+    const AWAY: f64 = 64.0; // CSS px: far enough to bring it back and judge the next approach
+    let notch = bar.notch?;
+    let off = bar.fullscreen || slow_below.is_none();
+    if let Some(from) = bar.dodge {
+        let away = distance(px, py, from) >= AWAY; // from its full size, not the hidden one
+        if !off && !away { return None; }
+        bar.dodge = None;
+        bar.dodge_armed = !off && away;
+        return Some(false);
+    }
+    if off { return None; }
+    let d = distance(px, py, notch);
+    if d >= AWAY { bar.dodge_armed = true; return None; }
+    if !bar.dodge_armed || d > NEAR || bar.interactive { return None; }
+    bar.dodge_armed = false;
+    if !bar.dodgeable || speed >= slow_below? { return None; }
+    bar.dodge = Some(notch);
+    Some(true)
+}
+
 /// Share of dark pixels in a band around the island (past its ears, outline and the edge of its
 /// shadow), clipped to its screen. `win` in physical pixels, `notch` in CSS pixels of the window.
 fn backdrop_ratio(win: windows::Win32::Foundation::RECT, monitor: (i32, i32, i32, i32), scale: f64, notch: Rect) -> Option<f32> {
@@ -356,7 +425,8 @@ fn watch_config(app: AppHandle) {
 #[tauri::command]
 fn init(window: WebviewWindow) -> Value {
     let (cfg, monitor, dark) = with(|s| {
-        let bar = s.bars.iter().find(|b| b.label == window.label());
+        let bar = s.bars.iter_mut().find(|b| b.label == window.label());
+        let bar = bar.map(|b| { b.dodge = None; b.dodge_armed = false; &*b }); // fresh page: island shown
         (s.cfg.clone(), bar.map(|b| json!({
             "index": b.index, "primary": b.primary, "scaleFactor": b.scale,
             "physical": { "x": b.monitor.0, "y": b.monitor.1, "width": b.monitor.2, "height": b.monitor.3 },
@@ -380,8 +450,12 @@ async fn notifications() -> Vec<Value> {
 }
 
 #[tauri::command]
-fn set_hit_rects(window: WebviewWindow, rects: Vec<Rect>, notch: Option<Rect>) {
-    with(|s| if let Some(b) = s.bars.iter_mut().find(|b| b.label == window.label()) { b.rects = rects; b.notch = notch; });
+fn set_hit_rects(window: WebviewWindow, rects: Vec<Rect>, notch: Option<Rect>, dodgeable: bool) {
+    with(|s| if let Some(b) = s.bars.iter_mut().find(|b| b.label == window.label()) {
+        b.rects = rects;
+        b.notch = notch;
+        b.dodgeable = dodgeable;
+    });
 }
 
 #[tauri::command]

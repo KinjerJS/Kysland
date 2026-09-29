@@ -14,7 +14,13 @@
   --tint: var(--accent);
 }
 
-/* Outline color, animated: the ears' gradients follow it too. */
+/* Animated variables: the ears' gradients and size follow them. */
+@property --notch-ear {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 10px;
+}
+/* Outline color. */
 @property --notch-outline {
   syntax: '<color>';
   inherits: true;
@@ -35,7 +41,8 @@
   font-size: 13px;
   border-radius: 0 0 var(--notch-radius) var(--notch-radius);
   box-shadow: 0 0 0 1px var(--notch-outline), 0 4px 14px rgba(0, 0, 0, 0.22);
-  transition: width .5s var(--spring), height .5s var(--spring), border-radius .5s var(--spring), box-shadow .4s ease, --notch-outline .4s ease;
+  transition: width .5s var(--spring), height .5s var(--spring), border-radius .5s var(--spring), box-shadow .4s ease, --notch-outline .4s ease,
+    --notch-ear .5s var(--spring);
 }
 /* Mostly black around the island (or "outline": true): thin outline so it stays visible. */
 .notch.outlined { --notch-outline: var(--notch-outline-color); }
@@ -404,3 +411,18 @@ body.pos-bottom .notch[data-size=card] { border-radius: 24px 24px 0 0; }
 .n-vol [data-mute] { cursor: pointer; }
 .n-vol input { flex: 1; min-width: 0; accent-color: var(--tint); cursor: pointer; }
 .n-vol b { min-width: 3ch; text-align: right; }
+
+/* Slow approach: the island tucks itself into the screen edge (and lets clicks through, see the
+   engine), then springs back once the cursor moves away. Beats the inline size of the view. */
+.notch.dodged {
+  width: 56px !important;
+  height: 5px !important;
+  --notch-ear: 4px;
+  border-radius: 0 0 5px 5px;
+  box-shadow: 0 0 0 1px var(--notch-outline);
+  transition: width .35s cubic-bezier(.4, 0, .2, 1), height .35s cubic-bezier(.4, 0, .2, 1), border-radius .35s ease,
+    box-shadow .3s ease, --notch-outline .4s ease, --notch-ear .35s ease;
+}
+body.pos-bottom .notch.dodged { border-radius: 5px 5px 0 0; }
+.notch-inner { transition: opacity .3s ease .08s; }
+.notch.dodged .notch-inner { opacity: 0; transition: opacity .12s ease; }
