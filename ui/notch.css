@@ -500,3 +500,27 @@ body.pos-bottom .notch.dodged.eyes.roaming { border-radius: 46px 46px 0 0; }
 /* The pair is moved frame by frame (island.js): no transition on its position. */
 .notch.dodged.eyes.roaming .notch-eyes { gap: 13px; transition: opacity .2s ease .2s; }
 .notch.roaming .notch-eyes i { width: 12px; height: 15px; border-radius: 5px; }
+
+/* Asleep: z's float up from above the eyes and fade. */
+.notch-eyes .zzz {
+  position: absolute;
+  left: calc(50% + 10px);
+  top: calc(50% - 16px);
+  color: var(--notch-fg);
+  font: italic 700 var(--zs, 11px) var(--notch-font);
+  pointer-events: none;
+  animation: zzz 2.4s ease-out forwards;
+}
+@keyframes zzz {
+  0% { translate: 0 0; opacity: 0; scale: .5; }
+  20% { opacity: .9; }
+  100% { translate: var(--zx, 20px) -42px; opacity: 0; scale: 1.3; }
+}
+/* Poked: a quick squash and stretch. */
+.notch-eyes.jolt .eye { animation: eyes-jolt .35s cubic-bezier(.3, 1.4, .5, 1); }
+@keyframes eyes-jolt {
+  0% { scale: 1; }
+  30% { scale: 1.3 .75; }
+  60% { scale: .9 1.15; }
+  100% { scale: 1; }
+}

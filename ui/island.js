@@ -166,8 +166,9 @@
   // quick glances at the cursor, a blink now and then, a look elsewhere before checking back.
   // If the cursor stays close long enough, the island grows tall and the eyes come alive: they
   // look around as if wondering where they are, circle, sneak up next to the cursor a few hops at
-  // a time (never right under it), stare at it, doze off when nothing happens, jump away when it
-  // gets too close, and show moods with their brows.
+  // a time (never right under it), stare at it, doze off when nothing happens (Zzz; a slow cursor
+  // doesn't wake them, a click does), jump away when it gets too close, and show moods with their
+  // brows. The grown island catches the mouse, so it can be clicked (poked).
   const rand = (min, max) => min + Math.random() * (max - min);
   const pick = (list) => list[Math.floor(Math.random() * list.length)];
   const clamp = (v, max) => Math.max(-max, Math.min(max, v));
@@ -181,6 +182,8 @@
       this.notch = notch;
       this.cursor = null;
       this.cursorAt = 0; // last time the cursor moved
+      this.trail = []; // recent cursor positions, to tell a slow sneak from a real move
+      this.pokes = [];
       this.elsewhere = false;
       this.roaming = false;
     }
@@ -211,6 +214,7 @@
     stop() {
       for (const timer of [this.blinkT, this.glanceT, this.backT, this.roamT, this.growT, this.moodT]) clearTimeout(timer);
       cancelAnimationFrame(this.raf);
+      this.setMove(null);
       this.elsewhere = false;
       this.roaming = false;
       this.notch.classList.remove('roaming');
@@ -227,8 +231,11 @@
     }
 
     look(x, y) {
-      if (!this.cursor || Math.hypot(x - this.cursor.x, y - this.cursor.y) > 1) this.cursorAt = performance.now();
+      const now = performance.now();
+      if (!this.cursor || Math.hypot(x - this.cursor.x, y - this.cursor.y) > 1) this.cursorAt = now;
       this.cursor = { x, y };
+      this.trail.push({ t: now, x, y });
+      while (this.trail.length && now - this.trail[0].t > 400) this.trail.shift();
       // While roaming, the animation loop decides where to look.
       if (!this.elsewhere && !this.roaming) this.aim(x, y);
     }
@@ -270,17 +277,20 @@
         const box = { x: Math.max(0, r.width / 2 - 30), y: Math.max(0, r.height / 2 - 20) }; // room for the pair
         const c = this.cursor && { x: this.cursor.x - mid.x, y: this.cursor.y - mid.y };
         const fresh = now - this.cursorAt < 400;
-        // Cursor right on the eyes: they jump away (not too often).
-        if (c && fresh && now - this.fledAt > 1800 && Math.hypot(c.x - this.pos.x, c.y - this.pos.y) < 28) {
+        this.lastBox = box;
+        this.lastC = c;
+        const asleep = this.move?.kind === 'doze';
+        // Cursor right on the eyes: they jump away (not too often, and not in their sleep).
+        if (c && fresh && !asleep && now - this.fledAt > 1800 && Math.hypot(c.x - this.pos.x, c.y - this.pos.y) < 28) {
           this.fledAt = now;
-          this.move = this.flee(now, c, box);
+          this.setMove(this.flee(now, c, box));
         }
-        // Woken up by the cursor moving.
-        if (this.move?.kind === 'doze' && fresh) {
+        // Woken up by a real move (sneaking up slowly doesn't wake them).
+        if (asleep && this.travel() > 45) {
           this.setMood('surprised', 700, ['grumpy', 1400]);
-          this.move = null;
+          this.setMove(null);
         }
-        if (!this.move || now > this.move.until) this.move = this.nextMove(now, c, box);
+        if (!this.move || now > this.move.until) this.setMove(this.nextMove(now, c, box));
         const target = this.move.target(now, c, box);
         const k = 1 - Math.exp(-dt * this.move.pull); // eased chase of the target
         this.pos.x = clamp(this.pos.x + (target.x - this.pos.x) * k, box.x);
@@ -296,6 +306,42 @@
         this.raf = requestAnimationFrame(tick);
       };
       this.growT = setTimeout(() => { this.raf = requestAnimationFrame(tick); }, 450); // once the island has grown
+    }
+
+    /** Replaces the current behavior (letting the old one clean up). */
+    setMove(move) {
+      this.move?.end?.();
+      this.move = move;
+    }
+
+    /** Distance the cursor covered in the last 400 ms. */
+    travel() {
+      let d = 0;
+      for (let i = 1; i < this.trail.length; i++) d += Math.hypot(this.trail[i].x - this.trail[i - 1].x, this.trail[i].y - this.trail[i - 1].y);
+      return d;
+    }
+
+    /** A click on the grown island. */
+    poke() {
+      if (!this.roaming) return;
+      const now = performance.now();
+      this.jolt();
+      if (this.move?.kind === 'doze') {
+        // Woken up by a click: jumps away, startled or cross (this mood replaces the flee's own).
+        this.setMove(this.lastC ? this.flee(now, this.lastC, this.lastBox) : null);
+        if (Math.random() < 0.5) this.setMood('grumpy', 2800);
+        else this.setMood('surprised', 900, ['grumpy', 1800]);
+        return;
+      }
+      this.pokes = this.pokes.filter((t) => now - t < 2500).concat(now);
+      if (this.pokes.length >= 3) this.setMood('grumpy', 2200); // enough!
+      else this.setMood('surprised', 450, ['happy', 1600]);
+    }
+
+    jolt() {
+      this.el.classList.remove('jolt');
+      void this.el.offsetWidth; // restart the animation
+      this.el.classList.add('jolt');
     }
 
     nextMove(now, c, box) {
@@ -369,10 +415,30 @@
       };
     }
 
-    // Nothing happening: heavy eyelids, a slow drift down (until the cursor moves).
+    // Nothing happening: heavy eyelids, a slow drift down, Zzz floating up (until a real move).
     doze(now) {
       this.setMood('sleepy');
-      return { kind: 'doze', pull: 1.2, until: now + 60000, target: (t, cur, box) => ({ x: 0, y: box.y * 0.5 }) };
+      let n = 0;
+      const snore = () => {
+        const z = document.createElement('span');
+        z.className = 'zzz';
+        z.textContent = ['z', 'Z', 'z'][n % 3];
+        z.style.setProperty('--zs', ['10px', '13px', '11px'][n++ % 3]);
+        z.style.setProperty('--zx', `${rand(12, 28).toFixed(0)}px`);
+        z.addEventListener('animationend', () => z.remove());
+        this.el.appendChild(z);
+      };
+      snore();
+      const timer = setInterval(snore, 850);
+      return {
+        kind: 'doze', pull: 1.2, until: now + 60000,
+        target: (t, cur, box) => ({ x: 0, y: box.y * 0.5 }),
+        look: () => ({ x: this.pos.x, y: this.pos.y + 60 }), // eyes down
+        end: () => {
+          clearInterval(timer);
+          this.el.querySelectorAll('.zzz').forEach((z) => z.remove());
+        },
+      };
     }
 
     // Jumps to the other side, startled, then sulks a little.
@@ -424,17 +490,20 @@
       let enterT = 0, leaveT = 0;
       if (m.conf['expand-on-hover']) {
         notch.addEventListener('mouseenter', () => {
+          if (S.dodged) return; // grown hidden island (roaming eyes): no expanding
           clearTimeout(leaveT);
           if (S.notif) return clearTimeout(S.notifTimer); // reading the notification: pause
           enterT = setTimeout(() => setExpanded(m, true), m.conf['hover-delay']);
         });
         notch.addEventListener('mouseleave', () => {
+          if (S.dodged) return;
           clearTimeout(enterT);
           if (S.notif) return startNotifTimer(m, 2500);
           leaveT = setTimeout(() => setExpanded(m, false), m.conf['collapse-delay']);
         });
       }
       notch.addEventListener('click', (e) => {
+        if (S.dodged) return S.eyes.poke();
         if (S.notif) {
           // Click: opens the app (and removes the notification); ✕: just closes.
           if (!e.target.closest('.n-close')) openNotif(S.notif.data);
@@ -451,7 +520,7 @@
         api.action('menu');
       });
       notch.addEventListener('wheel', (e) => {
-        if (e.target.closest('input, .n-history')) return; // the history scrolls, not the volume
+        if (S.dodged || e.target.closest('input, .n-history')) return; // the history scrolls, not the volume
         api.action('audio', e.deltaY < 0 ? 'up' : 'down', m.conf['scroll-step']);
       }, { passive: true });
       setInterval(() => render(m), 500);

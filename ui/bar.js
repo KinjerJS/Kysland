@@ -138,8 +138,9 @@ function reportHitRects() {
   const notchEl = document.querySelector('.notch');
   const notch = notchEl ? box(notchEl.getBoundingClientRect()) : null;
   const dodgeable = notchEl?.dataset.dodgeable === '1';
-  const json = JSON.stringify([rects, notch, dodgeable]);
-  if (json !== lastHitRects) { lastHitRects = json; api.setHitRects(rects, notch, dodgeable); }
+  const grab = notchEl?.classList.contains('roaming') ?? false; // roaming eyes can be clicked
+  const json = JSON.stringify([rects, notch, dodgeable, grab]);
+  if (json !== lastHitRects) { lastHitRects = json; api.setHitRects(rects, notch, dodgeable, grab); }
 }
 setInterval(reportHitRects, 100); // also follows animations (notch expanding, popups)
 

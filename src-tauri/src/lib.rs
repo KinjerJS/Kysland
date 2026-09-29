@@ -47,6 +47,8 @@ struct Bar {
     dodge: Option<Rect>,
     /// The next approach will be judged (the cursor went far enough away since the last one).
     dodge_armed: bool,
+    /// The hidden island catches the mouse again (grown, eyes roaming: they can be clicked).
+    grab: bool,
 }
 
 #[derive(Default)]
@@ -137,7 +139,7 @@ fn create_bars(app: &AppHandle, cfg: &Value) {
             monitor: (p.x, p.y, s.width as i32, s.height as i32), scale: m.scale_factor(),
             appbar: (cfg["reserve"] == true).then(|| win32::AppBar::register(hwnd)),
             rects: vec![], notch: None, interactive: false, fullscreen: false, dark: false,
-            dodgeable: false, dodge: None, dodge_armed: false,
+            dodgeable: false, dodge: None, dodge_armed: false, grab: false,
         };
         position_bar(&mut bar, cfg);
         let _ = win.set_ignore_cursor_events(true);
@@ -300,7 +302,7 @@ fn background_loop(app: AppHandle) {
                     if eyes && bar.dodge.is_some() && (moved || change.is_some()) { gazes.push((bar.label.clone(), px, py)); }
                     // A hidden island lets clicks through to what's behind it.
                     let inside = !bar.fullscreen && bar.rects.iter()
-                        .filter(|r| bar.dodge.is_none() || Some(**r) != bar.notch)
+                        .filter(|r| bar.dodge.is_none() || bar.grab || Some(**r) != bar.notch)
                         .any(|r| px >= r.x && px < r.x + r.w && py >= r.y && py < r.y + r.h);
                     if inside != bar.interactive {
                         bar.interactive = inside;
@@ -485,11 +487,12 @@ async fn notifications() -> Vec<Value> {
 }
 
 #[tauri::command]
-fn set_hit_rects(window: WebviewWindow, rects: Vec<Rect>, notch: Option<Rect>, dodgeable: bool) {
+fn set_hit_rects(window: WebviewWindow, rects: Vec<Rect>, notch: Option<Rect>, dodgeable: bool, grab: bool) {
     with(|s| if let Some(b) = s.bars.iter_mut().find(|b| b.label == window.label()) {
         b.rects = rects;
         b.notch = notch;
         b.dodgeable = dodgeable;
+        b.grab = grab;
     });
 }
 
