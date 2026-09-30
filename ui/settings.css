@@ -499,4 +499,5 @@ h2 {
 @keyframes kys-food-drop { from { translate: -50% -300%; opacity: 0; } 20% { opacity: 1; } to { translate: -50% -50%; scale: .7; } }
 .kys-ball { font-size: 18px; translate: -50% -50%; }
 .kys-float { translate: -50% 0; color: #ff6b8a; font-size: 16px; animation: kys-float 1.4s ease-out forwards; }
+.kys-float.capped { color: var(--faint); font-size: 12px; font-weight: 600; white-space: nowrap; }
 @keyframes kys-float { from { translate: -50% -10px; opacity: 0; } 15% { opacity: 1; } to { translate: -50% -50px; opacity: 0; } }

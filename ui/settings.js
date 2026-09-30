@@ -316,7 +316,8 @@
     buddy.setKys(k);
     if (dragging) redraw = true; // after the drop: the tile being dragged stays
     else if (S && tab === 'kys') render();
-    if (gain) requestAnimationFrame(() => $('.kys-credits')?.classList.add('bump'));
+    if (gain?.amount) requestAnimationFrame(() => $('.kys-credits')?.classList.add('bump'));
+    else if (gain && ['talk', 'dizzy'].includes(gain.source)) floatAt(buddy.pos, t('kys.capped'), 'capped'); // today's cap reached
   }
 
   /** A little something floating away from a point (a heart when Kys eats). */
@@ -519,7 +520,12 @@
       }
       this.spinAngle = a;
       if (Math.abs(this.spin) > 8) {
-        if (!this.dizzyUntil) { this.spinDir = Math.sign(this.spin) || 1; this.setMood('dizzy'); this.el.classList.add('dizzy'); }
+        if (!this.dizzyUntil) {
+          this.spinDir = Math.sign(this.spin) || 1;
+          this.setMood('dizzy');
+          this.el.classList.add('dizzy');
+          invoke('kys_earn', { source: 'dizzy' });
+        }
         this.dizzyUntil = now + 2200;
       }
     }

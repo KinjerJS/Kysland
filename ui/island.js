@@ -1184,7 +1184,7 @@
 
   function nearEyes(S, e) {
     const c = S.eyes.center();
-    return Math.hypot(e.clientX - c.x, e.clientY - c.y) < 24;
+    return Math.hypot(e.clientX - c.x, e.clientY - c.y) < 32;
   }
 
   /** Caught while peeking (approached slowly, eyes clicked): delighted, and a few credits. */
@@ -1216,7 +1216,8 @@
     const out = S.peeking || S.dodged || S.eyes.flight;
     if (!out && gain.source === 'time') return; // quietly, when Kys isn't around
     const r = S.notch.el.getBoundingClientRect();
-    floatAt(out ? S.eyes.center() : { x: r.left + r.width / 2, y: r.bottom - 6 }, `+${gain.amount} ✦`, 'gain');
+    const text = gain.amount ? `+${gain.amount} ✦` : t('kys.capped'); // 0: today's cap reached
+    floatAt(out ? S.eyes.center() : { x: r.left + r.width / 2, y: r.bottom - 6 }, text, gain.amount ? 'gain' : 'gain capped');
   }
 
   /** Fed from the settings: the food drops onto Kys, who munches it (peeking in to eat if needed). */

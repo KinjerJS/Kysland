@@ -723,6 +723,7 @@ body.pos-bottom .notch.splash { transform-origin: 50% 100%; }
   animation: kys-float 1.4s ease-out forwards;
 }
 .kys-float.heart { color: #ff6b8a; font-size: 12px; }
+.kys-float.capped { color: var(--notch-dim); font-weight: 600; }
 @keyframes kys-float { from { translate: -50% 4px; opacity: 0; } 15% { opacity: 1; } to { translate: -50% 30px; opacity: 0; } }
 
 /* Kys in the expanded island (island.js): its button next to the gear, and its page. */

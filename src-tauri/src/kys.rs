@@ -142,7 +142,7 @@ pub fn state() -> Value {
     })
 }
 
-/// Tells every window, with what was just earned if anything.
+/// Tells every window, with what was just earned if anything (0: nothing more today).
 fn broadcast(gain: Option<(u32, &str)>) {
     hub::emit("kys", json!({ "state": state(), "gain": gain.map(|(amount, source)| json!({ "amount": amount, "source": source })) }));
 }
@@ -192,7 +192,9 @@ pub fn earn(source: &str) {
         save(kys);
         gain
     });
-    broadcast(gain.map(|c| (c, source)));
+    // Today's cap reached: said anyway (0), so it's clear why nothing comes (not for its own peeks).
+    let capped = SOURCES.iter().any(|s| s.0 == source) && source != "peek";
+    broadcast(gain.or(capped.then_some(0)).map(|c| (c, source)));
 }
 
 /// Talked to: a credit and a bit of joy, unless it was to be mean (its answer is grumpy).
