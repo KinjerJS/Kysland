@@ -77,13 +77,13 @@ body.pos-bottom .notch::after  { background: radial-gradient(circle at 100% 0, t
   position: absolute;
   top: 0;
   left: 50%;
-  translate: calc(-50% + var(--peek-shift, 0px)) 0; /* nudged aside by peeking eyes */
+  translate: -50% 0;
   width: max-content;
   opacity: 0;
   scale: .94;
   filter: blur(4px);
   transform-origin: top center;
-  transition: opacity .22s ease, scale .4s var(--spring), filter .22s ease, translate .45s var(--spring);
+  transition: opacity .22s ease, scale .4s var(--spring), filter .22s ease;
 }
 body.pos-bottom .notch-view { top: auto; bottom: 0; transform-origin: bottom center; }
 .notch-view.shown { opacity: 1; scale: 1; filter: none; transition-delay: .08s; }
@@ -610,9 +610,23 @@ body.pos-bottom .notch.splash { transform-origin: 50% 100%; }
 }
 .notch.roaming .notch-eyes .stars span { font-size: 12px; }
 
-/* Peeking eyes (island.js): the resting island grows on one side (Notch.extra), what it shows is
-   nudged the other way (--peek-shift on .notch-view), and the eyes pop into the room made. */
-.notch.peek .notch-eyes { opacity: 1; gap: 5px; transition: opacity .2s ease .12s, translate .45s var(--spring); }
-.notch.peek .notch-eyes i { width: 7px; height: 9px; border-radius: 3px; animation: eyes-open .3s cubic-bezier(.3, 1.4, .5, 1) .15s backwards; }
+/* Peeking eyes (island.js): they drop in from the top (the screen edge) into the middle of the
+   resting island and shove what's on either side apart, which tips over a little and settles,
+   while the island widens by --peek-room (Notch.extra); they shoot back up when leaving. */
+.notch { --peek-room: 32px; }
+.notch.peek .notch-eyes { opacity: 1; gap: 5px; transition: translate .38s cubic-bezier(.3, 1.45, .6, 1), opacity .1s ease; }
+.notch.peek .notch-eyes i { width: 7px; height: 9px; border-radius: 3px; }
 .notch.peek .notch-eyes b { opacity: var(--brow); width: 9px; height: 2px; margin-bottom: 2px; }
-.notch.peek .notch-eyes.scared { opacity: 0; transition: translate .25s cubic-bezier(.5, 0, .9, .4), opacity .15s ease .1s; }
+.notch.peek .notch-eyes.leaving { transition: translate .28s cubic-bezier(.5, 0, .9, .5), opacity .1s ease .2s; }
+.notch.peek .notch-eyes.scared { transition: translate .15s cubic-bezier(.6, 0, 1, .6), opacity .08s ease .1s; }
+/* What they shove: before the date to the left, from the date on to the right. */
+.n-compact > * { transition: translate .45s var(--spring); }
+.notch.peek .n-compact > * {
+  translate: calc(var(--peek-room) / -2) 0;
+  transition-delay: .12s;
+  animation: peek-tip-left .7s ease-out .12s;
+}
+.notch.peek .n-compact > .n-date,
+.notch.peek .n-compact > .n-date ~ * { translate: calc(var(--peek-room) / 2) 0; animation-name: peek-tip-right; }
+@keyframes peek-tip-left { 30% { rotate: -9deg; } 60% { rotate: 4deg; } 100% { rotate: 0deg; } }
+@keyframes peek-tip-right { 30% { rotate: 9deg; } 60% { rotate: -4deg; } 100% { rotate: 0deg; } }

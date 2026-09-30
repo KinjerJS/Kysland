@@ -968,10 +968,11 @@
   }
 
   // --- Peeking eyes -----------------------------------------------------------------------------
-  // Now and then the eyes squeeze into the resting island: it grows a little on one side, what it
-  // shows gets nudged the other way, and they keep an eye on the cursor for a few seconds. Coming at
-  // them fast scares them off: they dash away past the edge and stay away for a while.
-  const PEEK_ROOM = 44; // px the island grows by to make room for them
+  // Now and then the eyes drop in from the top (the screen edge) into the middle of the resting
+  // island, shoving what's on either side apart (it tips over a little, then settles) while the
+  // island widens a touch, and keep an eye on the cursor for a few seconds before going back up.
+  // Coming at them fast scares them off: they shoot back up and stay away for a while.
+  const PEEK_ROOM = 32; // px the island widens by; same as --peek-room in notch.css
 
   function schedulePeek(m, min = 25, max = 70) {
     const S = m.island;
@@ -989,29 +990,40 @@
     const S = m.island;
     if (m.conf.peek === false) return;
     if (S.peeking || !canPeek(m, S)) return schedulePeek(m, 8, 20); // busy: a bit later
-    const dir = pick([-1, 1]);
-    S.peeking = { dir, v: 0, last: null };
+    S.peeking = { v: 0, last: null };
     S.eyes.start(0);
-    // They come in from the edge while the content gets pushed aside, with a little jostle.
+    // Above the island first (off the screen), right over the gap they're about to make...
     const eyes = S.eyes.el;
     eyes.style.transition = 'none';
-    eyes.style.setProperty('--ex', `${dir * ((S.notch.current?.offsetWidth || 160) / 2 + PEEK_ROOM)}px`);
+    eyes.style.setProperty('--ex', `${peekSpot(S).toFixed(1)}px`);
+    eyes.style.setProperty('--ey', '-36px');
     void eyes.offsetWidth;
     eyes.style.transition = '';
+    // ...then down they drop, shoving the time and the date apart as the island widens a touch.
     S.notch.extra = PEEK_ROOM;
-    S.notch.el.style.setProperty('--peek-shift', `${(-dir * PEEK_ROOM) / 2}px`);
     S.notch.el.classList.add('peek');
     S.notch.resize();
     placePeekEyes(S);
-    S.notch.el.classList.remove('splash');
-    void S.notch.el.offsetWidth;
-    S.notch.el.classList.add('splash');
+    setTimeout(() => {
+      S.notch.el.classList.remove('splash');
+      void S.notch.el.offsetWidth;
+      S.notch.el.classList.add('splash'); // the bump of the landing
+    }, 140);
     S.peekEndT = setTimeout(() => endPeek(m), rand(3500, 7000));
   }
 
+  /** Middle of the gap between the time and the date, from the island's center (the pushing
+   *  apart is symmetrical, so the gap stays there). */
+  function peekSpot(S) {
+    const view = S.notch.current;
+    const time = view?.querySelector('.n-time'), date = view?.querySelector('.n-date');
+    if (!time || !date) return 0;
+    const n = S.notch.el.getBoundingClientRect();
+    return (time.getBoundingClientRect().right + date.getBoundingClientRect().left) / 2 - (n.left + n.width / 2);
+  }
+
   function placePeekEyes(S) {
-    const w = (S.notch.current?.offsetWidth || 160) + PEEK_ROOM;
-    S.eyes.el.style.setProperty('--ex', `${(S.peeking.dir * (w / 2 - PEEK_ROOM / 2 - 3)).toFixed(1)}px`);
+    S.eyes.el.style.setProperty('--ex', `${peekSpot(S).toFixed(1)}px`);
     S.eyes.el.style.setProperty('--ey', '0px');
   }
 
@@ -1038,22 +1050,21 @@
     if (!p) return;
     S.peeking = null;
     clearTimeout(S.peekEndT);
+    // Back up past the screen edge: calmly, or in a flash when scared. The time and the date
+    // close the gap behind them.
     const eyes = S.eyes.el;
-    if (scared) {
-      eyes.classList.add('scared'); // dashes off past the edge
-      eyes.style.setProperty('--ex', `${p.dir * (S.notch.el.offsetWidth / 2 + 30)}px`);
-    } else {
-      eyes.classList.add('blink'); // eyes closing as it ducks back out
-    }
+    eyes.classList.add(scared ? 'scared' : 'leaving');
+    eyes.style.setProperty('--ey', scared ? '-46px' : '-36px');
     setTimeout(() => {
-      eyes.classList.remove('scared', 'blink');
       S.notch.el.classList.remove('peek');
-      S.notch.el.style.setProperty('--peek-shift', '0px');
       S.notch.extra = 0;
       S.notch.resize();
+    }, scared ? 60 : 160);
+    setTimeout(() => {
+      eyes.classList.remove('scared', 'leaving');
       if (!S.dodged) S.eyes.stop(); // hiding from the cursor took the eyes over meanwhile
       schedulePeek(m, scared ? 90 : 30, scared ? 180 : 80);
-    }, scared ? 260 : 150);
+    }, scared ? 200 : 320);
   }
 
   // --- Views --------------------------------------------------------------------------------
