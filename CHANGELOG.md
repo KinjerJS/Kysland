@@ -14,6 +14,7 @@ What changed in each version. The section of a version is also the text of its G
 - While it eats, Kys stays happy: whatever else it would feel waits until it's done.
 - Asleep, Kys no longer blinks or glances around. Sneak up on it very slowly and it opens one eye a crack, the one on your side, to watch you.
 - **Credits**: making the settings' buddy dizzy now earns them too, catching Kys while it peeks is a little easier, and once today's cap is reached, "✦ max today" says so instead of nothing.
+- In the expanded island, a click on the RAM switches it between % and GB used, and on the network between download and upload (remembered).
 - When Kys drops into the island, the time and the date now tip into a V around it.
 - The installer includes llama.cpp, which runs the model with the best instructions your processor has (6 MB installer instead of 4.7 MB).
 

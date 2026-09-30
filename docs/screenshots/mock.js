@@ -70,7 +70,7 @@
         },
         audio: { volume: 62, muted: false },
         cpu: { usage: 14 },
-        memory: { percentage: 47 },
+        memory: { percentage: 47, used: 7.5, total: 15.9 },
         network: { connected: true, type: 'wifi', essid: 'Home', down: '2.4 MB/s', up: '180 KB/s' },
         battery: { present: false },
         claude: {

@@ -1756,14 +1756,24 @@
         </div>` : `<div class="n-empty">${t('island.nothing_playing')}</div>`}
         <div class="n-stats">
           <span class="n-chip" data-stat="cpu">${icon('cpu')}<b></b></span>
-          <span class="n-chip" data-stat="memory">${icon('memory-stick')}<b></b></span>
-          <span class="n-chip" data-stat="network">${icon('arrow-down')}<b></b></span>
+          <span class="n-chip n-toggle" data-stat="memory" title="${esc(t('island.stat_toggle'))}">${icon('memory-stick')}<b></b></span>
+          <span class="n-chip n-toggle" data-stat="network" title="${esc(t('island.stat_toggle'))}">${icon('arrow-down')}<b></b></span>
         </div>
         ${claudeRow(S)}
         <div class="n-chip n-vol"><i class="icon" data-mute></i><input type="range" min="0" max="100"><b></b></div>
       </div>`,
       mount(el) {
         el.querySelector('.n-bell').onclick = () => openHistory(m);
+        // A click on the RAM switches between % and GB, on the network between download and upload.
+        el.querySelector('.n-stats').onclick = (e) => {
+          const name = e.target.closest('.n-toggle')?.dataset.stat;
+          if (!name) return;
+          const alt = statAlt();
+          alt[name] = !alt[name];
+          try { localStorage.setItem('stats', JSON.stringify(alt)); } catch { /* no storage: not remembered */ }
+          S.statAlt = alt;
+          render(m);
+        };
         el.querySelector('.n-kysbtn').onclick = () => { S.page = 'kys'; render(m); };
         el.querySelector('.n-gear').onclick = () => { setExpanded(m, false); api.action('settings'); };
         el.querySelector('.n-date-long').onclick = () => openCalendar(m);
@@ -1830,8 +1840,11 @@
         }
         const chip = (name, text) => { el.querySelector(`[data-stat="${name}"] b`).textContent = text; };
         chip('cpu', d.cpu ? `${d.cpu.usage}%` : '–');
-        chip('memory', d.memory ? `${d.memory.percentage}%` : '–');
-        chip('network', d.network?.connected ? d.network.down : t('island.offline'));
+        const alt = S.statAlt || (S.statAlt = statAlt());
+        const gb = (v) => Number(v).toLocaleString(window.i18n.lang, { maximumFractionDigits: 1 });
+        chip('memory', !d.memory ? '–' : alt.memory ? t('island.memory_gb', { used: gb(d.memory.used), total: gb(d.memory.total) }) : `${d.memory.percentage}%`);
+        chip('network', !d.network?.connected ? t('island.offline') : alt.network ? d.network.up : d.network.down);
+        el.querySelector('[data-stat="network"] .icon').className = `icon icon-${alt.network ? 'arrow-up' : 'arrow-down'}`;
         updateClaude(el, d.claude);
         if (d.audio) {
           el.querySelector('[data-mute]').className = `icon icon-${d.audio.muted ? 'volume-x' : 'volume-2'}`;
@@ -1839,6 +1852,11 @@
         }
       },
     };
+  }
+
+  /** How the RAM and the network show (see the stats' click): remembered. */
+  function statAlt() {
+    try { return JSON.parse(localStorage.getItem('stats')) || {}; } catch { return {}; }
   }
 
   function volumeView(a) {

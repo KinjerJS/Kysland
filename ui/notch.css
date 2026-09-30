@@ -400,6 +400,8 @@ body.pos-bottom .notch[data-size=card] { border-radius: 24px 24px 0 0; }
 /* Equal-width chips: their values change without shifting the layout. */
 .n-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: -6px; }
 .n-stats .n-chip { justify-content: center; min-width: 0; overflow: hidden; }
+.n-stats .n-toggle { cursor: pointer; transition: background .15s ease; }
+.n-stats .n-toggle:hover { background: rgba(255, 255, 255, 0.13); }
 .n-chip {
   display: flex; align-items: center; gap: 6px;
   padding: 7px 10px;
