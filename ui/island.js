@@ -968,11 +968,12 @@
   }
 
   // --- Peeking eyes -----------------------------------------------------------------------------
-  // Now and then the eyes drop in from the top (the screen edge) into the middle of the resting
-  // island, shoving what's on either side apart (it tips over a little, then settles) while the
-  // island widens a touch, and keep an eye on the cursor for a few seconds before going back up.
+  // Now and then the eyes drop in from the top (the screen edge) right into the middle of the
+  // resting island, landing on its content: the time and the date get knocked down and askew (a
+  // little differently each time) and stay that way under them, while the island widens a touch.
+  // They keep an eye on the cursor for a few seconds, then go back up and everything springs back.
   // Coming at them fast scares them off: they shoot back up and stay away for a while.
-  const PEEK_ROOM = 32; // px the island widens by; same as --peek-room in notch.css
+  const PEEK_ROOM = 12; // px the island widens by
 
   function schedulePeek(m, min = 25, max = 70) {
     const S = m.island;
@@ -990,16 +991,24 @@
     const S = m.island;
     if (m.conf.peek === false) return;
     if (S.peeking || !canPeek(m, S)) return schedulePeek(m, 8, 20); // busy: a bit later
-    S.peeking = { v: 0, last: null };
+    S.peeking = { v: 0, last: null, x: peekSpot(S) };
     S.eyes.start(0);
-    // Above the island first (off the screen), right over the gap they're about to make...
+    // How hard what's on either side gets knocked: sideways, down, askew.
+    const n = S.notch.el.style;
+    n.setProperty('--knock-l-x', `${-rand(6, 10).toFixed(1)}px`);
+    n.setProperty('--knock-l-y', `${rand(5, 8).toFixed(1)}px`);
+    n.setProperty('--knock-l-r', `${-rand(8, 16).toFixed(1)}deg`);
+    n.setProperty('--knock-r-x', `${rand(6, 10).toFixed(1)}px`);
+    n.setProperty('--knock-r-y', `${rand(5, 8).toFixed(1)}px`);
+    n.setProperty('--knock-r-r', `${rand(7, 14).toFixed(1)}deg`);
+    // Above the island first (off the screen), right over the spot they land on...
     const eyes = S.eyes.el;
     eyes.style.transition = 'none';
-    eyes.style.setProperty('--ex', `${peekSpot(S).toFixed(1)}px`);
+    eyes.style.setProperty('--ex', `${S.peeking.x.toFixed(1)}px`);
     eyes.style.setProperty('--ey', '-36px');
     void eyes.offsetWidth;
     eyes.style.transition = '';
-    // ...then down they drop, shoving the time and the date apart as the island widens a touch.
+    // ...then down they drop, knocking the time and the date as the island widens a touch.
     S.notch.extra = PEEK_ROOM;
     S.notch.el.classList.add('peek');
     S.notch.resize();
@@ -1012,8 +1021,8 @@
     S.peekEndT = setTimeout(() => endPeek(m), rand(3500, 7000));
   }
 
-  /** Middle of the gap between the time and the date, from the island's center (the pushing
-   *  apart is symmetrical, so the gap stays there). */
+  /** Middle of the gap between the time and the date, from the island's center (measured before
+   *  they get knocked). */
   function peekSpot(S) {
     const view = S.notch.current;
     const time = view?.querySelector('.n-time'), date = view?.querySelector('.n-date');
@@ -1023,7 +1032,7 @@
   }
 
   function placePeekEyes(S) {
-    S.eyes.el.style.setProperty('--ex', `${peekSpot(S).toFixed(1)}px`);
+    S.eyes.el.style.setProperty('--ex', `${S.peeking.x.toFixed(1)}px`);
     S.eyes.el.style.setProperty('--ey', '0px');
   }
 

@@ -611,22 +611,20 @@ body.pos-bottom .notch.splash { transform-origin: 50% 100%; }
 .notch.roaming .notch-eyes .stars span { font-size: 12px; }
 
 /* Peeking eyes (island.js): they drop in from the top (the screen edge) into the middle of the
-   resting island and shove what's on either side apart, which tips over a little and settles,
-   while the island widens by --peek-room (Notch.extra); they shoot back up when leaving. */
-.notch { --peek-room: 32px; }
+   resting island and land on its content, knocking what's on either side down and askew
+   (--knock-*, a bit different each time) while the island widens a touch (Notch.extra); they
+   shoot back up when leaving and everything springs back. */
 .notch.peek .notch-eyes { opacity: 1; gap: 5px; transition: translate .38s cubic-bezier(.3, 1.45, .6, 1), opacity .1s ease; }
 .notch.peek .notch-eyes i { width: 7px; height: 9px; border-radius: 3px; }
 .notch.peek .notch-eyes b { opacity: var(--brow); width: 9px; height: 2px; margin-bottom: 2px; }
 .notch.peek .notch-eyes.leaving { transition: translate .28s cubic-bezier(.5, 0, .9, .5), opacity .1s ease .2s; }
 .notch.peek .notch-eyes.scared { transition: translate .15s cubic-bezier(.6, 0, 1, .6), opacity .08s ease .1s; }
-/* What they shove: before the date to the left, from the date on to the right. */
-.n-compact > * { transition: translate .45s var(--spring); }
+/* What they land on: before the date gets knocked to the left, from the date on to the right. */
+.n-compact > * { transition: translate .5s var(--spring), rotate .5s var(--spring); }
 .notch.peek .n-compact > * {
-  translate: calc(var(--peek-room) / -2) 0;
-  transition-delay: .12s;
-  animation: peek-tip-left .7s ease-out .12s;
+  translate: var(--knock-l-x) var(--knock-l-y);
+  rotate: var(--knock-l-r);
+  transition: translate .45s cubic-bezier(.3, 1.6, .5, 1) .1s, rotate .45s cubic-bezier(.3, 1.6, .5, 1) .1s;
 }
 .notch.peek .n-compact > .n-date,
-.notch.peek .n-compact > .n-date ~ * { translate: calc(var(--peek-room) / 2) 0; animation-name: peek-tip-right; }
-@keyframes peek-tip-left { 30% { rotate: -9deg; } 60% { rotate: 4deg; } 100% { rotate: 0deg; } }
-@keyframes peek-tip-right { 30% { rotate: 9deg; } 60% { rotate: -4deg; } 100% { rotate: 0deg; } }
+.notch.peek .n-compact > .n-date ~ * { translate: var(--knock-r-x) var(--knock-r-y); rotate: var(--knock-r-r); }
