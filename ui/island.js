@@ -213,11 +213,17 @@
       this.openT = setTimeout(() => this.el.classList.add('opened'), 700); // don't open again when coming back in
       if (roamAfter > 0) this.roamT = setTimeout(() => this.roam(), roamAfter * 1000);
       const blink = () => {
-        this.el.classList.add('blink');
-        setTimeout(() => this.el.classList.remove('blink'), 110);
+        if (!this.asleep() && !this.eating()) {
+          this.el.classList.add('blink');
+          setTimeout(() => this.el.classList.remove('blink'), 110);
+        }
         this.blinkT = setTimeout(blink, rand(2200, 5000));
       };
       const glance = () => {
+        if (this.asleep()) {
+          this.glanceT = setTimeout(glance, rand(3000, 7000));
+          return;
+        }
         const c = this.center();
         this.elsewhere = true;
         this.aim(c.x + (Math.random() < 0.5 ? -1 : 1) * rand(30, 70), c.y + rand(-10, 30));
@@ -251,8 +257,19 @@
       this.el.style.setProperty('--ey', '0px');
     }
 
-    /** Shows a mood (brows, lids); back to neutral after `ms`, or on to `then` = [mood, ms]. */
+    asleep() { return this.move?.kind === 'doze'; }
+
+    eating() { return performance.now() < (this.eatingUntil || 0); }
+
+    /**
+     * Shows a mood (brows, lids); back to neutral after `ms`, or on to `then` = [mood, ms]. While it
+     * eats, it stays happy: the last mood asked for waits until it's done.
+     */
     setMood(mood, ms = 0, then = null) {
+      if (this.eating()) {
+        this.afterMeal = [mood, ms, then];
+        return;
+      }
       clearTimeout(this.moodT);
       if (mood === 'neutral' && this.sad) mood = 'sad'; // Kys starving or miserable
       this.el.dataset.mood = mood;
@@ -272,7 +289,15 @@
     /** Eating: a few chomps, then happy. */
     munch() {
       mouthChew(this.el, false);
-      this.setMood('happy', 2200);
+      this.eatingUntil = 0;
+      this.setMood('happy');
+      this.eatingUntil = performance.now() + MEAL;
+      this.afterMeal = ['happy', 900]; // a bit more, unless something else came up meanwhile
+      clearTimeout(this.mealT);
+      this.mealT = setTimeout(() => {
+        this.eatingUntil = 0;
+        this.setMood(...this.afterMeal);
+      }, MEAL);
     }
 
     look(x, y) {
@@ -428,6 +453,13 @@
           this.raf = requestAnimationFrame(tick);
           return;
         }
+        // Asleep, a cursor sneaking right up to it (10 to 20 px from the eyes): the eye on that side
+        // opens a crack, and watches it.
+        const side = asleep && c && Math.hypot(Math.max(0, Math.abs(c.x - this.pos.x) - 20), Math.max(0, Math.abs(c.y - this.pos.y) - 9)) < 18
+          ? (c.x < this.pos.x ? 'l' : 'r') : null;
+        this.el.classList.toggle('peek-l', side === 'l');
+        this.el.classList.toggle('peek-r', side === 'r');
+        this.cracked = side;
         // Woken up by a real move (sneaking up slowly doesn't wake them).
         if (asleep && this.travel() > 45) {
           this.setMood('surprised', 700, ['grumpy', 1400]);
@@ -709,10 +741,12 @@
       return {
         kind: 'doze', pull: 1.2, until: now + 60000,
         target: (t, cur, box) => ({ x: 0, y: box.y * 0.5 }),
-        look: () => ({ x: this.pos.x, y: this.pos.y + 60 }), // eyes down
+        look: () => (this.cracked ? null : { x: this.pos.x, y: this.pos.y + 60 }), // eyes down (one on the cursor, cracked)
         end: () => {
           clearInterval(timer);
           this.el.querySelectorAll('.zzz').forEach((z) => z.remove());
+          this.el.classList.remove('peek-l', 'peek-r');
+          this.cracked = null;
         },
       };
     }
@@ -1467,23 +1501,30 @@
   const FACE_EYES = '<div class="notch-eyes"><span class="eye l"><b></b><i></i></span><span class="eye r"><b></b><i></i></span>'
     + '<span class="mouth"></span></div>';
 
-  /** A mood on the face, for a while (then back to its usual one: sad when it's miserable). */
+  /** A mood on the face, for a while (then back to its usual one: sad when it's miserable). While it
+   *  eats, it stays happy: the last mood asked for waits until it's done. */
   function faceMood(face, mood, ms = 0) {
     const eyes = face.querySelector('.notch-eyes');
     if (!eyes) return;
+    if (performance.now() < (face.eatingUntil || 0)) {
+      face.afterMeal = [mood, ms];
+      return;
+    }
     clearTimeout(face.moodT);
     face.moodT = 0;
     eyes.dataset.mood = mood === 'neutral' && face.classList.contains('sad') ? 'sad' : mood;
     if (ms) face.moodT = setTimeout(() => { face.moodT = 0; faceMood(face, 'neutral'); }, ms);
   }
 
-  /** The face blinks now and then, as long as it's on screen. */
+  /** The face blinks now and then, as long as it's on screen (not with its mouth full). */
   function faceBlink(face) {
     const eyes = face.querySelector('.notch-eyes');
     const blink = () => {
       if (!face.isConnected) return;
-      eyes.classList.add('blink');
-      setTimeout(() => eyes.classList.remove('blink'), 120);
+      if (performance.now() >= (face.eatingUntil || 0)) {
+        eyes.classList.add('blink');
+        setTimeout(() => eyes.classList.remove('blink'), 120);
+      }
       setTimeout(blink, 2200 + Math.random() * 3300);
     };
     setTimeout(blink, 1500 + Math.random() * 1500);
@@ -1499,7 +1540,14 @@
     const c = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
     const chew = () => {
       mouthChew(eyes);
-      faceMood(face, 'happy', 2200);
+      face.eatingUntil = 0;
+      faceMood(face, 'happy');
+      face.eatingUntil = performance.now() + MEAL;
+      face.afterMeal = ['happy', 900];
+      setTimeout(() => {
+        face.eatingUntil = 0;
+        faceMood(face, ...face.afterMeal);
+      }, MEAL);
       floatAt({ x: c.x + 30, y: c.y - 6 }, '❤', 'heart'); // beside the mouth, not over it
     };
     if (performance.now() - (S.handFedAt || 0) < 1500) return chew(); // given by hand: already in its mouth
@@ -1517,6 +1565,9 @@
       chew();
     }, 480);
   }
+
+  /** How long a meal lasts (the chewing), in ms. */
+  const MEAL = 1300;
 
   /** Kys's mouth, on a pair of eyes: hidden at 0, wide open at 1 (food coming near). */
   function mouthOpen(eyes, open) {

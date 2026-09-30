@@ -486,6 +486,10 @@ body.pos-bottom .notch.dodged.eyes { border-radius: 6px 6px 0 0; }
 .notch-eyes[data-mood=happy]      { --brow: 1; --bl-y: -4px; --br-y: -4px; --lid-l: .45; --lid-r: .45; }
 .notch-eyes[data-mood=happy] i    { border-radius: 50% 50% 2px 2px / 90% 90% 2px 2px; } /* ^ ^ */
 .notch-eyes[data-mood=sleepy]     { --lid-l: .3; --lid-r: .3; }
+/* Asleep, a cursor sneaking right up: the eye on that side opens a crack (island.js). */
+.notch-eyes[data-mood=sleepy].peek-l { --lid-l: .65; }
+.notch-eyes[data-mood=sleepy].peek-r { --lid-r: .65; }
+.notch-eyes.peek-l .l i, .notch-eyes.peek-r .r i { transition: translate 80ms cubic-bezier(.2, .8, .3, 1), scale .35s ease; }
 .notch.dodged.eyes .notch-eyes { opacity: 1; transition: opacity .2s ease .2s, translate .5s cubic-bezier(.3, 1.25, .5, 1); }
 .notch.dodged.eyes .notch-eyes:not(.opened) i { animation: eyes-open .32s cubic-bezier(.3, 1.4, .5, 1) .22s backwards; }
 @keyframes eyes-open { from { scale: 1 0; } }

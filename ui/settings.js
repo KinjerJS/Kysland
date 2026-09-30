@@ -471,8 +471,10 @@
       document.addEventListener('mousemove', (e) => this.track(e.clientX, e.clientY));
       document.documentElement.addEventListener('mouseleave', () => { this.cursor = null; });
       const blink = () => {
-        this.eyes.classList.add('blink');
-        setTimeout(() => this.eyes.classList.remove('blink'), 120);
+        if (this.move?.kind !== 'doze' && !this.eating()) { // not in its sleep, not with its mouth full
+          this.eyes.classList.add('blink');
+          setTimeout(() => this.eyes.classList.remove('blink'), 120);
+        }
         setTimeout(blink, rand(2200, 5500));
       };
       setTimeout(blink, rand(1500, 3000));
@@ -551,6 +553,13 @@
         this.fledAt = now;
         this.setMove(this.flee(now, c));
       }
+      // Asleep, a cursor sneaking right up to it (10 to 20 px away): the eye on that side opens a
+      // crack, and watches it.
+      const side = asleep && c && Math.hypot(Math.max(0, Math.abs(c.x - this.pos.x) - 36), Math.max(0, Math.abs(c.y - this.pos.y) - 20)) < 18
+        ? (c.x < this.pos.x ? 'l' : 'r') : null;
+      this.eyes.classList.toggle('peek-l', side === 'l');
+      this.eyes.classList.toggle('peek-r', side === 'r');
+      this.cracked = side;
       if (asleep && this.travel() > 45) {
         this.setMood('surprised', 700, ['grumpy', 1400]);
         this.setMove(null);
@@ -680,7 +689,14 @@
     eat(item) {
       const chew = () => {
         this.chew();
-        this.setMood('happy', 2200);
+        this.eatingUntil = 0;
+        this.setMood('happy');
+        this.eatingUntil = performance.now() + 1300;
+        this.afterMeal = ['happy', 900]; // a bit more, unless something else came up meanwhile
+        setTimeout(() => {
+          this.eatingUntil = 0;
+          this.setMood(...this.afterMeal);
+        }, 1300);
         floatAt({ x: this.pos.x + 32, y: this.pos.y }, '❤', 'heart'); // beside the mouth, not over it
       };
       if (performance.now() - (this.handFedAt || 0) < 1500) return chew(); // already in its mouth
@@ -727,7 +743,14 @@
       requestAnimationFrame(step);
     }
 
+    eating() { return performance.now() < (this.eatingUntil || 0); }
+
+    /** A mood for a while. While it eats, it stays happy: the last mood asked for waits until it's done. */
     setMood(mood, ms = 0, then = null) {
+      if (this.eating()) {
+        this.afterMeal = [mood, ms, then];
+        return;
+      }
       clearTimeout(this.moodT);
       if (mood === 'neutral' && this.sad) mood = 'sad'; // Kys starving or miserable
       this.eyes.dataset.mood = mood;
@@ -823,8 +846,13 @@
       return {
         kind: 'doze', pull: 1, until: now + 60000,
         target: () => (this.mode === 'home' ? this.homeSpot() : base),
-        look: () => ({ x: this.pos.x, y: this.pos.y + 100 }),
-        end: () => { clearInterval(timer); this.el.querySelectorAll('.zzz').forEach((z) => z.remove()); },
+        look: () => (this.cracked ? null : { x: this.pos.x, y: this.pos.y + 100 }), // eyes down (one on the cursor, cracked)
+        end: () => {
+          clearInterval(timer);
+          this.el.querySelectorAll('.zzz').forEach((z) => z.remove());
+          this.eyes.classList.remove('peek-l', 'peek-r');
+          this.cracked = null;
+        },
       };
     }
 
