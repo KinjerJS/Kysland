@@ -1,13 +1,14 @@
 {
   "name": "kysland",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Dynamic Island for Windows (Tauri)",
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",
     "build": "tauri build",
     "check": "node scripts/check.js",
-    "vendor": "node scripts/vendor.js"
+    "vendor": "node scripts/vendor.js",
+    "screenshots": "node scripts/screenshots.js"
   },
   "author": "Kinjer",
   "license": "MIT",

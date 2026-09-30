@@ -2,6 +2,11 @@
 
 What changed in each version. The section of a version is also the text of its GitHub release.
 
+## 0.4.1 — 2026-09-30
+
+- Fixed: on Kys's page in the expanded island, the buttons (give, play, wear) and the shop tiles had lost their look.
+- A brand new README, with screenshots.
+
 ## 0.4.0 — 2026-09-30
 
 ### Kys, the eyes as a pet

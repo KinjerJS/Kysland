@@ -1,88 +1,118 @@
+<div align="center">
+
+<img src="docs/images/island.png" width="640" alt="The Kysland island at the top of the screen: album art, the time, the date and an equalizer">
+
 # Kysland
 
-A **Dynamic Island** for Windows: a black notch attached to the top edge of the screen. At rest it shows the time and date. Hover it and it expands to show what's playing, your notifications and the state of your system.
+**A Dynamic Island for Windows.**<br>
+The time and what's playing at the top of your screen, your notifications, your system at a glance…<br>
+and **Kys**, a little pair of eyes that lives in it.
 
-Kysland is built with [Tauri](https://tauri.app): the interface is HTML/CSS (fully customizable, hot-reloaded) and the engine is Rust, calling Windows APIs directly (Core Audio, media controls, notifications, window management). The installer is about 4 MB.
+[![Download](https://img.shields.io/github/v/release/KinjerJS/Kysland?label=download&color=cba6f7)](https://github.com/KinjerJS/Kysland/releases/latest)
+![Windows 10 and 11](https://img.shields.io/badge/Windows-10%20%7C%2011-1a1a22)
+![Tauri 2](https://img.shields.io/badge/Tauri-2-24c8db)
+![Installer 4.5 MB](https://img.shields.io/badge/installer-4.5%20MB-555)
+[![MIT](https://img.shields.io/badge/license-MIT-lightgrey)](#license)
 
-It can also be a full **Waybar / Hyprland-style status bar**.
+</div>
 
-## Features
+## Hover it
 
-### The island
+<img src="docs/images/expanded.png" width="400" align="right" alt="The expanded island: the song playing with its controls, CPU, RAM and network, Claude usage and a volume slider">
 
-- **At rest**: time and date. When music is playing, the album art and an animated equalizer appear too.
-- **On hover**: it expands into a card with album art, title, artist, a clickable progress bar, previous / play-pause / next controls, CPU, RAM, network throughput and a volume slider.
-- **Shared-element transitions**: the time, date, album art and equalizer glide and scale between the compact and expanded layouts.
-- **Adaptive colors**: the equalizer and progress bar take the dominant color of the album art.
-- **Live events**: the island stretches for a few seconds on volume changes, track changes, charger plugged or unplugged, network lost or restored, and GlazeWM workspace switches.
-- **Script messages**: `kysland.exe --island="Build finished" --icon=check-circle`.
-- **Calendar**: click the date to open a month calendar (today highlighted, arrows or mouse wheel to change month).
-- **Mouse**: the wheel changes the volume. Right-click opens the Kysland menu.
-- **Gets out of the way**: move the cursor to the island quickly and it expands as usual; approach it slowly (aiming at something behind it) and it tucks itself into the screen edge and lets clicks through, with two little eyes that keep glancing at the cursor (and blink), then comes back once the cursor moves away. If the cursor stays close for a while (20 s by default), the island grows tall and the eyes come alive: they look around, circle, sneak up next to the cursor, stare at it, show moods with their brows, doze off (Zzz) when nothing moves, and jump away when the cursor gets too close. The grown island catches the mouse: sneak up slowly on the sleeping eyes and click them to wake them up (grumpy or startled).
-- **Peeking eyes**: now and then, the eyes drop in from the top into the middle of the resting island, knocking the time and the date down and askew, and keep an eye on the cursor for a few seconds. Rush at them and they dash off for a while (`"peek"`).
-- **Auto-hide** (optional): the island tucks itself away past the screen edge while the mouse is far from it or on another screen, and comes back as the mouse gets near. Notifications and events (volume, track…) still show.
-- **Outline on dark backgrounds**: when what's around the island is mostly black, a thin outline keeps it visible.
+The island is a black notch attached to the top edge of the screen. Point at it and it stretches into a card, its elements gliding into place:
 
-### Kys, the eyes as a pet
+- **Music** from Spotify, your browser or any player: album art, a clickable progress bar, previous / play-pause / next, all tinted with the album's colors.
+- **Your system**: CPU, RAM and network throughput.
+- **Volume** with a slider, the mouse wheel or your keys. The island replaces the Windows volume flyout and follows whichever output is active (speakers, a Bluetooth headset…).
+- **Claude usage** (optional): the 5-hour session and weekly limits of your Claude plan, with a warning at 80%.
+- **A calendar** when you click the date.
 
-The eyes have a name: **Kys**. It gets hungry and a little bored while Kysland runs (not while the PC is off), and shows it: it peeks in more often asking for food when hungry, and looks down when starving or miserable.
+It also stretches for a moment on its own: a volume change, a new track, the charger plugged in, the Wi-Fi coming back.
 
-- **Credits** ✦ come from what happens with it, each capped per day: it peeks in (+1), you catch it while it peeks by coming slowly and clicking its eyes (+5), you make it dizzy (+2), it comes back from being thrown out (+3), you poke it while it roams (+1), time spent together (+1 every 10 minutes), and a daily bonus that grows with the days in a row. A little "+N ✦" floats away from it.
-- **Shop**: food (cookie, apple, candy, cake) that it eats in the island, a ball to play with, and things to wear (bow, cap, glasses, crown).
-- Everything is on its page in the expanded island (the little Kys next to the gear) and in the **Kys** tab of the settings window (menu **Kys…**, or `kysland.exe --kys`); its state is kept in `~\.config\kysland\kys.json`.
+<br clear="right">
 
-### Windows notifications
+## Your notifications, in the island
 
-- New notifications show up in the island as they arrive: app icon (or a colored initial), app name, title and text.
-- **Click** opens the app. **✕** dismisses it. Hovering pauses it, and several notifications play one after another.
-- **History**: the bell in the expanded view lists your last 30 notifications, with an unread badge. Click an entry to open it, use its ✕ to delete it, or clear everything with the trash button. Deletions also remove the notifications from the Windows notification center.
+<img src="docs/images/notification.png" width="520" alt="A Discord notification shown in the island">
 
-### Claude usage (optional)
+Windows notifications drop into the island as they arrive. Click one to open its app, hover it to keep it on screen. The bell of the expanded island keeps the last 30, and deleting them there also clears them from the Windows notification center.
 
-If [Claude Code](https://claude.com/claude-code) is signed in on the PC, the expanded view can show your plan usage: the 5-hour session limit and the weekly limit, with reset times and the account email (masked, e.g. `jo****83@gmail.com`). The island warns you at 80% of the session and when the limit is reached. Enable it with `"claude": true` or from the menu.
+## Meet Kys
 
-### Volume and fullscreen
+The eyes have a name: **Kys**. It lives in the island, and it has a life of its own.
 
-- **Instant volume**: Windows notifies Kysland the moment the volume changes, whatever the source (keys, mixer, an app, a Bluetooth headset).
-- **No more Windows volume flyout**: the island replaces it. Set `"hide-windows-osd": false` to keep the Windows one. It comes back as soon as Kysland quits.
-- **Fullscreen**: the island hides during games, fullscreen videos and F11 (`"hide-on-fullscreen"`, also in the menu).
-- **Click-through**: outside the island, the top strip lets clicks go through to your windows.
+<table>
+<tr>
+<td width="50%"><img src="docs/images/kys-eating.png" alt="Kys dropping into the island, knocking the time and the date askew, happy after a cookie"></td>
+<td width="50%"><img src="docs/images/roaming.png" alt="The island grown tall, Kys dizzy with stars circling above its crown"></td>
+</tr>
+<tr>
+<td>Now and then it <b>drops in from the top</b>, knocking the time and the date askew, to check on your cursor. Rush at it and it flees.</td>
+<td>Stay close and the island grows: it <b>explores</b>, comes next to your cursor, dozes off (Zzz)… circle around it and it gets <b>dizzy</b>.</td>
+</tr>
+</table>
 
-### Music sources
+<img src="docs/images/kys-page.png" width="400" align="right" alt="Kys's page in the island: its face, belly and joy gauges, inventory and shop">
 
-- Any player that reports to Windows media controls (SMTC): Spotify, browsers, media players…
-- An optional KemHome agent (`ws://localhost:8080/media/ws`), which provides album art for Chrome through its extension.
+**Look after it.** Kys gets hungry and a bit bored while you use your PC (never while it's off), and shows it: it asks for food, and looks down when it's miserable.
 
-### Status bar mode
+**Earn credits ✦** by playing with it:
+- **catch** it while it peeks (come slowly, click its eyes);
+- make it **dizzy**, poke it, let it come back from a **flight**;
+- spend **time** together, and come back **every day** for a growing bonus.
 
-- Floating "island" bar, one per screen (or on the screens you choose), at the top or bottom.
-- Can reserve screen space (Windows AppBar), so maximized windows stay below it.
-- **GlazeWM** integration: clickable workspaces, scroll to switch, active binding mode.
+**Spend them** in its shop: cookies, apples, candy and cake it munches right in the island, a ball to play with, and a bow, a cap, glasses or a crown to wear.
+
+Everything is on its page: click the little Kys next to the gear in the expanded island.
+
+<br clear="right">
+
+## It knows when to step aside
+
+<img src="docs/images/hiding.png" width="300" align="right" alt="The island tucked into the screen edge, two little eyes watching">
+
+- **Aiming at something behind it?** Approach slowly and the island tucks itself into the screen edge to let you click through, two little eyes watching you. Come in fast and it opens as usual.
+- **Fullscreen**: it disappears during games, videos and F11.
+- **Auto-hide** (optional): it slides away while your mouse is far from it or on another screen.
+- **Dark backgrounds**: a thin outline keeps the black island visible.
+
+<br clear="right">
+
+## Make it yours
+
+<table>
+<tr>
+<td width="50%"><img src="docs/images/settings.png" alt="The settings window: language, start with Windows, screens, island options"></td>
+<td width="50%"><img src="docs/images/settings-kys.png" alt="The Kys tab of the settings window: credits, gauges, inventory and shop"></td>
+</tr>
+</table>
+
+A settings window gathers every option: language (English or French, following Windows by default), start with Windows, **which screens** show the island, how it hides, Kys, notifications, volume keys… It opens from the right-click menu, the gear of the expanded island or the tray icon.
+
+For more, `config.jsonc` and `style.css` are hot-reloaded: formats, colors, sizes, and even a full **Waybar-style status bar** with workspaces for [GlazeWM](https://github.com/glzr-io/glazewm).
 
 ## Install
 
-Download `Kysland_x.y.z_x64-setup.exe` from the [Releases](../../releases) and run it.
+**[Download the latest installer](https://github.com/KinjerJS/Kysland/releases/latest)** (`Kysland_x.y.z_x64-setup.exe`) and run it.
 
-- It installs for your user account, no admin rights needed.
-- Kysland starts with Windows right after you sign in (through a scheduled task, which Windows doesn't delay the way it delays startup apps). Turn it off from the menu.
-- To uninstall: Settings → Apps. Kysland quits cleanly first, so the volume flyout is restored. Your configuration in `~\.config\kysland` is kept.
-- On first launch, an existing WinCustom configuration (`~\.config\wincustom`) is imported.
+- It installs for your user account, no admin rights needed, and starts with Windows right after you sign in (turn that off in the settings).
+- What changed in each version: [CHANGELOG.md](CHANGELOG.md).
+- To uninstall: Settings → Apps. Kysland quits cleanly first, so the Windows volume flyout comes back. Your configuration in `~\.config\kysland` is kept.
 
-If something is left in a bad state after a crash, `kysland.exe --repair` restores the volume flyout and the taskbar, and frees the reserved screen space.
+Kysland isn't signed yet, so Windows SmartScreen or Defender may warn about it on download.
 
 ## Usage
 
-Right-click the island, press **`Ctrl+Alt+W`** anywhere, or right-click the tray icon to open the menu: reload, edit the configuration, language (automatic = Windows display language, English or French), screen (main, all, or a given one), a **Dynamic Island** submenu (hiding from a slow cursor, eyes, sensitivity, fullscreen hiding, outline, Claude usage), start with Windows, and the **CSS inspector** (DevTools).
+Right-click the island, press **`Ctrl+Alt+W`** anywhere, or right-click the tray icon to open the menu: settings, Kys, reload, edit the configuration, language, screen, a **Dynamic Island** submenu (hiding from a slow cursor, eyes, fullscreen hiding, outline, Claude usage…), start with Windows, and the **CSS inspector** (DevTools).
 
-**Settings window**: the same options with more room, a screen picker (several screens at once) and a few extra switches. Open it from the menu (**Kysland** at the top, or **Settings…**), the ⚙ button of the expanded island, a left click on the tray icon, or `kysland.exe --settings`.
-
-| Option | Effect |
+| Command line | Effect |
 |---|---|
 | `--settings` / `--kys` | Open the settings window (on the Kys tab) |
+| `--island="text" --icon=name` | Show a message in the island, e.g. `--island="Build finished" --icon=check-circle` |
+| `--autostart=on` / `--autostart=off` | Start with Windows or not |
 | `--quit` | Quit cleanly |
 | `--repair` | Restore the volume flyout, the taskbar and the screen space, then exit |
-| `--island="text" --icon=name` | Show a message in the island |
-| `--autostart=on` / `--autostart=off` | Start with Windows or not |
 
 ## Configuration
 
@@ -92,6 +122,7 @@ Files live in `%USERPROFILE%\.config\kysland\`:
 |---|---|
 | `config.jsonc` | Layout, modules, formats, mouse actions (documented with comments) |
 | `style.css` | The look (CSS variables such as `--accent`, `--notch-bg`…) |
+| `kys.json` | Kys's state: credits, gauges, inventory (managed by Kysland) |
 
 Island options (in the `"island"` section):
 
@@ -104,15 +135,15 @@ Island options (in the `"island"` section):
 | `outline` | `"auto"` | Thin outline when it's mostly black around the island; `true` / `false` to force it (color: `--notch-outline-color`) |
 | `dodge` / `dodge-speed` | `true` / `450` | Hide when the cursor approaches slower than this many px/s |
 | `dodge-eyes` | `true` | Eyes watching the cursor while hidden |
-| `peek` | `true` | Eyes peeking into the resting island now and then |
-| `auto-hide` / `auto-hide-distance` | `false` / `300` | Hide while the mouse is farther than this many px or on another screen |
 | `dodge-roam` / `dodge-roam-delay` | `true` / `20` | Cursor still close after this many seconds: the island grows and the eyes roam |
-| `kemhome` | `http://localhost:8080` | KemHome agent URL, `false` to disable |
+| `peek` | `true` | Kys peeking into the resting island now and then |
+| `auto-hide` / `auto-hide-distance` | `false` / `300` | Hide while the mouse is farther than this many px or on another screen |
 | `hide-windows-osd` | `true` | Handle the volume keys and hide the Windows volume flyout |
 | `volume-step` | `2` | Percent per volume key press |
 | `notifications` | `true` | Show Windows notifications in the island |
 | `notification-duration` | `6` | Seconds per notification |
 | `claude` | `false` | Show Claude plan usage |
+| `kemhome` | `http://localhost:8080` | KemHome agent URL (album art for Chrome), `false` to disable |
 | `transients` | all `true` | Which events stretch the island: `volume`, `media`, `battery`, `network`, `workspace` |
 
 Top-level options include `language` (`"auto"`, `"en"`, `"fr"`), `monitors` (`"primary"`, `"all"` or screen numbers from left to right starting at 0, e.g. `[0, 2]`), `reserve`, `hide-on-fullscreen` and `wallpaper`. Status bar modules (`workspaces`, `window`, `clock`, `cpu`, `memory`, `disk`, `network`, `audio`, `battery`, `launcher`, `power`, `media`, `custom/<name>`…) are listed in the comments of `config.jsonc`.
@@ -128,21 +159,25 @@ Notifications are read locally from the Windows notification database.
 
 ## Development
 
+Kysland is built with [Tauri](https://tauri.app): the interface is HTML/CSS/JS, and the engine is Rust, calling Windows APIs directly (Core Audio, media controls, notifications, window management).
+
 Requirements: Node.js, Rust (stable, MSVC) and the Visual Studio C++ build tools.
 
 ```sh
 npm install
-npm run dev        # run Kysland with hot rebuild of the Rust engine
-npm run check      # checks: interface script syntax, invisible control characters
-npm run build      # build the NSIS installer into src-tauri/target/release/bundle/nsis/
+npm run dev          # run Kysland with hot rebuild of the Rust engine
+npm run check        # checks: script syntax, invisible control characters, changelog
+npm run build        # build the NSIS installer into src-tauri/target/release/bundle/nsis/
+npm run screenshots  # regenerate the README images (headless Chrome, sample data)
 ```
 
 Layout:
 
-- `ui/`: the interface (HTML, CSS, JS), served by the WebView. `settings.*` is the settings window. `api.js` bridges it to the Rust commands and events, `i18n.js` holds the displayed strings.
-- `src-tauri/src/`: the engine. `lib.rs` (windows, menu, commands, background loop), `audio.rs`, `media.rs`, `notifs.rs`, `system.rs`, `glaze.rs`, `win32.rs`, `config.rs`, `autostart.rs`, `i18n.rs` (menu strings).
-- Code, comments and commits are in English; only displayed text is translated (`ui/i18n.js`, `src-tauri/src/i18n.rs`).
+- `ui/`: the interface, served by the WebView. `index.html` / `island.js` / `notch.css` are the island, `settings.*` the settings window, `api.js` the bridge to the engine, `i18n.js` the displayed strings.
+- `src-tauri/src/`: the engine. `lib.rs` (windows, menu, commands, background loop), `kys.rs` (Kys), `audio.rs`, `media.rs`, `notifs.rs`, `system.rs`, `glaze.rs`, `win32.rs`, `config.rs`, `autostart.rs`, `i18n.rs` (menu strings).
 - `defaults/`: default configuration, bundled as a resource.
+- `docs/screenshots/`: the pages behind the README images: the real interface with sample data.
+- Code, comments and commits are in English; only displayed text is translated (`ui/i18n.js`, `src-tauri/src/i18n.rs`).
 
 ## Releasing
 

@@ -1,0 +1,26 @@
+<!doctype html>
+<!-- The settings window (ui/settings.html) with sample data, for the README screenshots. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kysland — settings</title>
+  <link rel="stylesheet" href="../../ui/vendor/lucide.css">
+  <link rel="stylesheet" href="../../ui/settings.css">
+</head>
+<body>
+  <header class="hero">
+    <div class="home" aria-hidden="true"></div>
+    <div class="hero-text">
+      <h1>Kysland</h1>
+      <p class="version"></p>
+    </div>
+  </header>
+  <main id="sections"></main>
+  <div class="toast" role="status"></div>
+  <script src="mock.js"></script>
+  <script src="../../ui/i18n.js"></script>
+  <script src="../../ui/settings.js"></script>
+  <script>window.demo.wait(1200).then(() => window.demo.ready());</script>
+</body>
+</html>

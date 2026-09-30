@@ -1,0 +1,8 @@
+/* A desktop behind the island, for the README screenshots. */
+html, body {
+  background:
+    radial-gradient(900px 520px at 18% -8%, rgba(124, 92, 255, 0.6), transparent 62%),
+    radial-gradient(800px 480px at 86% -4%, rgba(255, 106, 176, 0.5), transparent 60%),
+    radial-gradient(1000px 700px at 50% 130%, rgba(45, 212, 255, 0.35), transparent 60%),
+    #11132a;
+}
