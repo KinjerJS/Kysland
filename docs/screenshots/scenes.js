@@ -39,14 +39,18 @@
       input.form.requestSubmit();
       input.value = 'Are you hungry?';
       await wait(900);
-      const face = document.querySelector('.n-kys-face');
-      const c = center(face);
-      face.closest('.notch-view').dispatchEvent(new MouseEvent('mousemove', { clientX: c.x + 120, clientY: c.y + 60, bubbles: true }));
-      // Down to the shop.
-      const body = document.querySelector('.n-kys-body');
-      const shop = [...body.querySelectorAll('.k-title')][1];
-      body.scrollTop += rect(shop).top - rect(body).top;
-      await wait(400);
+      // A cookie from the inventory held out to it: its mouth opens.
+      Element.prototype.setPointerCapture = () => {}; // no real pointer here
+      const cookie = document.querySelector('[data-kys-item="cookie"]');
+      const from = center(cookie), to = center(document.querySelector('.n-kys-face .mouth'));
+      const at = (x, y) => ({ clientX: x, clientY: y, button: 0, pointerId: 1, bubbles: true });
+      cookie.dispatchEvent(new PointerEvent('pointerdown', at(from.x, from.y)));
+      for (let i = 1; i <= 12; i++) {
+        const u = i / 12;
+        cookie.dispatchEvent(new PointerEvent('pointermove', at(from.x + (to.x + 34 - from.x) * u, from.y + (to.y + 26 - from.y) * u)));
+        await wait(30);
+      }
+      await wait(300);
       return ready(around(60, 40));
     }
 

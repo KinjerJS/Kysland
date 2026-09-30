@@ -62,7 +62,7 @@ The eyes have a name: **Kys**. It lives in the island, and it has a life of its 
 - make it **dizzy**, poke it, let it come back from a **flight**;
 - spend **time** together, and come back **every day** for a growing bonus.
 
-**Spend them** in its shop: cookies, apples, candy and cake it munches right in the island, a ball to play with, and a bow, a cap, glasses or a crown to wear.
+**Spend them** in its shop: cookies, apples, candy and cake, a ball to play with, and a bow, a cap, glasses or a crown to wear. Then **drag them onto Kys**: hold a cookie out and its mouth opens wider as it comes near, let go and it chews it up.
 
 **Talk to it.** Ask it for the next song, the volume at 30, the time, or how it's doing. Out of the box it understands commands and a bit of small talk, with nothing to download. Want a real chat? Give it a **brain**: a small AI that runs on your PC, never online, loaded only while you talk to Kys. **Light** (Qwen3 1.7B) answers in a second; **Smart** (Qwen3 4B) takes about three and is much better company. Either way it picks an emotion for each answer, and its eyes show it: its brows, its eyelids, wherever it is.
 

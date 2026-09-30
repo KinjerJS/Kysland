@@ -648,8 +648,45 @@ body.pos-bottom .notch.splash { transform-origin: 50% 100%; }
 .notch.peek .notch-eyes.hungry .ask, .notch.roaming .notch-eyes.hungry .ask { display: block; }
 @keyframes kys-ask { 50% { margin-top: -3px; } }
 .notch-eyes[data-mood=sad] { --brow: 1; --bl-y: -2px; --br-y: -2px; --bl-r: -16deg; --br-r: 16deg; --lid-l: .72; --lid-r: .72; }
-.notch-eyes.munch .eye { animation: kys-munch .3s ease-in-out 3; }
-@keyframes kys-munch { 50% { scale: 1.2 .7; } }
+/* Kys's mouth (island.js): none until food comes near, then it opens wider and wider (--open, 0 to
+   1) and the eyes go up a little to make room; eating, it chomps a few times. */
+.notch-eyes .mouth {
+  --mw: 10px; --mh: 7px;
+  position: absolute;
+  left: 50%;
+  top: calc(50% + var(--mouth-y, 6px));
+  width: var(--mw);
+  height: var(--mh);
+  margin: calc(var(--mh) / -2) 0 0 calc(var(--mw) / -2);
+  overflow: hidden;
+  border-radius: 45% 45% 50% 50% / 35% 35% 65% 65%;
+  background: #5c1628;
+  box-shadow: 0 0 0 1.5px var(--notch-fg);
+  opacity: 0;
+  scale: calc(.45 + .55 * var(--open, 0)) max(.16, var(--open, 0));
+  translate: calc(var(--gx) * .4) 0;
+  transition: scale .12s ease, opacity .15s ease;
+  pointer-events: none;
+}
+.notch-eyes .mouth::after { content: ''; position: absolute; left: 20%; right: 20%; bottom: -25%; height: 55%; border-radius: 50%; background: #ff6b8a; }
+.notch-eyes .eye { transition: translate .15s ease; }
+.notch-eyes.mouthy .mouth, .notch-eyes.chewing .mouth { opacity: 1; }
+.notch-eyes.mouthy .eye, .notch-eyes.chewing .eye { translate: 0 var(--mouth-lift, -3px); }
+.notch-eyes.chewing .mouth { animation: kys-chew .24s ease-in-out 5; }
+@keyframes kys-chew { 0%, 100% { scale: .8 .18; } 50% { scale: .85 .8; } }
+.notch.roaming .notch-eyes { --mouth-y: 11px; --mouth-lift: -5px; }
+.notch.roaming .notch-eyes .mouth { --mw: 14px; --mh: 10px; }
+.kys-crumb {
+  position: fixed;
+  z-index: 20;
+  width: 3px;
+  height: 3px;
+  border-radius: 1px;
+  background: #d9a05b;
+  pointer-events: none;
+  animation: kys-crumb .6s ease-in forwards;
+}
+@keyframes kys-crumb { to { translate: var(--cx) 18px; rotate: 120deg; opacity: 0; } }
 .kys-food, .kys-ball, .kys-float { position: fixed; z-index: 20; pointer-events: none; line-height: 1; }
 .kys-food { font-size: 14px; translate: -50% -50%; animation: kys-food-drop .48s cubic-bezier(.5, 0, .9, .6) forwards; }
 @keyframes kys-food-drop { from { translate: -50% -280%; opacity: 0; } 20% { opacity: 1; } to { translate: -50% -50%; scale: .7; } }
@@ -707,7 +744,8 @@ body.pos-bottom .notch.splash { transform-origin: 50% 100%; }
 .n-kys-face .notch-eyes i { width: 9px; height: 11px; border-radius: 3.5px; }
 .n-kys-face .notch-eyes[data-mood=happy] i { border-radius: 50% 50% 2px 2px / 90% 90% 2px 2px; }
 .n-kys-face .notch-eyes b { opacity: var(--brow); width: 12px; margin-bottom: 3px; }
-.n-kys-face.munch .notch-eyes .eye { animation: kys-munch .3s ease-in-out 3; }
+.n-kys-face .notch-eyes { --mouth-y: 8px; --mouth-lift: -5px; }
+.n-kys-face .notch-eyes .mouth { --mw: 13px; --mh: 10px; }
 .n-kys-face.think .notch-eyes { --gx: 3px !important; --gy: -3px !important; } /* looks up while it thinks */
 .n-kys-face .hat, .n-kys-face .ask { position: absolute; left: 50%; top: 50%; line-height: 1; pointer-events: none; }
 .n-kys-face .hat { font-size: 18px; translate: -50% calc(-50% - 27px); }
@@ -790,27 +828,39 @@ body.pos-bottom .notch.splash { transform-origin: 50% 100%; }
 .n-kys-body::-webkit-scrollbar { width: 4px; }
 .n-kys-body::-webkit-scrollbar-thumb { background: var(--notch-soft); border-radius: 2px; }
 .k-title { margin-top: 6px; color: var(--notch-dim); font-size: 11px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
-.k-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 7px 10px;
+/* The inventory: tiles to drag onto Kys (island.js, kysDrag). */
+.k-hint { color: var(--notch-dim); font-size: 11.5px; margin-top: -2px; }
+.k-inv-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.k-inv {
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: 8px 0 7px;
   border-radius: 10px;
   background: var(--notch-soft);
-  font-size: 13px;
+  cursor: grab;
+  touch-action: none;
+  transition: scale .2s var(--spring), background .2s ease, opacity .2s ease;
 }
-.k-row em { color: var(--notch-dim); font-style: normal; }
-.notch .k-btn {
-  padding: 3px 10px;
-  border-radius: 8px;
-  border: 1px solid color-mix(in srgb, var(--tint) 60%, transparent);
-  color: var(--tint);
-  font-size: 12px;
+.k-inv:hover { background: rgba(255, 255, 255, 0.13); scale: 1.05; }
+.k-inv-icon { font-size: 20px; line-height: 1.2; }
+.k-inv em { position: absolute; right: 5px; bottom: 2px; color: var(--notch-dim); font-size: 10.5px; font-style: normal; }
+.k-inv.worn { box-shadow: inset 0 0 0 1.5px var(--tint); cursor: pointer; }
+.k-inv.tired { opacity: .5; }
+.k-inv.dragging { opacity: .3; scale: .9; }
+.kys-drag {
+  position: fixed;
+  z-index: 30;
+  font-size: 22px;
+  line-height: 1;
+  translate: -50% -50%;
+  pointer-events: none;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.5));
+  transition: scale .15s var(--spring);
 }
-.notch .k-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--tint) 18%, transparent); }
-.notch .k-btn.on { background: var(--tint); color: #000; }
-.notch .k-btn:disabled { opacity: .4; cursor: default; }
+.kys-drag.near { scale: 1.2; }
+.kys-drag.given { transition: left .16s ease-in, top .16s ease-in, scale .16s ease-in, opacity .16s ease-in; scale: .3; opacity: 0; }
+.kys-drag.back { transition: left .25s ease, top .25s ease, opacity .25s ease; opacity: 0; }
 .notch .k-shop-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
 .notch .k-shop {
   display: flex;

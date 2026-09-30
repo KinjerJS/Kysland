@@ -177,7 +177,7 @@
     constructor(notch) {
       this.el = document.createElement('div');
       this.el.className = 'notch-eyes';
-      this.el.innerHTML = '<span class="eye l"><b></b><i></i></span><span class="eye r"><b></b><i></i></span>'
+      this.el.innerHTML = '<span class="eye l"><b></b><i></i></span><span class="eye r"><b></b><i></i></span><span class="mouth"></span>'
         + '<div class="stars"><span>✦</span><span>✧</span><span>✦</span></div>' // circle while dizzy
         + '<span class="hat"></span><span class="ask">🍪</span>'; // Kys's accessory; asking for food
       this.stars = this.el.querySelector('.stars');
@@ -271,11 +271,7 @@
 
     /** Eating: a few chomps, then happy. */
     munch() {
-      this.el.classList.remove('munch');
-      void this.el.offsetWidth;
-      this.el.classList.add('munch');
-      clearTimeout(this.munchT);
-      this.munchT = setTimeout(() => this.el.classList.remove('munch'), 950);
+      mouthChew(this.el, false);
       this.setMood('happy', 2200);
     }
 
@@ -787,7 +783,7 @@
         });
         notch.addEventListener('mouseleave', () => {
           S.dragging = false; // a drag can't go on without the mouse
-          if (S.dodged || S.typing) return; // typing to Kys: stays open until the input is left
+          if (S.dodged || S.typing || S.kysDragging) return; // typing to Kys, giving it something: stays open
           clearTimeout(enterT);
           if (S.notif) return startNotifTimer(m, 2500);
           leaveT = setTimeout(() => setExpanded(m, false), m.conf['collapse-delay']);
@@ -1195,6 +1191,7 @@
     if (S.expanded && S.page === 'kys') return faceEat(m, item); // on its page, open
     const eat = () => {
       const c = S.eyes.center();
+      mouthOpen(S.eyes.el, 1);
       const food = document.createElement('div');
       food.className = 'kys-food';
       food.textContent = FOOD[item] || '🍪';
@@ -1315,13 +1312,14 @@
       mount(el) {
         el.querySelector('.n-back').onclick = () => { stopTyping(m); S.page = 'main'; render(m); };
         el.querySelector('.n-kys-body').onclick = (e) => kysPageClick(m, el, e);
+        el.querySelector('.n-kys-body').addEventListener('pointerdown', (e) => kysDrag(m, el, e));
         el.addEventListener('mousemove', (e) => faceAim(el, e.clientX, e.clientY));
         faceBlink(el.querySelector('.n-kys-face'));
         mountTalk(m, el);
       },
       update(el) {
         const k = S.kys;
-        if (!k || el.dataset.stamp === String(S.kysStamp)) return; // redrawn only when Kys changes
+        if (!k || el.dataset.stamp === String(S.kysStamp) || S.kysDragging) return; // redrawn when Kys changes (not mid-drag)
         el.dataset.stamp = S.kysStamp;
         const hungry = k.food < 30, sad = k.food < 10 || k.joy < 15;
         el.querySelector('.n-kys-credits').textContent = `✦ ${k.credits}`;
@@ -1346,18 +1344,18 @@
 
   function kysPageBody(k) {
     const name = (id) => esc(t(`kys.item.${id}`));
-    const row = (i, extra, button) => `<div class="k-row"><span>${KYS_ICON[i.id]} ${name(i.id)}${extra}</span>${button}</div>`;
-    const inventory = [
-      ...k.items.filter((i) => i.kind === 'food' && (k.inventory[i.id] || 0) > 0)
-        .map((i) => row(i, ` <em>×${k.inventory[i.id]}</em>`, `<button class="k-btn" data-kys-feed="${i.id}">${esc(t('kys.give'))}</button>`)),
-      ...k.items.filter((i) => i.kind !== 'food' && k.owned.includes(i.id)).map((i) => {
-        if (i.kind === 'toy') {
-          return row(i, '', `<button class="k-btn" data-kys-play="1" ${k.canPlay ? '' : 'disabled'}>${esc(t(k.canPlay ? 'kys.play' : 'kys.resting'))}</button>`);
-        }
-        const worn = k.wearing === i.id;
-        return row(i, '', `<button class="k-btn${worn ? ' on' : ''}" data-kys-wear="${worn ? '-' : i.id}">${esc(t(worn ? 'kys.take_off' : 'kys.wear'))}</button>`);
-      }),
-    ].join('') || `<div class="n-empty">${esc(t('kys.inventory_empty'))}</div>`;
+    // What it has, to drag onto it (kysDrag): food, the ball, things to wear.
+    const tiles = [
+      ...k.items.filter((i) => i.kind === 'food' && (k.inventory[i.id] || 0) > 0),
+      ...k.items.filter((i) => i.kind !== 'food' && k.owned.includes(i.id)),
+    ].map((i) => {
+      const worn = k.wearing === i.id, tired = i.kind === 'toy' && !k.canPlay;
+      const tip = worn ? t('kys.take_off_tip') : tired ? t('kys.tired') : t('kys.drag_tip');
+      return `<div class="k-inv${worn ? ' worn' : ''}${tired ? ' tired' : ''}" data-kys-item="${i.id}" title="${name(i.id)} · ${esc(tip)}">`
+        + `<span class="k-inv-icon">${KYS_ICON[i.id]}</span>${i.kind === 'food' ? `<em>×${k.inventory[i.id]}</em>` : ''}</div>`;
+    }).join('');
+    const inventory = tiles ? `<div class="k-hint">${esc(t('kys.drag_hint'))}</div><div class="k-inv-grid">${tiles}</div>`
+      : `<div class="n-empty">${esc(t('kys.inventory_empty'))}</div>`;
     const shop = k.items.map((i) => {
       const have = i.kind !== 'food' && k.owned.includes(i.id);
       const effect = i.kind === 'toy' ? t('kys.effect_toy') : i.kind === 'wear' ? t('kys.effect_wear')
@@ -1373,22 +1371,23 @@
       + `<div class="k-title">${esc(t('kys.earn'))}</div>${earn}`;
   }
 
-  /** Buttons of the Kys page; the engine answers with the new state (event "kys"). */
+  /** The shop's tiles; the engine answers with the new state (event "kys"). */
   function kysPageClick(m, el, e) {
-    const b = e.target.closest('button');
+    const b = e.target.closest('button[data-kys-buy]');
     if (!b || b.disabled) return;
-    const d = b.dataset;
-    const call = d.kysBuy ? api.kys.buy(d.kysBuy) : d.kysFeed ? api.kys.feed(d.kysFeed)
-      : d.kysWear ? api.kys.wear(d.kysWear === '-' ? null : d.kysWear) : d.kysPlay ? api.kys.play() : null;
-    call?.catch((err) => {
-      const text = String(err);
-      const msg = el.querySelector('.k-msg');
-      msg.textContent = text.includes('credits') ? t('kys.poor') : text.includes('tired') ? t('kys.tired') : text;
-      msg.classList.add('show');
-      clearTimeout(m.island.kysMsgT);
-      m.island.kysMsgT = setTimeout(() => { msg.classList.remove('show'); m.island.notch.resize(); }, 2500);
-      m.island.notch.resize();
-    });
+    api.kys.buy(b.dataset.kysBuy).catch((err) => kysError(m, el, err));
+  }
+
+  /** What went wrong (not enough credits, Kys too tired to play...), for a moment. */
+  function kysError(m, el, err) {
+    const text = String(err);
+    const msg = el.querySelector('.k-msg');
+    if (!msg) return;
+    msg.textContent = text.includes('credits') ? t('kys.poor') : text.includes('tired') ? t('kys.tired') : text;
+    msg.classList.add('show');
+    clearTimeout(m.island.kysMsgT);
+    m.island.kysMsgT = setTimeout(() => { msg.classList.remove('show'); m.island.notch.resize(); }, 2500);
+    m.island.notch.resize();
   }
 
   /**
@@ -1465,7 +1464,8 @@
   }
 
   // The page's face has Kys's own eyes (the markup and the moods of the Eyes class: brows, lids).
-  const FACE_EYES = '<div class="notch-eyes"><span class="eye l"><b></b><i></i></span><span class="eye r"><b></b><i></i></span></div>';
+  const FACE_EYES = '<div class="notch-eyes"><span class="eye l"><b></b><i></i></span><span class="eye r"><b></b><i></i></span>'
+    + '<span class="mouth"></span></div>';
 
   /** A mood on the face, for a while (then back to its usual one: sad when it's miserable). */
   function faceMood(face, mood, ms = 0) {
@@ -1491,25 +1491,140 @@
 
   /** Fed while its page is open: the food drops onto the face, a few chomps, a heart. */
   function faceEat(m, item) {
-    const face = m.island.notch.current?.querySelector('.n-kys-face');
+    const S = m.island;
+    const face = S.notch.current?.querySelector('.n-kys-face');
     if (!face) return;
+    const eyes = face.querySelector('.notch-eyes');
     const r = face.getBoundingClientRect();
     const c = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    const chew = () => {
+      mouthChew(eyes);
+      faceMood(face, 'happy', 2200);
+      floatAt(c, '❤', 'heart');
+    };
+    if (performance.now() - (S.handFedAt || 0) < 1500) return chew(); // given by hand: already in its mouth
+    // Otherwise (fed from the settings) the food drops in, its mouth wide open.
+    mouthOpen(eyes, 1);
+    faceMood(face, 'surprised');
     const food = document.createElement('div');
     food.className = 'kys-food';
     food.textContent = FOOD[item] || '🍪';
     food.style.left = `${c.x}px`;
-    food.style.top = `${c.y}px`;
+    food.style.top = `${c.y + 8}px`;
     document.body.appendChild(food);
     setTimeout(() => {
       food.remove();
-      face.classList.remove('munch');
-      void face.offsetWidth;
-      face.classList.add('munch');
-      faceMood(face, 'happy', 2200);
-      setTimeout(() => face.classList.remove('munch'), 950);
-      floatAt(c, '❤', 'heart');
+      chew();
     }, 480);
+  }
+
+  /** Kys's mouth, on a pair of eyes: hidden at 0, wide open at 1 (food coming near). */
+  function mouthOpen(eyes, open) {
+    eyes.style.setProperty('--open', open.toFixed(2));
+    eyes.classList.toggle('mouthy', open > 0.02);
+  }
+
+  /** Eating: the mouth chomps a few times, crumbs falling (not on the small resting island). */
+  function mouthChew(eyes, crumbs = true) {
+    mouthOpen(eyes, 0);
+    eyes.classList.remove('chewing');
+    void eyes.offsetWidth;
+    eyes.classList.add('chewing');
+    if (crumbs) for (let i = 0; i < 3; i++) setTimeout(() => crumb(eyes), 120 + i * 260);
+    clearTimeout(eyes.chewT);
+    eyes.chewT = setTimeout(() => eyes.classList.remove('chewing'), 1250);
+  }
+
+  function crumb(eyes) {
+    const r = eyes.querySelector('.mouth')?.getBoundingClientRect();
+    if (!r?.width) return;
+    const el = document.createElement('span');
+    el.className = 'kys-crumb';
+    el.style.left = `${r.left + r.width / 2 + rand(-4, 4)}px`;
+    el.style.top = `${r.bottom}px`;
+    el.style.setProperty('--cx', `${rand(-8, 8).toFixed(1)}px`);
+    el.addEventListener('animationend', () => el.remove());
+    document.body.appendChild(el);
+  }
+
+  /**
+   * Giving Kys something from its page: an item of the inventory follows the pointer, Kys watches
+   * it, and for food opens its mouth wider as it comes near. Dropped on Kys, it's eaten, played
+   * with or worn; dropped elsewhere, it goes back. A click on what it wears takes it off.
+   */
+  function kysDrag(m, view, e) {
+    const S = m.island;
+    const tile = e.target.closest('[data-kys-item]');
+    const item = tile && S.kys?.items.find((i) => i.id === tile.dataset.kysItem);
+    const face = view.querySelector('.n-kys-face');
+    if (!item || !face || e.button !== 0) return;
+    e.preventDefault();
+    tile.setPointerCapture(e.pointerId);
+    const eyes = face.querySelector('.notch-eyes');
+    const from = { x: e.clientX, y: e.clientY };
+    const mouth = () => {
+      const r = face.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 + 8 };
+    };
+    const reach = (x, y) => { const c = mouth(); return Math.hypot(x - c.x, y - c.y); };
+    let ghost = null;
+    const move = (ev) => {
+      if (!ghost) {
+        if (Math.hypot(ev.clientX - from.x, ev.clientY - from.y) < 5) return; // a click, so far
+        ghost = document.createElement('div');
+        ghost.className = 'kys-drag';
+        ghost.textContent = KYS_ICON[item.id];
+        document.body.appendChild(ghost);
+        tile.classList.add('dragging');
+        S.kysDragging = true;
+        faceMood(face, item.kind === 'food' ? 'surprised' : 'curious');
+      }
+      ghost.style.left = `${ev.clientX}px`;
+      ghost.style.top = `${ev.clientY}px`;
+      faceAim(view, ev.clientX, ev.clientY);
+      const d = reach(ev.clientX, ev.clientY);
+      if (item.kind === 'food') mouthOpen(eyes, Math.max(0, Math.min(1, 1 - (d - 25) / 110)));
+      ghost.classList.toggle('near', d < 50);
+    };
+    const end = (ev) => {
+      tile.removeEventListener('pointermove', move);
+      tile.removeEventListener('pointerup', end);
+      tile.removeEventListener('pointercancel', end);
+      tile.classList.remove('dragging');
+      S.kysDragging = false;
+      if (!S.hover) setTimeout(() => { if (!S.hover && !S.typing) setExpanded(m, false); }, m.conf['collapse-delay']);
+      if (!ghost) {
+        if (tile.classList.contains('worn')) api.kys.wear(null).catch((err) => kysError(m, view, err));
+        return;
+      }
+      if (ev.type === 'pointercancel' || reach(ev.clientX, ev.clientY) > 55) {
+        // Not for it: back where it was.
+        const r = tile.getBoundingClientRect();
+        ghost.classList.add('back');
+        ghost.style.left = `${r.left + r.width / 2}px`;
+        ghost.style.top = `${r.top + r.height / 2}px`;
+        setTimeout(() => ghost.remove(), 260);
+        mouthOpen(eyes, 0);
+        faceMood(face, 'neutral');
+        return;
+      }
+      const c = mouth();
+      ghost.classList.add('given');
+      ghost.style.left = `${c.x}px`;
+      ghost.style.top = `${c.y}px`;
+      setTimeout(() => ghost.remove(), 180);
+      S.handFedAt = performance.now();
+      const call = item.kind === 'food' ? api.kys.feed(item.id) : item.kind === 'toy' ? api.kys.play() : api.kys.wear(item.id);
+      if (item.kind !== 'food') faceMood(face, 'happy', 1800);
+      call.catch((err) => {
+        mouthOpen(eyes, 0);
+        faceMood(face, 'sad', 1500);
+        kysError(m, view, err);
+      });
+    };
+    tile.addEventListener('pointermove', move);
+    tile.addEventListener('pointerup', end);
+    tile.addEventListener('pointercancel', end);
   }
 
   /** Playing while its page is open: a ball bouncing across the page, the face following it. */

@@ -319,6 +319,44 @@ h2 {
 .btn.on { background: var(--accent); color: var(--accent-fg); }
 .btn:disabled { opacity: .4; cursor: default; }
 
+/* The inventory: tiles to drag onto the buddy (settings.js, startDrag). */
+.row.inv-hint { min-height: 0; padding-bottom: 0; }
+.inv { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; padding: 12px; }
+.inv-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 12px 6px 10px;
+  border-radius: 12px;
+  background: #101014;
+  border: 1px solid var(--line);
+  cursor: grab;
+  touch-action: none;
+  transition: translate .2s var(--spring), border-color .2s ease, opacity .2s ease;
+}
+.inv-item:hover { translate: 0 -2px; border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.inv-icon { font-size: 28px; line-height: 1.2; }
+.inv-name { font-size: 13px; font-weight: 500; }
+.inv-state { min-height: 16px; color: var(--faint); font-size: 11.5px; }
+.inv-item.worn { border-color: var(--accent); cursor: pointer; }
+.inv-item.worn .inv-state { color: var(--accent); }
+.inv-item.tired { opacity: .5; }
+.inv-item.dragging { opacity: .3; }
+.kys-drag {
+  position: fixed;
+  z-index: 40;
+  font-size: 30px;
+  line-height: 1;
+  translate: -50% -50%;
+  pointer-events: none;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.5));
+  transition: scale .15s var(--spring);
+}
+.kys-drag.near { scale: 1.2; }
+.kys-drag.given { transition: left .16s ease-in, top .16s ease-in, scale .16s ease-in, opacity .16s ease-in; scale: .3; opacity: 0; }
+.kys-drag.back { transition: left .25s ease, top .25s ease, opacity .25s ease; opacity: 0; }
+
 .shop { display: grid; grid-template-columns: repeat(auto-fill, minmax(126px, 1fr)); gap: 10px; padding: 12px; }
 .shop-item {
   display: flex;
@@ -396,8 +434,41 @@ h2 {
 .buddy.hungry .ask { display: block; }
 @keyframes kys-ask { 50% { margin-top: -4px; } }
 .buddy-eyes[data-mood=sad] { --brow: 1; --bl-y: -2px; --br-y: -2px; --bl-r: -16deg; --br-r: 16deg; --lid-l: .72; --lid-r: .72; }
-.buddy-eyes.munch .eye { animation: kys-munch .3s ease-in-out 3; }
-@keyframes kys-munch { 50% { scale: 1.2 .7; } }
+/* Its mouth (settings.js): none until food comes near, then it opens wider and wider (--open, 0 to
+   1) and the eyes go up a little to make room; eating, it chomps a few times. */
+.buddy .mouth {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 10px;
+  margin: 5px 0 0 -7px;
+  overflow: hidden;
+  border-radius: 45% 45% 50% 50% / 35% 35% 65% 65%;
+  background: #5c1628;
+  box-shadow: 0 0 0 1.5px var(--fg);
+  opacity: 0;
+  scale: calc(.45 + .55 * var(--open, 0)) max(.16, var(--open, 0));
+  transition: scale .12s ease, opacity .15s ease;
+  pointer-events: none;
+}
+.buddy .mouth::after { content: ''; position: absolute; left: 20%; right: 20%; bottom: -25%; height: 55%; border-radius: 50%; background: #ff6b8a; }
+.buddy-eyes .eye { transition: translate .15s ease; }
+.buddy.mouthy .mouth, .buddy.chewing .mouth { opacity: 1; }
+.buddy.mouthy .buddy-eyes .eye, .buddy.chewing .buddy-eyes .eye { translate: 0 -5px; }
+.buddy.chewing .mouth { animation: kys-chew .24s ease-in-out 5; }
+@keyframes kys-chew { 0%, 100% { scale: .8 .18; } 50% { scale: .85 .8; } }
+.kys-crumb {
+  position: fixed;
+  z-index: 30;
+  width: 4px;
+  height: 4px;
+  border-radius: 1px;
+  background: #d9a05b;
+  pointer-events: none;
+  animation: kys-crumb .6s ease-in forwards;
+}
+@keyframes kys-crumb { to { translate: var(--cx) 22px; rotate: 120deg; opacity: 0; } }
 .kys-food, .kys-ball, .kys-float { position: fixed; z-index: 30; pointer-events: none; line-height: 1; }
 .kys-food { font-size: 20px; translate: -50% -50%; animation: kys-food-drop .48s cubic-bezier(.5, 0, .9, .6) forwards; }
 @keyframes kys-food-drop { from { translate: -50% -300%; opacity: 0; } 20% { opacity: 1; } to { translate: -50% -50%; scale: .7; } }
