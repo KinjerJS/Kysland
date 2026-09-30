@@ -19,6 +19,7 @@ It can also be a full **Waybar / Hyprland-style status bar**.
 - **Calendar**: click the date to open a month calendar (today highlighted, arrows or mouse wheel to change month).
 - **Mouse**: the wheel changes the volume. Right-click opens the Kysland menu.
 - **Gets out of the way**: move the cursor to the island quickly and it expands as usual; approach it slowly (aiming at something behind it) and it tucks itself into the screen edge and lets clicks through, with two little eyes that keep glancing at the cursor (and blink), then comes back once the cursor moves away. If the cursor stays close for a while (20 s by default), the island grows tall and the eyes come alive: they look around, circle, sneak up next to the cursor, stare at it, show moods with their brows, doze off (Zzz) when nothing moves, and jump away when the cursor gets too close. The grown island catches the mouse: sneak up slowly on the sleeping eyes and click them to wake them up (grumpy or startled).
+- **Peeking eyes**: now and then, the eyes squeeze into the resting island, nudging what it shows aside, and keep an eye on the cursor for a few seconds. Rush at them and they dash off for a while (`"peek"`).
 - **Auto-hide** (optional): the island tucks itself away past the screen edge while the mouse is far from it or on another screen, and comes back as the mouse gets near. Notifications and events (volume, track…) still show.
 - **Outline on dark backgrounds**: when what's around the island is mostly black, a thin outline keeps it visible.
 
@@ -95,6 +96,7 @@ Island options (in the `"island"` section):
 | `outline` | `"auto"` | Thin outline when it's mostly black around the island; `true` / `false` to force it (color: `--notch-outline-color`) |
 | `dodge` / `dodge-speed` | `true` / `450` | Hide when the cursor approaches slower than this many px/s |
 | `dodge-eyes` | `true` | Eyes watching the cursor while hidden |
+| `peek` | `true` | Eyes peeking into the resting island now and then |
 | `auto-hide` / `auto-hide-distance` | `false` / `300` | Hide while the mouse is farther than this many px or on another screen |
 | `dodge-roam` / `dodge-roam-delay` | `true` / `20` | Cursor still close after this many seconds: the island grows and the eyes roam |
 | `kemhome` | `http://localhost:8080` | KemHome agent URL, `false` to disable |

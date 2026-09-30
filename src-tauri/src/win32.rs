@@ -10,7 +10,7 @@ use windows::Win32::Graphics::Gdi::{
     BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HGDIOBJ, SRCCOPY,
 };
 use windows::Win32::System::Threading::{OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION};
-use windows::Win32::UI::Input::KeyboardAndMouse::{keybd_event, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP};
+use windows::Win32::UI::Input::KeyboardAndMouse::{keybd_event, GetAsyncKeyState, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP, VK_LBUTTON, VK_RBUTTON};
 use windows::Win32::UI::Shell::{
     SHAppBarMessage, SHGetFileInfoW, ShellExecuteW, ABM_NEW, ABM_QUERYPOS, ABM_REMOVE, ABM_SETPOS,
     ABM_SETSTATE, APPBARDATA, SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON,
@@ -48,6 +48,14 @@ pub fn window_rect(h: isize) -> Option<RECT> {
     let mut rc = RECT::default();
     unsafe { GetWindowRect(hwnd(h), &mut rc).ok()? };
     Some(rc)
+}
+
+/// Primary mouse button held down (the physical button, swapped buttons taken into account).
+pub fn primary_button_down() -> bool {
+    unsafe {
+        let vk = if GetSystemMetrics(SM_SWAPBUTTON) != 0 { VK_RBUTTON } else { VK_LBUTTON };
+        (GetAsyncKeyState(vk.0 as i32) as u16 & 0x8000) != 0
+    }
 }
 
 pub fn cursor_pos() -> (i32, i32) {

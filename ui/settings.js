@@ -11,7 +11,7 @@
   // Island options and their defaults (same as island.js / the engine).
   const ISLAND = {
     'expand-on-hover': true, outline: 'auto', dodge: true, 'dodge-speed': 450, 'dodge-eyes': true,
-    'dodge-roam': true, 'dodge-roam-delay': 20, 'auto-hide': false, 'auto-hide-distance': 300,
+    'dodge-roam': true, 'dodge-roam-delay': 20, 'auto-hide': false, 'auto-hide-distance': 300, peek: true,
     notifications: true, 'hide-windows-osd': true, claude: false,
   };
   // Top-level options, as named in the state sent by the engine.
@@ -107,6 +107,7 @@
         row(t('set.autohide'), t('set.autohide_desc'), toggle('auto-hide')),
         row(t('set.autohide_distance'), '', seg('auto-hide-distance', [[200, '200 px'], [300, '300 px'], [500, '500 px']]), { disabled: !I['auto-hide'], sub: true }),
         row(t('set.fullscreen'), t('set.fullscreen_desc'), toggle('hide-on-fullscreen')),
+        row(t('set.peek'), t('set.peek_desc'), toggle('peek')),
         row(t('set.outline'), t('set.outline_desc'), seg('outline', [['auto', t('set.outline_auto')], [true, t('set.outline_on')], [false, t('set.outline_off')]])),
       ]),
       section(t('set.dodge_section'), [

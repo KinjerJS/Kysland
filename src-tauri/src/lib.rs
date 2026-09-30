@@ -49,6 +49,11 @@ struct Bar {
     dodge_armed: bool,
     /// The hidden island catches the mouse again (grown, eyes roaming: they can be clicked).
     grab: bool,
+    /// The mouse button went down over the island: it keeps the mouse until it's released (drags).
+    press_inside: bool,
+    /// Eyes peeking into the resting island: the page wants the cursor position.
+    watch: bool,
+    watch_seen: bool,
     /// Auto-hide: the cursor is on this screen, near the island (so the island shows).
     near: bool,
     /// Auto-hide: since when the cursor is too far (the island hides a moment later).
@@ -145,7 +150,7 @@ fn create_bars(app: &AppHandle, cfg: &Value) {
             monitor: (p.x, p.y, s.width as i32, s.height as i32), scale: m.scale_factor(),
             appbar: (cfg["reserve"] == true).then(|| win32::AppBar::register(hwnd)),
             rects: vec![], notch: None, interactive: false, fullscreen: false, dark: false,
-            dodgeable: false, dodge: None, dodge_armed: false, grab: false, near: true, far_since: None,
+            dodgeable: false, dodge: None, dodge_armed: false, grab: false, press_inside: false, watch: false, watch_seen: false, near: true, far_since: None,
         };
         position_bar(&mut bar, cfg);
         let _ = win.set_ignore_cursor_events(true);
@@ -287,9 +292,13 @@ fn background_loop(app: AppHandle) {
         let (mut fs_at, mut top_at, mut shell_at, mut backdrop_at) = (Instant::now(), Instant::now(), Instant::now(), Instant::now());
         let mut last_notch: std::collections::HashMap<String, Rect> = std::collections::HashMap::new();
         let mut trail: std::collections::VecDeque<(Instant, i32, i32)> = std::collections::VecDeque::new();
+        let mut was_held = false;
         loop {
             std::thread::sleep(Duration::from_millis(30));
             let (cx, cy) = win32::cursor_pos();
+            let held = win32::primary_button_down();
+            let pressed = held && !was_held;
+            was_held = held;
             let now = Instant::now();
             trail.push_back((now, cx, cy));
             while trail.front().is_some_and(|p| now - p.0 > Duration::from_millis(250)) { trail.pop_front(); }
@@ -310,11 +319,21 @@ fn background_loop(app: AppHandle) {
                     let change = dodge_step(bar, dodge_speed, px, py, speed / bar.scale);
                     if let Some(on) = change { dodges.push((bar.label.clone(), on)); }
                     // The hidden island no longer gets mouse events: its eyes follow the cursor through the engine.
-                    if eyes && bar.dodge.is_some() && (moved || change.is_some()) { gazes.push((bar.label.clone(), px, py)); }
+                    // (and to the eyes peeking into the resting island, from the moment they show up)
+                    let peeking_now = bar.watch && !bar.watch_seen;
+                    bar.watch_seen = bar.watch;
+                    if ((eyes && bar.dodge.is_some()) || bar.watch) && (moved || change.is_some() || peeking_now) {
+                        gazes.push((bar.label.clone(), px, py));
+                    }
                     // A hidden island lets clicks through to what's behind it.
-                    let inside = !bar.fullscreen && bar.rects.iter()
+                    let over = !bar.fullscreen && bar.rects.iter()
                         .filter(|r| bar.dodge.is_none() || bar.grab || Some(**r) != bar.notch)
                         .any(|r| px >= r.x && px < r.x + r.w && py >= r.y && py < r.y + r.h);
+                    // A press that started over the island keeps it until the button is released,
+                    // like any window: dragging the volume slider can go past the island.
+                    if pressed { bar.press_inside = bar.interactive; }
+                    if !held { bar.press_inside = false; }
+                    let inside = over || (bar.press_inside && !bar.fullscreen);
                     if inside != bar.interactive {
                         bar.interactive = inside;
                         if inside { bar.dodge_armed = false; } // reached normally: no dodging on the way out
@@ -528,12 +547,13 @@ async fn notifications() -> Vec<Value> {
 }
 
 #[tauri::command]
-fn set_hit_rects(window: WebviewWindow, rects: Vec<Rect>, notch: Option<Rect>, dodgeable: bool, grab: bool) {
+fn set_hit_rects(window: WebviewWindow, rects: Vec<Rect>, notch: Option<Rect>, dodgeable: bool, grab: bool, watch: bool) {
     with(|s| if let Some(b) = s.bars.iter_mut().find(|b| b.label == window.label()) {
         b.rects = rects;
         b.notch = notch;
         b.dodgeable = dodgeable;
         b.grab = grab;
+        b.watch = watch;
     });
 }
 
@@ -594,7 +614,7 @@ fn set_setting(app: AppHandle, key: String, value: Value) -> Result<(), String> 
     let island = with(|s| config::island_name(&s.cfg)).unwrap_or_else(|| "island".into());
     match key.as_str() {
         "language" | "monitors" | "hide-on-fullscreen" => config::set_value(&[&key], value),
-        "dodge" | "dodge-eyes" | "dodge-roam" | "dodge-roam-delay" | "dodge-speed" | "auto-hide" | "auto-hide-distance" | "outline"
+        "dodge" | "dodge-eyes" | "dodge-roam" | "dodge-roam-delay" | "dodge-speed" | "auto-hide" | "auto-hide-distance" | "peek" | "outline"
         | "claude" | "notifications"
         | "hide-windows-osd" | "expand-on-hover" => {
             config::set_value(&[&island, &key], value)
@@ -712,6 +732,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
             island["dodge-roam"] != false, None::<&str>)?,
         &Submenu::with_items(app, t("menu.dodge_speed"), dodge, &speed_items)?,
         &PredefinedMenuItem::separator(app)?,
+        &CheckMenuItem::with_id(app, "peek", t("menu.peek"), true, island["peek"] != false, None::<&str>)?,
         &CheckMenuItem::with_id(app, "auto-hide", t("menu.auto_hide"), true, island["auto-hide"] == true, None::<&str>)?,
         &CheckMenuItem::with_id(app, "fullscreen", t("menu.fullscreen"), true, cfg["hide-on-fullscreen"] != false, None::<&str>)?,
         &outline_menu,
@@ -752,7 +773,7 @@ fn on_menu(app: &AppHandle, id: &str) {
         }
         "fullscreen" => config::set_value(&["hide-on-fullscreen"], json!(cfg["hide-on-fullscreen"] == false)),
         "claude" => config::set_value(&[&island, "claude"], json!(config::island_conf(&cfg)["claude"] != true)),
-        "dodge" | "dodge-eyes" | "dodge-roam" => config::set_value(&[&island, id], json!(config::island_conf(&cfg)[id] == false)),
+        "dodge" | "dodge-eyes" | "dodge-roam" | "peek" => config::set_value(&[&island, id], json!(config::island_conf(&cfg)[id] == false)),
         "auto-hide" => config::set_value(&[&island, id], json!(config::island_conf(&cfg)[id] != true)),
         "outline:auto" => config::set_value(&[&island, "outline"], json!("auto")),
         "outline:on" | "outline:off" => config::set_value(&[&island, "outline"], json!(id == "outline:on")),

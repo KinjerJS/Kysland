@@ -156,7 +156,7 @@
 
     resize() {
       if (!this.current) return;
-      this.el.style.width = `${this.current.offsetWidth}px`;
+      this.el.style.width = `${this.current.offsetWidth + (this.extra || 0)}px`; // extra: room for peeking eyes
       this.el.style.height = `${this.current.offsetHeight}px`;
     }
   }
@@ -725,6 +725,7 @@
       'dodge-roam': true,            // ...and roam around a grown island if the cursor stays close
       'dodge-roam-delay': 20,        // seconds
       'auto-hide': false,            // hides while the mouse is far away or on another screen (read by the engine)
+      peek: true,                    // now and then, the eyes squeeze into the resting island to check on the cursor
       'auto-hide-distance': 300,     // px around the island where it comes back
       notifications: true,           // Windows notifications in the island
       claude: false,                 // Claude plan usage (if Claude Code is installed)
@@ -745,6 +746,7 @@
       notch.classList.toggle('eyes', m.conf['dodge-eyes'] !== false);
       S.near = state.near !== false;
       applyOutline(m, state.backdropDark);
+      schedulePeek(m, 15, 40);
       let enterT = 0, leaveT = 0;
       if (m.conf['expand-on-hover']) {
         notch.addEventListener('mouseenter', () => {
@@ -754,6 +756,7 @@
           enterT = setTimeout(() => setExpanded(m, true), m.conf['hover-delay']);
         });
         notch.addEventListener('mouseleave', () => {
+          S.dragging = false; // a drag can't go on without the mouse
           if (S.dodged) return;
           clearTimeout(enterT);
           if (S.notif) return startNotifTimer(m, 2500);
@@ -834,6 +837,7 @@
     onDodge(m, on) {
       const S = m.island;
       if (!S) return;
+      if (on && S.peeking) endPeek(m);
       S.dodged = on;
       S.notch.el.classList.toggle('dodged', on);
       if (on && m.conf['dodge-eyes'] !== false) S.eyes.start(m.conf['dodge-roam'] !== false ? m.conf['dodge-roam-delay'] : 0);
@@ -858,7 +862,10 @@
     },
 
     onGaze(m, x, y) {
-      m.island?.eyes.look(x, y);
+      const S = m.island;
+      if (!S) return;
+      if (S.peeking) watchPeek(m, x, y);
+      S.eyes.look(x, y);
     },
 
     onMessage(m, msg) {
@@ -884,10 +891,19 @@
     S.notch.el.classList.toggle('away', away);
   }
 
+  /** The volume slider and its number back to the current volume. */
+  function syncVolume(el, audio) {
+    const input = el.querySelector('.n-vol input');
+    if (!audio || !input) return;
+    input.value = audio.volume;
+    el.querySelector('.n-vol b').textContent = audio.volume;
+  }
+
   function setExpanded(m, v) {
     const S = m.island;
     if (S.expanded === v) return;
     S.expanded = v;
+    S.dragging = false;
     if (!v) S.page = 'main';
     if (!v && !S.notif && S.queue.length) return showNextNotif(m); // notifications that arrived while expanded
     render(m);
@@ -946,7 +962,98 @@
     applyAway(m);
     // Only a resting island hides from the cursor (not while open or showing a notification).
     S.notch.el.dataset.dodgeable = !S.expanded && !S.notif ? '1' : '0';
+    if (S.peeking && (S.expanded || S.notif || S.transient)) endPeek(m);
     S.notch.show(S.expanded ? expandedView(m) : S.notif || S.transient || compactView(m));
+    if (S.peeking) placePeekEyes(S); // the view may have changed width
+  }
+
+  // --- Peeking eyes -----------------------------------------------------------------------------
+  // Now and then the eyes squeeze into the resting island: it grows a little on one side, what it
+  // shows gets nudged the other way, and they keep an eye on the cursor for a few seconds. Coming at
+  // them fast scares them off: they dash away past the edge and stay away for a while.
+  const PEEK_ROOM = 44; // px the island grows by to make room for them
+
+  function schedulePeek(m, min = 25, max = 70) {
+    const S = m.island;
+    clearTimeout(S.peekT);
+    if (m.conf.peek === false) return;
+    S.peekT = setTimeout(() => startPeek(m), rand(min, max) * 1000);
+  }
+
+  function canPeek(m, S) {
+    return m.conf.peek !== false && !S.expanded && !S.notif && !S.transient && !S.dodged && S.near !== false
+      && !document.hidden && String(S.notch.key).startsWith('compact');
+  }
+
+  function startPeek(m) {
+    const S = m.island;
+    if (m.conf.peek === false) return;
+    if (S.peeking || !canPeek(m, S)) return schedulePeek(m, 8, 20); // busy: a bit later
+    const dir = pick([-1, 1]);
+    S.peeking = { dir, v: 0, last: null };
+    S.eyes.start(0);
+    // They come in from the edge while the content gets pushed aside, with a little jostle.
+    const eyes = S.eyes.el;
+    eyes.style.transition = 'none';
+    eyes.style.setProperty('--ex', `${dir * ((S.notch.current?.offsetWidth || 160) / 2 + PEEK_ROOM)}px`);
+    void eyes.offsetWidth;
+    eyes.style.transition = '';
+    S.notch.extra = PEEK_ROOM;
+    S.notch.el.style.setProperty('--peek-shift', `${(-dir * PEEK_ROOM) / 2}px`);
+    S.notch.el.classList.add('peek');
+    S.notch.resize();
+    placePeekEyes(S);
+    S.notch.el.classList.remove('splash');
+    void S.notch.el.offsetWidth;
+    S.notch.el.classList.add('splash');
+    S.peekEndT = setTimeout(() => endPeek(m), rand(3500, 7000));
+  }
+
+  function placePeekEyes(S) {
+    const w = (S.notch.current?.offsetWidth || 160) + PEEK_ROOM;
+    S.eyes.el.style.setProperty('--ex', `${(S.peeking.dir * (w / 2 - PEEK_ROOM / 2 - 3)).toFixed(1)}px`);
+    S.eyes.el.style.setProperty('--ey', '0px');
+  }
+
+  /** The cursor rushing at them (closing in fast, already close) scares them off. */
+  function watchPeek(m, x, y) {
+    const S = m.island, p = S.peeking;
+    const now = performance.now();
+    const c = S.eyes.center();
+    const d = Math.hypot(x - c.x, y - c.y);
+    if (p.last) {
+      const dt = Math.max(0.016, (now - p.last.t) / 1000);
+      p.v = p.v * 0.4 + ((p.last.d - d) / dt) * 0.6; // closing speed, px/s
+      if (d < 260 && p.v > 800) {
+        S.eyes.setMood('surprised');
+        S.eyes.jolt();
+        return endPeek(m, true);
+      }
+    }
+    p.last = { t: now, d };
+  }
+
+  function endPeek(m, scared = false) {
+    const S = m.island, p = S.peeking;
+    if (!p) return;
+    S.peeking = null;
+    clearTimeout(S.peekEndT);
+    const eyes = S.eyes.el;
+    if (scared) {
+      eyes.classList.add('scared'); // dashes off past the edge
+      eyes.style.setProperty('--ex', `${p.dir * (S.notch.el.offsetWidth / 2 + 30)}px`);
+    } else {
+      eyes.classList.add('blink'); // eyes closing as it ducks back out
+    }
+    setTimeout(() => {
+      eyes.classList.remove('scared', 'blink');
+      S.notch.el.classList.remove('peek');
+      S.notch.el.style.setProperty('--peek-shift', '0px');
+      S.notch.extra = 0;
+      S.notch.resize();
+      if (!S.dodged) S.eyes.stop(); // hiding from the cursor took the eyes over meanwhile
+      schedulePeek(m, scared ? 90 : 30, scared ? 180 : 80);
+    }, scared ? 260 : 150);
   }
 
   // --- Views --------------------------------------------------------------------------------
@@ -1026,8 +1133,19 @@
           };
         }
         const range = el.querySelector('input[type=range]');
-        range.addEventListener('pointerdown', () => { S.dragging = true; });
-        range.addEventListener('pointerup', () => { S.dragging = false; });
+        // While dragging, the volume shown follows the slider; once it ends, however it ends
+        // (released, the island closing, the mouse leaving it...), back to the current volume.
+        S.dragging = false;
+        const release = () => {
+          if (!S.dragging) return;
+          S.dragging = false;
+          syncVolume(el, S.data.audio);
+        };
+        range.addEventListener('pointerdown', (e) => {
+          S.dragging = true;
+          range.setPointerCapture?.(e.pointerId); // keeps the drag past the island's edge
+        });
+        for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) range.addEventListener(type, release);
         range.addEventListener('input', () => {
           el.querySelector('.n-vol b').textContent = range.value;
           api.action('audio', Number(range.value));
@@ -1060,10 +1178,7 @@
         updateClaude(el, d.claude);
         if (d.audio) {
           el.querySelector('[data-mute]').className = `icon icon-${d.audio.muted ? 'volume-x' : 'volume-2'}`;
-          if (!S.dragging) {
-            el.querySelector('.n-vol input').value = d.audio.volume;
-            el.querySelector('.n-vol b').textContent = d.audio.volume;
-          }
+          if (!S.dragging) syncVolume(el, d.audio);
         }
       },
     };

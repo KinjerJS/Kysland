@@ -57,6 +57,7 @@ const STRINGS: &[(&str, &str, &str)] = &[
     ("menu.island", "Dynamic Island", "Dynamic Island"),
     ("menu.dodge", "Hide when approached slowly", "Se cacher quand on s'approche doucement"),
     ("menu.dodge_eyes", "Eyes while hidden", "Yeux quand elle est cachée"),
+    ("menu.peek", "Eyes peek out now and then", "Les yeux jettent un œil de temps en temps"),
     ("menu.auto_hide", "Hide when the mouse is far away", "Se cacher quand la souris est loin"),
     ("menu.dodge_roam", "Eyes wander if you stay close", "Les yeux se baladent si on reste près"),
     ("menu.dodge_speed", "Hides…", "Se cache…"),
