@@ -125,7 +125,8 @@ popup.el.addEventListener('mouseleave', () => { popup.hideTimer = setTimeout(() 
 // The window also covers the popup area, so clicks outside the bar must go through.
 // Clickable areas are sent to the engine, which makes the window clickable above them only:
 // anywhere else, clicks reach the windows below.
-const HIT_SELECTOR = '.modules-left, .modules-center, .modules-right, #popup.visible, .notch';
+// (the island gone with Kys doesn't count; Kys running free does: it can be caught)
+const HIT_SELECTOR = '.modules-left, .modules-center, .modules-right, #popup.visible, .notch:not(.kys-away), .eye-flyer.free';
 // The island's own rect also goes along: the engine looks at the screen around it (outline)
 // and at how the cursor approaches it (dodging).
 let lastHitRects = '';
@@ -138,7 +139,7 @@ function reportHitRects() {
   const notchEl = document.querySelector('.notch');
   const notch = notchEl ? box(notchEl.getBoundingClientRect()) : null;
   const dodgeable = notchEl?.dataset.dodgeable === '1';
-  const grab = notchEl?.classList.contains('roaming') ?? false; // roaming eyes can be clicked
+  const grab = (notchEl?.classList.contains('roaming') || notchEl?.dataset.grab === '1') ?? false; // eyes that can be clicked, or grabbed
   const watch = notchEl?.classList.contains('peek') ?? false; // peeking eyes want the cursor
   const json = JSON.stringify([rects, notch, dodgeable, grab, watch]);
   if (json !== lastHitRects) { lastHitRects = json; api.setHitRects(rects, notch, dodgeable, grab, watch); }

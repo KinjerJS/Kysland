@@ -12,7 +12,7 @@
   const ISLAND = {
     'expand-on-hover': true, outline: 'auto', dodge: true, 'dodge-speed': 450, 'dodge-eyes': true,
     'dodge-roam': true, 'dodge-roam-delay': 20, 'auto-hide': false, 'auto-hide-distance': 300, peek: true,
-    notifications: true, 'hide-windows-osd': true, claude: false, 'kys-brain': 'simple',
+    notifications: true, 'hide-windows-osd': true, claude: false, 'kys-brain': 'simple', 'kys-grab': false,
   };
   // Top-level options, as named in the state sent by the engine.
   const TOP = { language: 'language', monitors: 'monitors', 'hide-on-fullscreen': 'hideOnFullscreen', autostart: 'autostart' };
@@ -125,6 +125,7 @@
         row(t('set.eyes'), t('set.eyes_desc'), toggle('dodge-eyes'), { disabled: dodgeOff, sub: true }),
         row(t('set.roam'), t('set.roam_desc'), toggle('dodge-roam'), { disabled: eyesOff, sub: true }),
         row(t('set.roam_delay'), '', seg('dodge-roam-delay', [[10, '10 s'], [20, '20 s'], [40, '40 s']]), { disabled: roamOff, sub: true }),
+        row(t('set.kys_grab'), t('set.kys_grab_desc'), toggle('kys-grab'), { disabled: eyesOff, sub: true }),
       ]),
       section(t('set.features'), [
         row(t('set.notifications'), t('set.notifications_desc'), toggle('notifications')),

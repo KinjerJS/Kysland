@@ -49,7 +49,7 @@ The eyes have a name: **Kys**. It lives in the island, and it has a life of its 
 </tr>
 <tr>
 <td>Now and then it <b>drops in from the top</b>, knocking the time and the date askew, to check on your cursor. Rush at it and it flees.</td>
-<td>Stay close and the island grows: it <b>explores</b>, comes next to your cursor, dozes off (Zzz)… circle around it and it gets <b>dizzy</b>.</td>
+<td>Stay close and the island grows: it <b>explores</b>, comes next to your cursor, dozes off (Zzz)… circle around it and it gets <b>dizzy</b>. With the <b>Grab Kys</b> option, pull it out of the island: it runs off across your screen until you catch it.</td>
 </tr>
 </table>
 
@@ -139,6 +139,7 @@ Island options (in the `"island"` section):
 | `dodge-eyes` | `true` | Eyes watching the cursor while hidden |
 | `dodge-roam` / `dodge-roam-delay` | `true` / `20` | Cursor still close after this many seconds: the island grows and the eyes roam |
 | `peek` | `true` | Kys peeking into the resting island now and then |
+| `kys-grab` | `false` | The hidden island's eyes can be grabbed and pulled out: Kys runs free on the screen until you catch it and bring it back |
 | `kys-brain` | `"simple"` | What Kys understands: `"simple"` (commands and a few phrases), or a local AI downloaded from the settings: `"light"` (Qwen3 1.7B, about 1 s per answer) or `"smart"` (Qwen3 4B, about 3 s, much better company) |
 | `auto-hide` / `auto-hide-distance` | `false` / `300` | Hide while the mouse is farther than this many px or on another screen |
 | `hide-windows-osd` | `true` | Handle the volume keys and hide the Windows volume flyout |

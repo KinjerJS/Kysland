@@ -26,6 +26,7 @@
       model: (action, model) => invoke('kys_brain_model', { action, model }),
       warm: () => invoke('kys_warm'),
       typing: (on) => invoke('kys_typing', { on }),
+      free: (on) => invoke('kys_free', { on }), // pulled out of the island (option "kys-grab")
     },
     setHitRects: (rects, notch, dodgeable, grab, watch) => invoke('set_hit_rects', {
       rects, notch: notch ?? null, dodgeable: !!dodgeable, grab: !!grab, watch: !!watch,

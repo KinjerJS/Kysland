@@ -246,6 +246,12 @@
       this.spinAngle = null;
       this.setMove(null);
       this.flight = null;
+      if (this.free) {
+        cancelAnimationFrame(this.freeRaf);
+        this.free.move?.end?.();
+        this.free = null;
+        this.flyer.classList.remove('free', 'held', 'pill');
+      }
       if (this.el.parentElement !== this.notch) this.notch.appendChild(this.el); // was flying
       this.goo.classList.remove('on');
       this.el.classList.remove('shake', 'opened', 'dizzy');
@@ -257,7 +263,7 @@
       this.el.style.setProperty('--ey', '0px');
     }
 
-    asleep() { return this.move?.kind === 'doze'; }
+    asleep() { return (this.free ? this.free.move : this.move)?.kind === 'doze'; }
 
     eating() { return performance.now() < (this.eatingUntil || 0); }
 
@@ -308,7 +314,7 @@
       while (this.trail.length && now - this.trail[0].t > 400) this.trail.shift();
       if (!this.flight) this.spinCheck(x, y, now);
       // While roaming, the animation loop decides where to look; dizzy, the eyes roll.
-      if (!this.elsewhere && !this.busy && !this.roaming && !this.isDizzy(now)) this.aim(x, y); // busy: watching the ball
+      if (!this.elsewhere && !this.busy && !this.roaming && !this.free && !this.isDizzy(now)) this.aim(x, y); // busy: watching the ball
     }
 
     // --- Dizzy: the cursor circling around the eyes -------------------------------------------
@@ -342,6 +348,13 @@
       this.spinDir = Math.sign(this.spin) || 1;
       this.setMood('dizzy');
       this.el.classList.add('dizzy');
+      if (this.free) {
+        // Sways where it floats (its loop rolls the eyes).
+        const base = { ...this.free.pos };
+        this.free.move?.end?.();
+        this.free.move = { kind: 'dizzy', pull: 3, until: Infinity, target: (t) => ({ x: base.x + Math.sin(t / 260) * 8, y: base.y + Math.sin(t / 370) * 4 }) };
+        return;
+      }
       if (this.roaming) {
         // Sways on the spot (the loop rolls the eyes).
         const base = { ...this.pos };
@@ -359,14 +372,15 @@
 
     /** Rolling eyes, turning the way the cursor went round. */
     roll(t) {
-      const [gx, gy] = this.roaming ? [5, 4] : [3, 1.5];
+      const big = this.roaming || this.free; // the big eyes
+      const [gx, gy] = big ? [5, 4] : [3, 1.5];
       const a = (t / 90) * this.spinDir;
       this.el.style.setProperty('--gx', `${(Math.cos(a) * gx).toFixed(2)}px`);
       this.el.style.setProperty('--gy', `${(Math.sin(a) * gy).toFixed(2)}px`);
       // Stars circling: below the thin strip (above it is the screen edge), above the eyes on the
       // grown island, or below them when they're up against the edge.
-      const [rx, ry] = this.roaming ? [30, 7] : [34, 5];
-      const cy = !this.roaming ? 13 : this.pos.y < -20 ? 26 : -26;
+      const [rx, ry] = big ? [30, 7] : [34, 5];
+      const cy = this.free ? -26 : !this.roaming ? 13 : this.pos.y < -20 ? 26 : -26;
       [...this.stars.children].forEach((star, i) => {
         const b = (t / 240) * this.spinDir + (i * 2 * Math.PI) / 3;
         const depth = (Math.sin(b) + 1) / 2; // 1: in front, 0: behind
@@ -383,6 +397,7 @@
       this.el.classList.remove('dizzy');
       this.spin = 0;
       if (this.move?.kind === 'dizzy') this.setMove(null);
+      if (this.free?.move?.kind === 'dizzy') this.free.move = null;
       this.el.classList.remove('shake');
       void this.el.offsetWidth;
       this.el.classList.add('shake');
@@ -402,7 +417,7 @@
       const len = Math.hypot(dx, dy) || 1;
       const k = Math.min(1, len / 40); // a close cursor doesn't pull the eyes all the way
       const gx = (dx / len) * k, gy = (dy / len) * k;
-      const [rx, ry] = this.roaming ? [6, 5] : [4, 2]; // bigger eyes, more room
+      const [rx, ry] = this.roaming || this.free ? [6, 5] : [4, 2]; // bigger eyes, more room
       const s = this.el.style;
       s.setProperty('--gx', `${(gx * rx).toFixed(2)}px`);
       s.setProperty('--gy', `${(gy * ry).toFixed(2)}px`);
@@ -652,6 +667,286 @@
       this.setMove({ kind: 'squint', pull: 3, until: now + 2600, target: () => still }); // stays put, peering at the cursor
     }
 
+    // --- Free (option "kys-grab"): pulled out of the island by its eyes, Kys runs around the screen
+    // in its drop, much like the settings' buddy, and the island is gone until it's caught (it
+    // panics) and brought back to its spot. Screen positions, CSS px (the window covers the screen
+    // meanwhile). Far from the island it's a plain pill; near it, the gooey drop again.
+
+    /** Pulled out: the eyes leave the island in their drop, held by the pointer (see `hold`).
+     *  `from`: the island's rect at that moment. */
+    pullOut(from) {
+      for (const timer of [this.glanceT, this.backT, this.roamT, this.growT]) clearTimeout(timer);
+      cancelAnimationFrame(this.raf);
+      cancelAnimationFrame(this.wobbleRaf);
+      this.setMove(null);
+      this.roaming = false;
+      this.notch.classList.remove('roaming');
+      this.flight = null;
+      this.dizzyUntil = 0;
+      this.el.classList.remove('dizzy');
+      const at = this.center();
+      this.free = { pos: at, held: at, from, since: performance.now(), move: null, fledAt: 0, left: false, caught: false };
+      this.place(at, 0);
+      this.shapeIsland(from);
+      this.gooIsland.classList.remove('gone');
+      this.flyer.appendChild(this.el);
+      this.flyer.classList.add('free', 'held');
+      this.goo.classList.add('on');
+      this.splash();
+      this.setMood('surprised');
+      let last = 0;
+      const tick = (now) => {
+        if (!this.free) return;
+        const dt = last ? Math.min(0.05, (now - last) / 1000) : 0;
+        last = now;
+        this.freeStep(now, dt);
+        this.freeRaf = requestAnimationFrame(tick);
+      };
+      this.freeRaf = requestAnimationFrame(tick);
+    }
+
+    /** Where the island goes back: its place, even while it's gone (see .kys-away). */
+    homeSpot() {
+      const r = this.notch.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2, rect: r };
+    }
+
+    /** Held by the pointer at `p` (null: let go). */
+    hold(p) { if (this.free) this.free.held = p; }
+
+    /** Caught while free: it panics, wriggling in the pointer's grip. */
+    grab(e) {
+      const F = this.free;
+      if (!F || F.homing || e.button !== 0) return;
+      e.preventDefault();
+      this.flyer.setPointerCapture(e.pointerId);
+      F.held = { x: e.clientX, y: e.clientY };
+      F.caught = true;
+      F.move?.end?.();
+      F.move = null;
+      this.flyer.classList.add('held');
+      this.setMood('panic');
+      const move = (ev) => { if (this.free) this.free.held = { x: ev.clientX, y: ev.clientY }; };
+      const up = (ev) => {
+        this.flyer.removeEventListener('pointermove', move);
+        this.flyer.removeEventListener('pointerup', up);
+        this.flyer.removeEventListener('pointercancel', up);
+        this.letGo({ x: ev.clientX, y: ev.clientY });
+      };
+      this.flyer.addEventListener('pointermove', move);
+      this.flyer.addEventListener('pointerup', up);
+      this.flyer.addEventListener('pointercancel', up);
+    }
+
+    /** Let go at `p`: brought back to its spot, in it goes (the island forms again); anywhere else,
+     *  it runs off, cross. Let go before it even left the island: back in. */
+    letGo(p) {
+      const F = this.free;
+      if (!F) return;
+      F.held = null;
+      this.flyer.classList.remove('held');
+      const home = this.homeSpot();
+      if (!F.left || Math.hypot(p.x - home.x, p.y - home.y) < 150) {
+        F.homing = true;
+        this.setMood(F.left ? 'happy' : 'neutral');
+        return;
+      }
+      F.move = this.freeFlee(performance.now(), p);
+      this.setMood('surprised', 600, ['grumpy', 1800]);
+    }
+
+    freeStep(now, dt) {
+      const F = this.free, c = this.cursor;
+      const home = this.homeSpot();
+      let target, pull;
+      if (F.held) {
+        target = F.held;
+        pull = 16;
+      } else if (F.homing) {
+        target = home;
+        pull = 8;
+      } else {
+        const asleep = F.move?.kind === 'doze';
+        // A cursor rushing onto it scares it off; one coming slowly can catch it.
+        if (c && now - this.cursorAt < 300 && !asleep && !this.isDizzy(now) && now - F.fledAt > 1500
+            && Math.hypot(c.x - F.pos.x, c.y - F.pos.y) < 80 && this.travel() > 110) {
+          F.fledAt = now;
+          F.move?.end?.();
+          F.move = this.freeFlee(now, c);
+          this.setMood('surprised', 500, ['suspicious', 1600]);
+        }
+        if (asleep && this.travel() > 45) {
+          F.move.end?.();
+          F.move = null;
+          this.setMood('surprised', 700, ['grumpy', 1400]);
+        }
+        if (!F.move || now > F.move.until) {
+          F.move?.end?.();
+          F.move = this.freeNext(now);
+        }
+        target = F.move.target(now);
+        pull = F.move.pull;
+      }
+      const W = innerWidth, H = innerHeight;
+      const k = 1 - Math.exp(-dt * pull);
+      const edge = F.held || F.homing ? 0 : 1; // on its own, it keeps off the screen's edges
+      const p = {
+        x: Math.max(36 * edge, Math.min(W - 36 * edge, F.pos.x + (target.x - F.pos.x) * k)),
+        y: Math.max(26 * edge, Math.min(H - 26 * edge, F.pos.y + (target.y - F.pos.y) * k)),
+      };
+      const vx = dt ? (p.x - F.pos.x) / dt : 0, vy = dt ? (p.y - F.pos.y) / dt : 0;
+      F.pos = p;
+      const toHome = Math.hypot(p.x - home.x, p.y - home.y);
+      if (toHome > 110) F.left = true;
+      // Home at last: in it goes.
+      if (F.homing && toHome < 6) return this.freeDone();
+      // The island shows where it goes back (from the start of the pull until it's away, then when
+      // it's carried near, or on its way in): drawn in the goo, so the drop merges with it.
+      const near = !F.left || F.homing || (F.held && toHome < 170);
+      this.shapeIsland(F.left ? home.rect : F.from);
+      this.gooIsland.classList.toggle('gone', !near);
+      this.goo.classList.toggle('on', near || toHome < 260);
+      this.flyer.classList.toggle('pill', !this.goo.classList.contains('on'));
+      // Wriggling when held; a slow breath otherwise.
+      const wriggle = F.held && F.caught ? Math.sin(now / 38) * 9 : 0;
+      const breath = F.held || F.homing ? 0 : Math.sin(now / 800) * 1.5;
+      const speed = Math.hypot(vx, vy);
+      this.place({ x: p.x, y: p.y + breath }, wriggle, (Math.atan2(vy, vx) * 180) / Math.PI, Math.min(0.35, speed / 1800),
+        F.held && F.caught ? Math.sin(now / 33) * 0.06 : 0);
+      // Asleep, a cursor sneaking right up to it: the eye on that side opens a crack.
+      const asleep = F.move?.kind === 'doze';
+      const side = asleep && c && Math.hypot(Math.max(0, Math.abs(c.x - p.x) - 32), Math.max(0, Math.abs(c.y - p.y) - 20)) < 18
+        ? (c.x < p.x ? 'l' : 'r') : null;
+      this.el.classList.toggle('peek-l', side === 'l');
+      this.el.classList.toggle('peek-r', side === 'r');
+      F.cracked = side;
+      if (this.isDizzy(now)) return this.roll(now);
+      if (F.held && F.caught) {
+        // Panicking: eyes darting everywhere.
+        if (!F.dartAt || now > F.dartAt) {
+          F.dart = { x: p.x + rand(-80, 80), y: p.y + rand(-50, 50) };
+          F.dartAt = now + rand(80, 200);
+        }
+        return this.aim(F.dart.x, F.dart.y);
+      }
+      if (this.elsewhere || this.busy) return;
+      const spot = F.held || F.homing ? home : F.move?.look?.(now) ?? c;
+      if (spot) this.aim(spot.x, spot.y);
+    }
+
+    /** Back in the island: the same eyes, at its middle; the page puts the island back (onHome). */
+    freeDone() {
+      const F = this.free;
+      cancelAnimationFrame(this.freeRaf);
+      F.move?.end?.();
+      this.free = null;
+      this.flyer.classList.remove('free', 'held', 'pill');
+      this.el.classList.remove('peek-l', 'peek-r');
+      this.el.style.setProperty('--ex', '0px');
+      this.el.style.setProperty('--ey', '0px');
+      this.notch.appendChild(this.el);
+      this.goo.classList.remove('on');
+      this.gooIsland.classList.remove('gone');
+      this.splash();
+      this.onHome?.(F);
+    }
+
+    freeNext(now) {
+      const c = this.cursor, F = this.free;
+      // Left alone for a long while: it goes back on its own (sleepy by then).
+      if (now - F.since > 240000 && now - this.cursorAt > 12000) {
+        F.homing = true;
+        this.setMood('sleepy');
+        return { kind: 'home', pull: 0, until: Infinity, target: () => F.pos };
+      }
+      if (c && now - this.cursorAt > 12000) return this.freeDoze(now);
+      const roll = Math.random();
+      if (roll < 0.06) return this.freeSixSeven(now);
+      if (c && roll < 0.36) return this.freeApproach(now, c);
+      if (roll < 0.72) return this.freeWander(now);
+      return this.freeWatch(now);
+    }
+
+    // Comes next to the cursor (beside it, never onto it), in two or three hops.
+    freeApproach(now, c) {
+      const F = this.free;
+      const side = Math.sign(F.pos.x - c.x) || pick([-1, 1]);
+      const hops = Math.round(rand(2, 3));
+      const from = { ...F.pos }, hopMs = rand(420, 650), gap = rand(62, 76);
+      this.setMood(pick(['curious', 'neutral', 'happy']), hops * hopMs + 600);
+      return {
+        kind: 'approach', pull: 7, until: now + hops * hopMs + rand(900, 1600),
+        target: (t) => {
+          const cur = this.cursor || c;
+          const to = { x: cur.x + side * gap, y: cur.y + 8 };
+          const u = Math.min(1, Math.ceil((t - now) / hopMs) / hops);
+          return { x: from.x + (to.x - from.x) * u, y: from.y + (to.y - from.y) * u };
+        },
+      };
+    }
+
+    // Floats somewhere on the screen, sometimes looking around.
+    freeWander(now) {
+      const spot = { x: rand(90, innerWidth - 90), y: rand(90, innerHeight - 90) };
+      const glance = Math.random() < 0.5 && { x: spot.x + pick([-1, 1]) * rand(80, 200), y: spot.y + rand(-60, 80) };
+      if (Math.random() < 0.3) this.setMood('curious', 2000);
+      return { kind: 'wander', pull: 1.6, until: now + rand(2600, 4600), target: () => spot, look: glance ? () => glance : null };
+    }
+
+    // Stays put and watches the cursor.
+    freeWatch(now) {
+      const base = { ...this.free.pos };
+      if (Math.random() < 0.4) this.setMood(pick(['suspicious', 'curious']), 2200);
+      return { kind: 'watch', pull: 3, until: now + rand(2000, 3500), target: () => base };
+    }
+
+    // Nothing moving for a while: falls asleep, z's floating up (until a real move).
+    freeDoze(now) {
+      this.setMood('sleepy');
+      const base = { x: this.free.pos.x, y: this.free.pos.y + 8 };
+      let n = 0;
+      const snore = () => {
+        const z = document.createElement('span');
+        z.className = 'zzz';
+        z.textContent = ['z', 'Z', 'z'][n % 3];
+        z.style.setProperty('--zs', ['10px', '13px', '11px'][n++ % 3]);
+        z.style.setProperty('--zx', `${rand(12, 28).toFixed(0)}px`);
+        z.addEventListener('animationend', () => z.remove());
+        this.el.appendChild(z);
+      };
+      snore();
+      const timer = setInterval(snore, 900);
+      return {
+        kind: 'doze', pull: 1, until: now + 60000,
+        target: () => base,
+        look: () => (this.free?.cracked ? null : { x: this.free.pos.x, y: this.free.pos.y + 80 }), // eyes down
+        end: () => {
+          clearInterval(timer);
+          this.el.querySelectorAll('.zzz').forEach((z) => z.remove());
+          this.el.classList.remove('peek-l', 'peek-r');
+        },
+      };
+    }
+
+    // Hops away from `c`.
+    freeFlee(now, c) {
+      const F = this.free;
+      const len = Math.hypot(F.pos.x - c.x, F.pos.y - c.y) || 1;
+      const away = {
+        x: Math.max(60, Math.min(innerWidth - 60, F.pos.x + ((F.pos.x - c.x) / len) * 200)),
+        y: Math.max(50, Math.min(innerHeight - 50, F.pos.y + ((F.pos.y - c.y) / len) * 140)),
+      };
+      return { kind: 'flee', pull: 9, until: now + 1100, target: () => away };
+    }
+
+    // The "6 7", where it floats.
+    freeSixSeven(now) {
+      const base = { ...this.free.pos };
+      this.setMood('happy', SIX_SEVEN);
+      sixSeven(this.el);
+      return { kind: 'sixseven', pull: 4, until: now + SIX_SEVEN + 300, target: () => base };
+    }
+
     nextMove(now, c, box) {
       if (c && now - this.cursorAt > 9000) return this.doze(now);
       const roll = Math.random();
@@ -793,6 +1088,7 @@
       'auto-hide-distance': 300,     // px around the island where it comes back
       notifications: true,           // Windows notifications in the island
       claude: false,                 // Claude plan usage (if Claude Code is installed)
+      'kys-grab': false,             // the hidden island's eyes can be pulled out: Kys runs free on the screen
       'kys-brain': 'simple',         // what Kys understands: "simple" (rules), "light" or "smart" (a local model, brain.rs)
       'notification-duration': 6,    // seconds
       transients: { volume: true, media: true, battery: true, network: true, workspace: true },
@@ -826,13 +1122,19 @@
         });
         notch.addEventListener('mouseleave', () => {
           S.dragging = false; // a drag can't go on without the mouse
-          if (S.dodged || S.typing || S.kysDragging) return; // typing to Kys, giving it something: stays open
+          if (S.dodged || S.typing || S.kysDragging || S.kysFree) return; // typing to Kys, giving it something: stays open
           clearTimeout(enterT);
           if (S.notif) return startNotifTimer(m, 2500);
           leaveT = setTimeout(() => setExpanded(m, false), m.conf['collapse-delay']);
         });
       }
+      // Option "kys-grab": the hidden island's eyes can be pulled out (see kysGrab), and caught back.
+      notch.addEventListener('pointerdown', (e) => kysGrab(m, e));
+      S.eyes.flyer.addEventListener('pointerdown', (e) => { if (S.kysFree) S.eyes.grab(e); });
+      S.eyes.onHome = (F) => kysHome(m, F);
+      api.kys.free(false); // a page loaded again while Kys was out: the window back to its strip
       notch.addEventListener('click', (e) => {
+        if (S.kysFree) return;
         if (S.dodged) return S.eyes.poke();
         if (S.peeking && nearEyes(S, e)) return catchKys(m);
         if (S.notif) {
@@ -874,7 +1176,7 @@
         if (m.conf.notifications === false) return;
         S.unread++;
         S.queue.push(data);
-        if (!S.notif && !S.expanded && !S.dodged) showNextNotif(m); // hidden: shown when it comes back
+        if (!S.notif && !S.expanded && !S.dodged && !S.kysFree) showNextNotif(m); // hidden: shown when it comes back
         return;
       }
       const prev = S.data[topic];
@@ -917,10 +1219,12 @@
 
     onDodge(m, on) {
       const S = m.island;
-      if (!S) return;
+      if (!S || S.kysFree) return;
       if (on && S.peeking) endPeek(m);
       S.dodged = on;
       S.notch.el.classList.toggle('dodged', on);
+      // Its eyes can be grabbed (option "kys-grab"): the hidden island takes the mouse.
+      S.notch.el.dataset.grab = on && m.conf['kys-grab'] === true && m.conf['dodge-eyes'] !== false ? '1' : '0';
       if (on && m.conf['dodge-eyes'] !== false) S.eyes.start(m.conf['dodge-roam'] !== false ? m.conf['dodge-roam-delay'] : 0);
       else S.eyes.stop();
       if (on) {
@@ -1086,7 +1390,7 @@
 
   /** `force`: to eat or play, even with peeking turned off. */
   function canPeek(m, S, force = false) {
-    return (force || m.conf.peek !== false) && !S.expanded && !S.notif && !S.transient && !S.dodged && S.near !== false
+    return (force || m.conf.peek !== false) && !S.expanded && !S.notif && !S.transient && !S.dodged && !S.kysFree && S.near !== false
       && !document.hidden && String(S.notch.key).startsWith('compact');
   }
 
@@ -1196,7 +1500,7 @@
   /** Only a resting island hides from the cursor (not while open, showing a notification, or
    *  with Kys peeking: it can be approached slowly and caught). */
   function updateDodgeable(S) {
-    S.notch.el.dataset.dodgeable = !S.expanded && !S.notif && !S.peeking ? '1' : '0';
+    S.notch.el.dataset.dodgeable = !S.expanded && !S.notif && !S.peeking && !S.kysFree ? '1' : '0';
   }
 
   // --- Kys, the eyes as a pet (kys.rs) -------------------------------------------------------------
@@ -1302,6 +1606,57 @@
       startPeek(m, { duration: 4000, quiet: true, force: true });
       setTimeout(feel, 420);
     }
+  }
+
+  /**
+   * Option "kys-grab": coming slowly, the hidden island's eyes can be grabbed and pulled out. Kys
+   * runs free on the screen in its drop, the island gone with it, until it's caught (it panics)
+   * and brought back to its spot, where the island forms again (see Eyes, free).
+   */
+  function kysGrab(m, e) {
+    const S = m.island;
+    if (m.conf['kys-grab'] !== true || !S.dodged || S.kysFree || e.button !== 0 || !nearEyes(S, e)) return;
+    const notch = S.notch.el;
+    notch.setPointerCapture(e.pointerId);
+    const from = { x: e.clientX, y: e.clientY };
+    const move = (ev) => {
+      if (!S.kysFree) {
+        if (Math.hypot(ev.clientX - from.x, ev.clientY - from.y) < 6) return; // a click (a poke), so far
+        S.kysFree = true;
+        const rect = notch.getBoundingClientRect();
+        notch.classList.add('kys-away', 'pulling'); // the island goes with it
+        S.eyes.pullOut(rect);
+        S.dodged = false;
+        notch.classList.remove('dodged');
+        notch.dataset.grab = '0';
+        updateDodgeable(S);
+        api.kys.free(true); // the window covers the screen, for it to run around
+      }
+      S.eyes.hold({ x: ev.clientX, y: ev.clientY });
+    };
+    const up = (ev) => {
+      notch.removeEventListener('pointermove', move);
+      notch.removeEventListener('pointerup', up);
+      notch.removeEventListener('pointercancel', up);
+      notch.classList.remove('pulling');
+      if (S.kysFree) S.eyes.letGo({ x: ev.clientX, y: ev.clientY });
+    };
+    notch.addEventListener('pointermove', move);
+    notch.addEventListener('pointerup', up);
+    notch.addEventListener('pointercancel', up);
+  }
+
+  /** Kys back in its spot: the island forms again (a few credits if it was caught). */
+  function kysHome(m, F) {
+    const S = m.island;
+    S.kysFree = false;
+    S.notch.el.classList.remove('kys-away', 'pulling');
+    S.eyes.stop();
+    updateDodgeable(S);
+    api.kys.free(false);
+    if (F.caught) api.kys.earn('catch');
+    if (!S.notif && S.queue.length) showNextNotif(m); // notifications that arrived meanwhile
+    else render(m);
   }
 
   /** How long the "6 7" lasts, in ms. */

@@ -590,6 +590,23 @@ body.pos-bottom .goo-island { border-radius: 46px 46px 0 0; }
 .eye-flyer .notch-eyes { opacity: 1; gap: 13px; translate: none; transition: none; }
 .eye-flyer .notch-eyes i { width: 12px; height: 15px; border-radius: 5px; }
 .eye-flyer .notch-eyes b { opacity: var(--brow); }
+/* Kys running free (option "kys-grab", island.js): the island is gone meanwhile; Kys can be caught
+   (it panics: brows up, eyes wide and darting). Far from the island it's a plain pill (no goo). */
+.notch.kys-away { opacity: 0; transition: opacity .2s ease; }
+.notch.kys-away:not(.pulling) { pointer-events: none; }
+.eye-flyer.free { pointer-events: auto; cursor: grab; }
+.eye-flyer.free.held { cursor: grabbing; }
+.eye-flyer.pill::before {
+  content: '';
+  position: absolute;
+  inset: -2px -2px;
+  border-radius: 22px;
+  background: var(--notch-bg);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18), 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.goo-island { transform-origin: 50% 0; transition: scale .45s cubic-bezier(.5, 0, .5, 1); }
+.goo-island.gone { scale: .3 0; }
+.notch-eyes[data-mood=panic] { --brow: 1; --bl-y: -5px; --br-y: -5px; --bl-r: -22deg; --br-r: 22deg; --lid-l: 1.2; --lid-r: 1.2; }
 /* Dizzy (circled), then eyes shut shaking its head (dazed); back from a flight, frowning and
    squinting to see where it is (squint). */
 .notch-eyes[data-mood=dazed] { --brow: 1; --bl-y: -2px; --br-y: -2px; --bl-r: -14deg; --br-r: 14deg; --lid-l: .1; --lid-r: .1; }

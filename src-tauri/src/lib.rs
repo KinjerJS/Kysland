@@ -60,6 +60,9 @@ struct Bar {
     near: bool,
     /// Auto-hide: since when the cursor is too far (the island hides a moment later).
     far_since: Option<Instant>,
+    /// Kys pulled out of the island and running free (option "kys-grab"): the window covers the
+    /// whole screen, the island neither dodges nor auto-hides, and the page follows the cursor.
+    free: bool,
 }
 
 #[derive(Default)]
@@ -152,7 +155,7 @@ fn create_bars(app: &AppHandle, cfg: &Value) {
             monitor: (p.x, p.y, s.width as i32, s.height as i32), scale: m.scale_factor(),
             appbar: (cfg["reserve"] == true).then(|| win32::AppBar::register(hwnd)),
             rects: vec![], notch: None, interactive: false, fullscreen: false, dark: false,
-            dodgeable: false, dodge: None, dodge_armed: false, grab: false, press_inside: false, watch: false, watch_seen: false, near: true, far_since: None,
+            dodgeable: false, dodge: None, dodge_armed: false, grab: false, press_inside: false, watch: false, watch_seen: false, near: true, far_since: None, free: false,
         };
         position_bar(&mut bar, cfg);
         let _ = win.set_ignore_cursor_events(true);
@@ -162,7 +165,15 @@ fn create_bars(app: &AppHandle, cfg: &Value) {
 }
 
 fn position_bar(bar: &mut Bar, cfg: &Value) {
+    let rc = bar_rect(bar, cfg);
+    win32::place_window(bar.hwnd, rc, !bar.fullscreen);
+}
+
+/// Where a bar's window goes: its strip (the bar and the room below it for the island), or the
+/// whole screen while Kys runs free.
+fn bar_rect(bar: &mut Bar, cfg: &Value) -> (i32, i32, i32, i32) {
     let (x, y, w, h) = bar.monitor;
+    if bar.free { return (x, y, w, h); }
     let height = cfg["height"].as_f64().unwrap_or(32.0);
     let total = ((height + cfg["popup-space"].as_f64().unwrap_or(420.0)) * bar.scale).round() as i32;
     let bottom = cfg["position"] == "bottom";
@@ -172,7 +183,7 @@ fn position_bar(bar: &mut Bar, cfg: &Value) {
         None => monitor,
     };
     let top = if bottom { rc.bottom - total } else { rc.top };
-    win32::place_window(bar.hwnd, (x, top, w, total), !bar.fullscreen);
+    (x, top, w, total)
 }
 
 fn destroy_bars(app: &AppHandle) {
@@ -381,14 +392,15 @@ fn background_loop(app: AppHandle) {
                     let Some(rc) = win32::window_rect(bar.hwnd) else { continue };
                     // Cursor in CSS pixels of the window.
                     let (px, py) = ((cx - rc.left) as f64 / bar.scale, (cy - rc.top) as f64 / bar.scale);
-                    if let Some(near) = presence_step(bar, auto_hide, bottom, (cx, cy), rc, (px, py), now) { presences.push((bar.label.clone(), near)); }
-                    let change = dodge_step(bar, dodge_speed, px, py, speed / bar.scale);
+                    let free = bar.free; // Kys out of the island: no dodging nor auto-hide meanwhile
+                    if !free && let Some(near) = presence_step(bar, auto_hide, bottom, (cx, cy), rc, (px, py), now) { presences.push((bar.label.clone(), near)); }
+                    let change = if free { None } else { dodge_step(bar, dodge_speed, px, py, speed / bar.scale) };
                     if let Some(on) = change { dodges.push((bar.label.clone(), on)); }
                     // The hidden island no longer gets mouse events: its eyes follow the cursor through the engine.
                     // (and to the eyes peeking into the resting island, from the moment they show up)
                     let peeking_now = bar.watch && !bar.watch_seen;
                     bar.watch_seen = bar.watch;
-                    if ((eyes && bar.dodge.is_some()) || bar.watch) && (moved || change.is_some() || peeking_now) {
+                    if ((eyes && bar.dodge.is_some()) || bar.watch || free) && (moved || change.is_some() || peeking_now) {
                         gazes.push((bar.label.clone(), px, py));
                     }
                     // A hidden island lets clicks through to what's behind it.
@@ -698,7 +710,7 @@ fn set_setting(app: AppHandle, key: String, value: Value) -> Result<(), String> 
     match key.as_str() {
         "language" | "monitors" | "hide-on-fullscreen" => config::set_value(&[&key], value),
         "dodge" | "dodge-eyes" | "dodge-roam" | "dodge-roam-delay" | "dodge-speed" | "auto-hide" | "auto-hide-distance" | "peek" | "outline"
-        | "claude" | "notifications" | "kys-brain"
+        | "claude" | "notifications" | "kys-brain" | "kys-grab"
         | "hide-windows-osd" | "expand-on-hover" => {
             config::set_value(&[&island, &key], value)
         }
@@ -735,6 +747,25 @@ async fn kys_wear(item: Option<String>) -> Result<(), String> { kys::wear(item.a
 
 #[tauri::command]
 async fn kys_play() -> Result<(), String> { kys::play() }
+
+/// Kys pulled out of the island, or back in (option "kys-grab"): the window covers the whole screen
+/// while it runs free, clicks going through everywhere but on it.
+#[tauri::command]
+fn kys_free(window: WebviewWindow, on: bool) {
+    let label = window.label().to_owned();
+    let app = window.app_handle().clone();
+    later(&app, move || {
+        let cfg = with(|s| s.cfg.clone());
+        let placed = with(|s| s.bars.iter_mut().find(|b| b.label == label).map(|bar| {
+            bar.free = on;
+            bar.dodge = None;
+            bar.dodge_armed = false;
+            (bar.hwnd, bar_rect(bar, &cfg), !bar.fullscreen)
+        }));
+        // Moved outside the lock: resizing the window lets its page run meanwhile.
+        if let Some((hwnd, rc, topmost)) = placed { win32::place_window(hwnd, rc, topmost); }
+    });
+}
 
 /// Talking to Kys: its answer, once it acted on it (see brain.rs). The smart brain takes a few
 /// seconds of CPU, off the command threads.
@@ -1049,7 +1080,7 @@ pub fn run() {
         )
         .invoke_handler({
             let commands: Box<dyn Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync> = Box::new(tauri::generate_handler![init, run_command, notifications, set_hit_rects, action, settings_state, set_setting, settings_action,
-                kys_state, kys_earn, kys_buy, kys_feed, kys_wear, kys_play, kys_talk, kys_brain, kys_brain_model, kys_typing, kys_warm]);
+                kys_state, kys_earn, kys_buy, kys_feed, kys_wear, kys_play, kys_talk, kys_brain, kys_brain_model, kys_typing, kys_warm, kys_free]);
             // Which command runs (sync ones run on the main thread), for the watchdog's log.
             move |invoke: tauri::ipc::Invoke<tauri::Wry>| {
                 *RUNNING.lock().unwrap() = Some((invoke.message.command().to_owned(), Instant::now()));

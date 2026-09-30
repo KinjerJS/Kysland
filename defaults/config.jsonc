@@ -37,6 +37,7 @@
     "dodge-roam": true,                  // cursor still close after a while: the notch grows and the eyes roam around
     "dodge-roam-delay": 20,              // seconds
     "peek": true,                        // now and then, the eyes squeeze into the notch to check on the mouse; rush at them and they flee
+    "kys-grab": false,                   // grab the eyes of the hidden island and pull: Kys runs free on the screen until caught and brought back
     "kys-brain": "simple",               // talking to Kys: "simple" (commands and a few phrases), or a small AI on your PC, downloaded from the settings: "light" (fast) or "smart" (much better company)
     "auto-hide": false,                  // hides while the mouse is far away or on another screen; comes back as it gets near
     "auto-hide-distance": 300,           // px around the notch where it comes back
