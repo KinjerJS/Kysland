@@ -1527,6 +1527,7 @@
   /** Eating: the mouth chomps a few times, crumbs falling (not on the small resting island). */
   function mouthChew(eyes, crumbs = true) {
     mouthOpen(eyes, 0);
+    eyes.style.setProperty('--side', Math.random() < 0.5 ? -1 : 1); // chews on one side or the other
     eyes.classList.remove('chewing');
     void eyes.offsetWidth;
     eyes.classList.add('chewing');

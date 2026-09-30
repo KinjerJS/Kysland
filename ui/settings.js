@@ -632,6 +632,7 @@
     /** Eating: the mouth chomps a few times, crumbs falling. */
     chew() {
       this.mouth(0);
+      this.el.style.setProperty('--side', Math.random() < 0.5 ? -1 : 1); // chews on one side or the other
       this.el.classList.remove('chewing');
       void this.el.offsetWidth;
       this.el.classList.add('chewing');
