@@ -249,6 +249,7 @@ h2 {
 .buddy-eyes[data-mood=happy]      { --brow: 1; --bl-y: -3px; --br-y: -3px; --lid-l: .45; --lid-r: .45; }
 .buddy-eyes[data-mood=happy] i    { border-radius: 50% 50% 2px 2px / 90% 90% 2px 2px; }
 .buddy-eyes[data-mood=sleepy]     { --lid-l: .3; --lid-r: .3; }
+.buddy-eyes[data-mood=dizzy]      { --brow: 1; --bl-y: -3px; --br-y: 1px; --bl-r: -8deg; --br-r: 10deg; --lid-l: .65; --lid-r: 1.1; }
 .buddy .zzz {
   position: absolute;
   left: calc(50% + 12px);

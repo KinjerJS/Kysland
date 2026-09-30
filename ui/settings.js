@@ -212,6 +212,28 @@
       this.cursorAt = now;
       this.trail.push({ t: now, x, y });
       while (this.trail.length && now - this.trail[0].t > 400) this.trail.shift();
+      this.spinCheck(x, y, now);
+    }
+
+    /** Circling the cursor around it (about a turn per second for two seconds) makes it dizzy. */
+    spinCheck(x, y, now) {
+      const dx = x - this.pos.x, dy = y - this.pos.y, r = Math.hypot(dx, dy);
+      const dt = this.spinAt ? (now - this.spinAt) / 1000 : 0;
+      this.spinAt = now;
+      this.spin = (this.spin || 0) * Math.exp(-dt / 1.6);
+      if (r < 20 || r > 300) { this.spinAngle = null; return; }
+      const a = Math.atan2(dy, dx);
+      if (this.spinAngle != null) {
+        let d = a - this.spinAngle;
+        if (d > Math.PI) d -= 2 * Math.PI;
+        else if (d < -Math.PI) d += 2 * Math.PI;
+        this.spin += d;
+      }
+      this.spinAngle = a;
+      if (Math.abs(this.spin) > 8) {
+        if (!this.dizzyUntil) { this.spinDir = Math.sign(this.spin) || 1; this.setMood('dizzy'); }
+        this.dizzyUntil = now + 2200;
+      }
     }
 
     /** Distance the cursor covered in the last 400 ms (a slow sneak doesn't wake it). */
@@ -237,7 +259,7 @@
       const out = this.mode === 'out';
       const asleep = this.move?.kind === 'doze';
       // Cursor onto it: hops away (out and about only, not in its sleep, not too often).
-      if (out && c && now - this.cursorAt < 400 && !asleep && this.move?.kind !== 'stick'
+      if (out && c && now - this.cursorAt < 400 && !asleep && !this.dizzyUntil && this.move?.kind !== 'stick'
           && now - (this.fledAt || 0) > 2200 && Math.hypot(c.x - this.pos.x, c.y - this.pos.y) < 42) {
         this.fledAt = now;
         this.setMove(this.flee(now, c));
@@ -259,6 +281,19 @@
       const breath = out ? Math.sin(now / 800) * 1.5 : 0;
       this.el.style.setProperty('--x', `${this.pos.x.toFixed(1)}px`);
       this.el.style.setProperty('--y', `${(this.pos.y + breath).toFixed(1)}px`);
+      if (this.dizzyUntil && now > this.dizzyUntil) {
+        // Over: a bit cross.
+        this.dizzyUntil = 0;
+        this.spin = 0;
+        this.setMood('grumpy', 1600);
+      }
+      if (this.dizzyUntil) {
+        // Rolling eyes, turning the way the cursor went round.
+        const a = (now / 90) * this.spinDir;
+        this.eyes.style.setProperty('--gx', `${(Math.cos(a) * 4).toFixed(2)}px`);
+        this.eyes.style.setProperty('--gy', `${(Math.sin(a) * 3).toFixed(2)}px`);
+        return;
+      }
       const spot = this.move.look?.(now) ?? c;
       if (spot) this.aim(spot.x, spot.y);
     }

@@ -231,6 +231,10 @@
     stop() {
       for (const timer of [this.blinkT, this.glanceT, this.backT, this.roamT, this.growT, this.moodT, this.shakeT, this.openT]) clearTimeout(timer);
       cancelAnimationFrame(this.raf);
+      cancelAnimationFrame(this.wobbleRaf);
+      this.dizzyUntil = 0;
+      this.spin = 0;
+      this.spinAngle = null;
       this.setMove(null);
       this.flight = null;
       if (this.el.parentElement !== this.notch) this.notch.appendChild(this.el); // was flying
@@ -257,8 +261,74 @@
       this.cursor = { x, y };
       this.trail.push({ t: now, x, y });
       while (this.trail.length && now - this.trail[0].t > 400) this.trail.shift();
-      // While roaming, the animation loop decides where to look.
-      if (!this.elsewhere && !this.roaming) this.aim(x, y);
+      if (!this.flight) this.spinCheck(x, y, now);
+      // While roaming, the animation loop decides where to look; dizzy, the eyes roll.
+      if (!this.elsewhere && !this.roaming && !this.isDizzy(now)) this.aim(x, y);
+    }
+
+    // --- Dizzy: the cursor circling around the eyes -------------------------------------------
+    /** Sums how far the cursor turns around the eyes, fading over ~1.6 s: about a turn per second
+     *  for two seconds makes them dizzy. Too close (on them) or too far doesn't count. */
+    spinCheck(x, y, now) {
+      const c = this.center();
+      const dx = x - c.x, dy = y - c.y, r = Math.hypot(dx, dy);
+      const dt = this.spinAt ? (now - this.spinAt) / 1000 : 0;
+      this.spinAt = now;
+      this.spin = (this.spin || 0) * Math.exp(-dt / 1.6);
+      if (r < 16 || r > 260) { this.spinAngle = null; return; }
+      const a = Math.atan2(dy, dx);
+      if (this.spinAngle != null) {
+        let d = a - this.spinAngle;
+        if (d > Math.PI) d -= 2 * Math.PI;
+        else if (d < -Math.PI) d += 2 * Math.PI;
+        this.spin += d;
+      }
+      this.spinAngle = a;
+      if (Math.abs(this.spin) > 8) this.dizzy(now);
+    }
+
+    isDizzy(now) { return now < (this.dizzyUntil || 0); }
+
+    dizzy(now) {
+      const already = this.isDizzy(now);
+      this.dizzyUntil = now + 2200; // as long as the circling goes on
+      if (already) return;
+      this.spinDir = Math.sign(this.spin) || 1;
+      this.setMood('dizzy');
+      if (this.roaming) {
+        // Sways on the spot (the loop rolls the eyes).
+        const base = { ...this.pos };
+        this.setMove({ kind: 'dizzy', pull: 3, until: Infinity, target: (t) => ({ x: base.x + Math.sin(t / 260) * 8, y: base.y + Math.sin(t / 370) * 4 }) });
+        return;
+      }
+      const step = (t) => {
+        if (this.roaming || !this.dizzyUntil) return; // the roaming loop took over, or stopped
+        if (!this.isDizzy(t)) return this.recover();
+        this.roll(t);
+        this.wobbleRaf = requestAnimationFrame(step);
+      };
+      this.wobbleRaf = requestAnimationFrame(step);
+    }
+
+    /** Rolling eyes, turning the way the cursor went round. */
+    roll(t) {
+      const [rx, ry] = this.roaming ? [5, 4] : [3, 1.5];
+      const a = (t / 90) * this.spinDir;
+      this.el.style.setProperty('--gx', `${(Math.cos(a) * rx).toFixed(2)}px`);
+      this.el.style.setProperty('--gy', `${(Math.sin(a) * ry).toFixed(2)}px`);
+    }
+
+    /** The circling stopped: eyes shut, shaking its head, a bit cross. */
+    recover() {
+      this.dizzyUntil = 0;
+      this.spin = 0;
+      if (this.move?.kind === 'dizzy') this.setMove(null);
+      this.el.classList.remove('shake');
+      void this.el.offsetWidth;
+      this.el.classList.add('shake');
+      clearTimeout(this.shakeT);
+      this.shakeT = setTimeout(() => this.el.classList.remove('shake'), 950);
+      this.setMood('dazed', 900, ['grumpy', 1400]);
     }
 
     center() {
@@ -308,7 +378,9 @@
         const asleep = this.move?.kind === 'doze';
         // Cursor right on the eyes: they jump away (not too often, and not in their sleep). Too close
         // to the edge in that direction, the jump throws them out of the island.
-        if (c && fresh && !asleep && now - this.fledAt > 1800 && Math.hypot(c.x - this.pos.x, c.y - this.pos.y) < 28) {
+        if (this.dizzyUntil && !this.isDizzy(now)) this.recover();
+        const dizzy = this.isDizzy(now);
+        if (c && fresh && !asleep && !dizzy && now - this.fledAt > 1800 && Math.hypot(c.x - this.pos.x, c.y - this.pos.y) < 28) {
           this.fledAt = now;
           const len = Math.hypot(this.pos.x - c.x, this.pos.y - c.y) || 1;
           const dir = { x: (this.pos.x - c.x) / len, y: (this.pos.y - c.y) / len };
@@ -334,7 +406,9 @@
         const breath = Math.sin(now / 700) * 1.2;
         this.el.style.setProperty('--ex', `${this.pos.x.toFixed(1)}px`);
         this.el.style.setProperty('--ey', `${(this.pos.y + breath).toFixed(1)}px`);
-        if (!this.elsewhere) {
+        if (dizzy) {
+          this.roll(now);
+        } else if (!this.elsewhere) {
           const spot = this.move.look?.(now); // somewhere else than the cursor
           if (spot) this.aim(mid.x + spot.x, mid.y + spot.y);
           else if (this.cursor) this.aim(this.cursor.x, this.cursor.y);
