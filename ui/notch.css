@@ -648,34 +648,53 @@ body.pos-bottom .notch.splash { transform-origin: 50% 100%; }
 .notch.peek .notch-eyes.hungry .ask, .notch.roaming .notch-eyes.hungry .ask { display: block; }
 @keyframes kys-ask { 50% { margin-top: -3px; } }
 .notch-eyes[data-mood=sad] { --brow: 1; --bl-y: -2px; --br-y: -2px; --bl-r: -16deg; --br-r: 16deg; --lid-l: .72; --lid-r: .72; }
-/* Kys's mouth (island.js): none until food comes near, then it opens wider and wider (--open, 0 to
-   1) and the eyes go up a little to make room; eating, it chomps a few times. */
+/* Kys's mouth (island.js), white like its eyes: none until food comes near, then it opens wider
+   and wider (--open, 0 to 1) and the eyes go up a little to make room. Eating, it's a C chomping
+   round and round in a small circle. */
 .notch-eyes .mouth {
-  --mw: 10px; --mh: 7px;
+  --mw: 9px; --mh: 7px; --mc: 6px; --ms: 1.5px; --orbit: 1px;
   position: absolute;
   left: 50%;
   top: calc(50% + var(--mouth-y, 6px));
+  box-sizing: border-box;
   width: var(--mw);
   height: var(--mh);
   margin: calc(var(--mh) / -2) 0 0 calc(var(--mw) / -2);
-  overflow: hidden;
-  border-radius: 45% 45% 50% 50% / 35% 35% 65% 65%;
-  background: #5c1628;
-  box-shadow: 0 0 0 1.5px var(--notch-fg);
+  border-radius: 40% 40% 50% 50% / 35% 35% 65% 65%;
+  background: var(--notch-fg);
   opacity: 0;
-  scale: calc(.45 + .55 * var(--open, 0)) max(.16, var(--open, 0));
+  scale: calc(.5 + .5 * var(--open, 0)) max(.2, var(--open, 0));
   translate: calc(var(--gx) * .4) 0;
   transition: scale .12s ease, opacity .15s ease;
   pointer-events: none;
 }
-.notch-eyes .mouth::after { content: ''; position: absolute; left: 20%; right: 20%; bottom: -25%; height: 55%; border-radius: 50%; background: #ff6b8a; }
 .notch-eyes .eye { transition: translate .15s ease; }
 .notch-eyes.mouthy .mouth, .notch-eyes.chewing .mouth { opacity: 1; }
 .notch-eyes.mouthy .eye, .notch-eyes.chewing .eye { translate: 0 var(--mouth-lift, -3px); }
-.notch-eyes.chewing .mouth { animation: kys-chew .24s ease-in-out 5; }
-@keyframes kys-chew { 0%, 100% { scale: .8 .18; } 50% { scale: .85 .8; } }
+.notch-eyes.chewing .mouth {
+  width: var(--mc);
+  height: var(--mc);
+  margin: calc(var(--mc) / -2) 0 0 calc(var(--mc) / -2);
+  border: var(--ms) solid var(--notch-fg);
+  border-right-color: transparent;
+  border-radius: 50%;
+  background: none;
+  scale: 1;
+  transition: none;
+  animation: kys-chew .32s linear 4;
+}
+@keyframes kys-chew {
+  0%, 100% { translate: calc(var(--orbit) * 1) 0; rotate: -12deg; }
+  12.5% { translate: calc(var(--orbit) * 0.71) calc(var(--orbit) * 0.71); rotate: -4deg; }
+  25% { translate: 0 calc(var(--orbit) * 1); rotate: 8deg; }
+  37.5% { translate: calc(var(--orbit) * -0.71) calc(var(--orbit) * 0.71); rotate: 12deg; }
+  50% { translate: calc(var(--orbit) * -1) 0; rotate: 4deg; }
+  62.5% { translate: calc(var(--orbit) * -0.71) calc(var(--orbit) * -0.71); rotate: -8deg; }
+  75% { translate: 0 calc(var(--orbit) * -1); rotate: -12deg; }
+  87.5% { translate: calc(var(--orbit) * 0.71) calc(var(--orbit) * -0.71); rotate: -4deg; }
+}
 .notch.roaming .notch-eyes { --mouth-y: 11px; --mouth-lift: -5px; }
-.notch.roaming .notch-eyes .mouth { --mw: 14px; --mh: 10px; }
+.notch.roaming .notch-eyes .mouth { --mw: 13px; --mh: 10px; --mc: 9px; --ms: 2.5px; --orbit: 1.5px; }
 .kys-crumb {
   position: fixed;
   z-index: 20;
@@ -745,7 +764,7 @@ body.pos-bottom .notch.splash { transform-origin: 50% 100%; }
 .n-kys-face .notch-eyes[data-mood=happy] i { border-radius: 50% 50% 2px 2px / 90% 90% 2px 2px; }
 .n-kys-face .notch-eyes b { opacity: var(--brow); width: 12px; margin-bottom: 3px; }
 .n-kys-face .notch-eyes { --mouth-y: 8px; --mouth-lift: -5px; }
-.n-kys-face .notch-eyes .mouth { --mw: 13px; --mh: 10px; }
+.n-kys-face .notch-eyes .mouth { --mw: 12px; --mh: 9px; --mc: 9px; --ms: 2.5px; --orbit: 1.5px; }
 .n-kys-face.think .notch-eyes { --gx: 3px !important; --gy: -3px !important; } /* looks up while it thinks */
 .n-kys-face .hat, .n-kys-face .ask { position: absolute; left: 50%; top: 50%; line-height: 1; pointer-events: none; }
 .n-kys-face .hat { font-size: 18px; translate: -50% calc(-50% - 27px); }

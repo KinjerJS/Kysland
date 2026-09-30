@@ -1500,7 +1500,7 @@
     const chew = () => {
       mouthChew(eyes);
       faceMood(face, 'happy', 2200);
-      floatAt(c, '❤', 'heart');
+      floatAt({ x: c.x + 30, y: c.y - 6 }, '❤', 'heart'); // beside the mouth, not over it
     };
     if (performance.now() - (S.handFedAt || 0) < 1500) return chew(); // given by hand: already in its mouth
     // Otherwise (fed from the settings) the food drops in, its mouth wide open.

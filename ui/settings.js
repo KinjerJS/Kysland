@@ -680,7 +680,7 @@
       const chew = () => {
         this.chew();
         this.setMood('happy', 2200);
-        floatAt(this.pos, '❤', 'heart');
+        floatAt({ x: this.pos.x + 32, y: this.pos.y }, '❤', 'heart'); // beside the mouth, not over it
       };
       if (performance.now() - (this.handFedAt || 0) < 1500) return chew(); // already in its mouth
       const at = this.mouthAt();
