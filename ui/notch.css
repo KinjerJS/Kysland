@@ -504,23 +504,7 @@ body.pos-bottom .notch.dodged.eyes { border-radius: 6px 6px 0 0; }
 }
 .notch-eyes.sixseven .eye.l::after { content: '6'; }
 .notch-eyes.sixseven .eye.r::after { content: '7'; }
-/* ...and two little hands under them, palms up (thumbs in), going up and down with them. */
-.notch-eyes.sixseven .eye::before {
-  --hand: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 16'%3E%3Cpath d='M2.5 7.5H21.5C21.5 12 18 15 13.5 15H10.5C6 15 2.5 12 2.5 7.5Z'/%3E%3Ccircle cx='5.6' cy='7.6' r='2'/%3E%3Ccircle cx='9.6' cy='6.9' r='2.1'/%3E%3Ccircle cx='13.9' cy='6.9' r='2.1'/%3E%3Ccircle cx='18.1' cy='7.4' r='2'/%3E%3Crect x='0.6' y='1.6' width='3.6' height='8' rx='1.8' transform='rotate(-22 2.4 5.6)'/%3E%3C/svg%3E");
-  content: '';
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  width: var(--hw, 9px);
-  height: calc(var(--hw, 9px) * 2 / 3);
-  translate: calc(-50% - var(--hx, 3px)) var(--hy, 2px);
-  background: var(--notch-fg);
-  -webkit-mask: var(--hand) center / contain no-repeat;
-  mask: var(--hand) center / contain no-repeat;
-}
-.notch-eyes.sixseven .eye.l::before { scale: -1 1; }
-.notch-eyes.sixseven .eye.r::before { translate: calc(-50% + var(--hx, 3px)) var(--hy, 2px); }
-.notch.roaming .notch-eyes { --b67: 4px; --n67: 12px; --hw: 15px; --hx: 6px; }
+.notch.roaming .notch-eyes { --b67: 4px; --n67: 12px; }
 /* Asleep, a cursor sneaking right up: the eye on that side opens a crack (island.js). */
 .notch-eyes[data-mood=sleepy].peek-l { --lid-l: .65; }
 .notch-eyes[data-mood=sleepy].peek-r { --lid-r: .65; }
@@ -803,7 +787,7 @@ body.pos-bottom .notch.splash { transform-origin: 50% 100%; }
 .n-kys-face .notch-eyes i { width: 9px; height: 11px; border-radius: 3.5px; }
 .n-kys-face .notch-eyes[data-mood=happy] i { border-radius: 50% 50% 2px 2px / 90% 90% 2px 2px; }
 .n-kys-face .notch-eyes b { opacity: var(--brow); width: 12px; margin-bottom: 3px; }
-.n-kys-face .notch-eyes { --mouth-y: 8px; --mouth-lift: -5px; --b67: 3px; --n67: 10px; --hw: 13px; --hx: 5px; }
+.n-kys-face .notch-eyes { --mouth-y: 8px; --mouth-lift: -5px; --b67: 3px; --n67: 10px; }
 .n-kys-face .notch-eyes .mouth { --mw: 12px; --mh: 9px; --mc: 7px; --ms: 2px; --orbit: 1.2px; --mx: 5px; }
 .n-kys-face.think .notch-eyes { --gx: 3px !important; --gy: -3px !important; } /* looks up while it thinks */
 .n-kys-face .hat, .n-kys-face .ask { position: absolute; left: 50%; top: 50%; line-height: 1; pointer-events: none; }

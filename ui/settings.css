@@ -265,22 +265,6 @@ h2 {
 }
 .buddy-eyes.sixseven .eye.l::after { content: '6'; }
 .buddy-eyes.sixseven .eye.r::after { content: '7'; }
-/* ...and two little hands under them, palms up (thumbs in), going up and down with them. */
-.buddy-eyes.sixseven .eye::before {
-  --hand: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 16'%3E%3Cpath d='M2.5 7.5H21.5C21.5 12 18 15 13.5 15H10.5C6 15 2.5 12 2.5 7.5Z'/%3E%3Ccircle cx='5.6' cy='7.6' r='2'/%3E%3Ccircle cx='9.6' cy='6.9' r='2.1'/%3E%3Ccircle cx='13.9' cy='6.9' r='2.1'/%3E%3Ccircle cx='18.1' cy='7.4' r='2'/%3E%3Crect x='0.6' y='1.6' width='3.6' height='8' rx='1.8' transform='rotate(-22 2.4 5.6)'/%3E%3C/svg%3E");
-  content: '';
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  width: var(--hw, 15px);
-  height: calc(var(--hw, 15px) * 2 / 3);
-  translate: calc(-50% - var(--hx, 6px)) var(--hy, 2px);
-  background: var(--fg);
-  -webkit-mask: var(--hand) center / contain no-repeat;
-  mask: var(--hand) center / contain no-repeat;
-}
-.buddy-eyes.sixseven .eye.l::before { scale: -1 1; }
-.buddy-eyes.sixseven .eye.r::before { translate: calc(-50% + var(--hx, 6px)) var(--hy, 2px); }
 /* Asleep, a cursor sneaking right up: the eye on that side opens a crack (settings.js). */
 .buddy-eyes[data-mood=sleepy].peek-l { --lid-l: .65; }
 .buddy-eyes[data-mood=sleepy].peek-r { --lid-r: .65; }
