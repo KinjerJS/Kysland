@@ -18,9 +18,15 @@
   const TOP = { language: 'language', monitors: 'monitors', 'hide-on-fullscreen': 'hideOnFullscreen', autostart: 'autostart' };
 
   let S = null;
+  let K = null; // Kys, the eyes as a pet (kys.rs)
+  // Tab: "#kys" when opened from the Kys menu entry, otherwise the one used last.
+  let tab = location.hash === '#kys' ? 'kys' : (() => {
+    try { return localStorage.getItem('tab') || 'settings'; } catch { return 'settings'; }
+  })();
 
   async function load() {
-    S = await invoke('settings_state');
+    [S, K] = await Promise.all([invoke('settings_state'), invoke('kys_state')]);
+    buddy.setKys(K);
     S.island = { ...ISLAND, ...S.island };
     S.language = S.language ?? 'auto';
     S.monitors = S.monitors ?? 'primary';
@@ -96,7 +102,7 @@
     const roamOff = eyesOff || !I['dodge-roam'];
     document.title = t('set.window_title');
     $('.version').textContent = t('set.version', { version: S.version });
-    $('#sections').innerHTML = [
+    $('#sections').innerHTML = tabsBar() + (tab === 'kys' && K ? kysTab() : [
       section(t('set.general'), [
         row(t('set.language'), '', seg('language', [['auto', t('set.lang_auto')], ['en', 'English'], ['fr', 'Français']])),
         row(t('set.autostart'), t('set.autostart_desc'), toggle('autostart')),
@@ -131,13 +137,109 @@
           action('reload', 'refresh-cw', t('set.reload')),
         ].join('')}</div>`,
       ]),
+    ].join(''));
+  }
+
+  // --- Kys tab: the eyes as a pet (kys.rs) ----------------------------------------------------------
+  // Its belly and joy, the credits, what it owns (food to give, the ball, things to wear), the shop,
+  // and how to earn credits with today's progress. Every change goes through the engine, which
+  // tells every window (the island shows Kys eating or playing).
+  const KYS_ICON = { cookie: '🍪', apple: '🍎', candy: '🍬', cake: '🍰', ball: '⚽', bow: '🎀', cap: '🧢', glasses: '👓', crown: '👑' };
+
+  const tabsBar = () => `<div class="tabs seg">${[['kys', 'Kys'], ['settings', t('set.tab_settings')]]
+    .map(([id, label]) => `<button class="${tab === id ? 'on' : ''}" data-tab="${id}">${esc(label)}</button>`).join('')}</div>`;
+
+  function kysEffect(i) {
+    if (i.kind === 'toy') return t('kys.effect_toy');
+    if (i.kind === 'wear') return t('kys.effect_wear');
+    return [i.food && t('kys.effect_food', { n: i.food }), i.joy && t('kys.effect_joy', { n: i.joy })].filter(Boolean).join(' · ');
+  }
+
+  const itemRow = (i, count, control) => `<div class="row"><div class="text"><div class="title">${KYS_ICON[i.id]} ${esc(t(`kys.item.${i.id}`))}`
+    + `${count ? ` <span class="count">${esc(count)}</span>` : ''}</div></div><div class="control">${control}</div></div>`;
+
+  const earnRow = (label, credits, today) => `<div class="row"><div class="text"><div class="title">${esc(label)}</div></div>`
+    + `<div class="control earn"><span class="plus">${esc(credits)} ✦</span><span class="today">${esc(today)}</span></div></div>`;
+
+  function kysTab() {
+    const k = K;
+    const hungry = k.food < 30, sad = k.food < 10 || k.joy < 15;
+    const status = sad ? 'kys.status_sad' : hungry ? 'kys.status_hungry' : k.food > 60 && k.joy > 70 ? 'kys.status_great' : 'kys.status_ok';
+    const bar = (label, value, cls) => `<div class="kys-bar"><span>${esc(label)}</span>`
+      + `<div class="track"><div class="fill ${cls}" style="width:${value}%"></div></div><b>${value}</b></div>`;
+    const top = `<div class="kys-top">
+        <div class="kys-credits"><span class="coin">✦</span><b>${k.credits}</b><span>${esc(t('kys.credits'))}</span></div>
+        ${k.streak > 1 ? `<div class="kys-streak">🔥 ${esc(t('kys.streak', { n: k.streak }))}</div>` : ''}
+      </div>
+      <div class="kys-bars">${bar(t('kys.food'), k.food, 'food')}${bar(t('kys.joy'), k.joy, 'joy')}</div>
+      <div class="kys-status${sad || hungry ? ' warn' : ''}">${esc(t(status))}</div>`;
+    const foods = k.items.filter((i) => i.kind === 'food' && (k.inventory[i.id] || 0) > 0);
+    const owned = k.items.filter((i) => i.kind !== 'food' && k.owned.includes(i.id));
+    const inventory = [
+      ...foods.map((i) => itemRow(i, `×${k.inventory[i.id]}`, `<button class="btn" data-kys-feed="${i.id}">${esc(t('kys.give'))}</button>`)),
+      ...owned.map((i) => {
+        if (i.kind === 'toy') {
+          return itemRow(i, '', `<button class="btn" data-kys-play="1" ${k.canPlay ? '' : 'disabled'}>${esc(t(k.canPlay ? 'kys.play' : 'kys.resting'))}</button>`);
+        }
+        const worn = k.wearing === i.id;
+        return itemRow(i, '', `<button class="btn${worn ? ' on' : ''}" data-kys-wear="${worn ? '-' : i.id}">${esc(t(worn ? 'kys.take_off' : 'kys.wear'))}</button>`);
+      }),
+    ];
+    const shop = k.items.map((i) => {
+      const have = i.kind !== 'food' && k.owned.includes(i.id);
+      return `<div class="shop-item${have ? ' have' : ''}"><div class="shop-icon">${KYS_ICON[i.id]}</div>`
+        + `<div class="shop-name">${esc(t(`kys.item.${i.id}`))}</div><div class="shop-effect">${esc(kysEffect(i))}</div>`
+        + `<button class="btn" data-kys-buy="${i.id}" ${have || k.credits < i.price ? 'disabled' : ''}>${have ? esc(t('kys.owned')) : `✦ ${i.price}`}</button></div>`;
+    }).join('');
+    const earn = [
+      ...k.sources.map((s) => earnRow(t(`kys.source.${s.id}`), `+${s.credits}`, `${s.today}/${s.cap}`)),
+      earnRow(t('kys.source.daily'), '+10', ''),
+    ];
+    return [
+      section('Kys', [`<div class="kys-card">${top}</div>`]),
+      section(t('kys.inventory'), inventory.length ? inventory : [`<div class="row"><div class="desc">${esc(t('kys.inventory_empty'))}</div></div>`]),
+      section(t('kys.shop'), [`<div class="shop">${shop}</div>`]),
+      section(t('kys.earn'), earn),
     ].join('');
+  }
+
+  /** Buttons of the Kys tab; the engine answers with the new state (event "kys"). */
+  function kysAction(d) {
+    const call = d.kysBuy ? ['kys_buy', { item: d.kysBuy }] : d.kysFeed ? ['kys_feed', { item: d.kysFeed }]
+      : d.kysWear ? ['kys_wear', { item: d.kysWear === '-' ? null : d.kysWear }] : d.kysPlay ? ['kys_play', {}] : null;
+    if (!call) return false;
+    invoke(...call).catch((e) => toast(String(e).includes('credits') ? t('kys.poor') : String(e).includes('tired') ? t('kys.tired') : String(e)));
+    return true;
+  }
+
+  function onKys(k, gain) {
+    K = k;
+    buddy.setKys(k);
+    if (S && tab === 'kys') render();
+    if (gain) requestAnimationFrame(() => $('.kys-credits')?.classList.add('bump'));
+  }
+
+  /** A little something floating away from a point (a heart when Kys eats). */
+  function floatAt(p, text, cls = '') {
+    const el = document.createElement('div');
+    el.className = `kys-float ${cls}`;
+    el.textContent = text;
+    el.style.left = `${p.x}px`;
+    el.style.top = `${p.y}px`;
+    el.addEventListener('animationend', () => el.remove());
+    document.body.appendChild(el);
   }
 
   document.addEventListener('click', (e) => {
     const b = e.target.closest('button');
     if (!b || !S || b.closest('.disabled')) return;
     const d = b.dataset;
+    if (d.tab) {
+      tab = d.tab;
+      try { localStorage.setItem('tab', tab); } catch { /* no storage: the tab just isn't remembered */ }
+      return render();
+    }
+    if (kysAction(d)) return;
     if (d.toggle) return set(d.toggle, val(d.toggle) !== true);
     if (d.key) return set(d.key, JSON.parse(d.value));
     if (d.screens) {
@@ -175,10 +277,11 @@
       this.el.className = 'buddy';
       this.el.setAttribute('aria-hidden', 'true');
       this.el.innerHTML = '<div class="buddy-eyes"><span class="eye l"><b></b><i></i></span><span class="eye r"><b></b><i></i></span></div>'
-        + '<div class="stars"><span>✦</span><span>✧</span><span>✦</span></div>'; // circle while dizzy
+        + '<div class="stars"><span>✦</span><span>✧</span><span>✦</span></div>' // circle while dizzy
+        + '<span class="hat"></span><span class="ask">🍪</span>'; // Kys's accessory; asking for food
       document.body.appendChild(this.el);
       this.eyes = this.el.firstElementChild;
-      this.stars = this.el.lastElementChild;
+      this.stars = this.el.querySelector('.stars');
       this.mode = 'home';
       this.settled = true;
       this.pos = this.homeSpot();
@@ -308,6 +411,7 @@
         });
         return;
       }
+      if (this.busy) return; // watching the ball
       const spot = this.move.look?.(now) ?? c;
       if (spot) this.aim(spot.x, spot.y);
     }
@@ -327,8 +431,67 @@
       s.setProperty('--sr', (1 + Math.min(0, gx) * 0.18).toFixed(3));
     }
 
+    /** Kys's state (kys.rs): what it wears, whether it's hungry or down. */
+    setKys(k) {
+      this.el.dataset.wear = k.wearing || '';
+      this.el.classList.toggle('hungry', k.food < 30);
+      const sad = k.food < 10 || k.joy < 15;
+      if (sad === this.sad) return;
+      this.sad = sad;
+      if (['neutral', 'sad'].includes(this.eyes.dataset.mood || 'neutral')) this.setMood('neutral');
+    }
+
+    /** Fed: the food drops onto it, a few chomps, a heart. */
+    eat(item) {
+      const at = { ...this.pos };
+      const food = document.createElement('div');
+      food.className = 'kys-food';
+      food.textContent = { cookie: '🍪', apple: '🍎', candy: '🍬', cake: '🍰' }[item] || '🍪';
+      food.style.left = `${at.x}px`;
+      food.style.top = `${at.y}px`;
+      document.body.appendChild(food);
+      setTimeout(() => {
+        food.remove();
+        this.eyes.classList.remove('munch');
+        void this.eyes.offsetWidth;
+        this.eyes.classList.add('munch');
+        setTimeout(() => this.eyes.classList.remove('munch'), 950);
+        this.setMood('happy', 2200);
+        floatAt(this.pos, '❤', 'heart');
+      }, 480);
+    }
+
+    /** Playing ball: a ball bouncing around it, its eyes following it. */
+    play() {
+      const ball = document.createElement('div');
+      ball.className = 'kys-ball';
+      ball.textContent = '⚽';
+      document.body.appendChild(ball);
+      this.busy = true;
+      this.setMood('happy');
+      const t0 = performance.now(), duration = 3600;
+      const step = (t) => {
+        const u = (t - t0) / duration;
+        if (u >= 1) {
+          ball.remove();
+          this.busy = false;
+          this.setMood('happy', 1500);
+          return;
+        }
+        const x = this.pos.x + Math.sin(u * Math.PI * 4) * 120;
+        const y = this.pos.y + 52 - Math.abs(Math.sin(u * Math.PI * 9)) * 30;
+        ball.style.left = `${x}px`;
+        ball.style.top = `${y}px`;
+        ball.style.rotate = `${Math.round(u * 1080)}deg`;
+        this.aim(x, y);
+        requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    }
+
     setMood(mood, ms = 0, then = null) {
       clearTimeout(this.moodT);
+      if (mood === 'neutral' && this.sad) mood = 'sad'; // Kys starving or miserable
       this.eyes.dataset.mood = mood;
       if (ms) this.moodT = setTimeout(() => (then ? this.setMood(...then) : this.setMood('neutral')), ms);
     }
@@ -436,8 +599,15 @@
     }
   }
 
-  new Buddy($('.hero .home'), matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const buddy = new Buddy($('.hero .home'), matchMedia('(prefers-reduced-motion: reduce)').matches);
 
   listen('settings-changed', load);
+  listen('kys', (e) => onKys(e.payload.state, e.payload.gain));
+  listen('kys-feed', (e) => buddy.eat(e.payload.item));
+  listen('kys-play', () => buddy.play());
+  listen('settings-tab', (e) => {
+    tab = e.payload;
+    if (S) render();
+  });
   load();
 })();

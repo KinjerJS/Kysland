@@ -279,3 +279,85 @@ h2 {
   scale: var(--ss);
   opacity: var(--so);
 }
+
+/* --- Tabs: Kys | Settings ------------------------------------------------------------------------ */
+.tabs { align-self: center; }
+.tabs button { padding: 6px 18px; font-size: 13.5px; }
+
+/* --- Kys tab (settings.js, kys.rs) ----------------------------------------------------------------- */
+.kys-card { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.kys-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.kys-credits { display: flex; align-items: baseline; gap: 8px; }
+.kys-credits .coin { color: #ffd66b; font-size: 20px; text-shadow: 0 0 8px rgba(255, 214, 107, 0.5); }
+.kys-credits b { font: 700 28px 'Segoe UI Variable Display', 'Segoe UI', sans-serif; }
+.kys-credits span:last-child { color: var(--dim); }
+.kys-credits.bump b { animation: kys-bump .5s var(--spring); }
+@keyframes kys-bump { 40% { scale: 1.25; color: #ffd66b; } }
+.kys-streak { color: var(--dim); font-size: 13px; }
+.kys-bars { display: flex; flex-direction: column; gap: 8px; }
+.kys-bar { display: grid; grid-template-columns: 56px 1fr 30px; align-items: center; gap: 10px; }
+.kys-bar span { color: var(--dim); font-size: 13px; }
+.kys-bar b { text-align: right; font-variant-numeric: tabular-nums; }
+.kys-bar .track { height: 8px; border-radius: 4px; background: #24242b; overflow: hidden; }
+.kys-bar .fill { height: 100%; border-radius: 4px; transition: width .6s var(--spring); }
+.kys-bar .fill.food { background: linear-gradient(90deg, #f5a65b, #ffd66b); }
+.kys-bar .fill.joy { background: linear-gradient(90deg, #ff6b8a, #cba6f7); }
+.kys-status { color: var(--dim); font-size: 13px; }
+.kys-status.warn { color: #ffb86b; }
+.count { color: var(--faint); font-weight: 400; margin-left: 4px; }
+
+.btn {
+  padding: 6px 14px;
+  border-radius: 9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  color: var(--accent);
+  font-size: 13px;
+  white-space: nowrap;
+  transition: background .2s ease, color .2s ease, opacity .2s ease;
+}
+.btn:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 15%, transparent); }
+.btn.on { background: var(--accent); color: var(--accent-fg); }
+.btn:disabled { opacity: .4; cursor: default; }
+
+.shop { display: grid; grid-template-columns: repeat(auto-fill, minmax(126px, 1fr)); gap: 10px; padding: 12px; }
+.shop-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 8px 10px;
+  border-radius: 12px;
+  background: #101014;
+  border: 1px solid var(--line);
+  text-align: center;
+}
+.shop-item.have { opacity: .6; }
+.shop-icon { font-size: 28px; line-height: 1.2; }
+.shop-name { font-weight: 500; font-size: 13px; }
+.shop-effect { color: var(--faint); font-size: 11.5px; min-height: 16px; }
+.shop-item .btn { margin-top: 6px; }
+
+.control.earn { gap: 12px; align-items: baseline; }
+.earn .plus { color: #ffd66b; font-weight: 600; }
+.earn .today { color: var(--faint); font-size: 12px; min-width: 38px; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* --- Kys on the buddy: accessory, asking for food, sad, eating, ball, floating hearts --------------- */
+.buddy .hat, .buddy .ask { position: absolute; left: 50%; top: 50%; line-height: 1; pointer-events: none; }
+.buddy .hat { font-size: 20px; translate: calc(-50% + var(--gx, 0px) * .3) calc(-50% - 26px); }
+.buddy[data-wear=bow] .hat::before { content: '🎀'; }
+.buddy[data-wear=cap] .hat::before { content: '🧢'; }
+.buddy[data-wear=crown] .hat::before { content: '👑'; }
+.buddy[data-wear=glasses] .hat::before { content: '👓'; }
+.buddy[data-wear=glasses] .hat { font-size: 30px; translate: -50% -50%; }
+.buddy .ask { display: none; font-size: 15px; translate: 42px -50%; animation: kys-ask 1.4s ease-in-out infinite; }
+.buddy.hungry .ask { display: block; }
+@keyframes kys-ask { 50% { margin-top: -4px; } }
+.buddy-eyes[data-mood=sad] { --brow: 1; --bl-y: -2px; --br-y: -2px; --bl-r: -16deg; --br-r: 16deg; --lid-l: .72; --lid-r: .72; }
+.buddy-eyes.munch .eye { animation: kys-munch .3s ease-in-out 3; }
+@keyframes kys-munch { 50% { scale: 1.2 .7; } }
+.kys-food, .kys-ball, .kys-float { position: fixed; z-index: 30; pointer-events: none; line-height: 1; }
+.kys-food { font-size: 20px; translate: -50% -50%; animation: kys-food-drop .48s cubic-bezier(.5, 0, .9, .6) forwards; }
+@keyframes kys-food-drop { from { translate: -50% -300%; opacity: 0; } 20% { opacity: 1; } to { translate: -50% -50%; scale: .7; } }
+.kys-ball { font-size: 18px; translate: -50% -50%; }
+.kys-float { translate: -50% 0; color: #ff6b8a; font-size: 16px; animation: kys-float 1.4s ease-out forwards; }
+@keyframes kys-float { from { translate: -50% -10px; opacity: 0; } 15% { opacity: 1; } to { translate: -50% -50px; opacity: 0; } }

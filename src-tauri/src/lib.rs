@@ -5,6 +5,7 @@ mod config;
 mod glaze;
 mod hub;
 mod i18n;
+mod kys;
 mod media;
 mod notifs;
 mod system;
@@ -293,11 +294,18 @@ fn background_loop(app: AppHandle) {
         let mut last_notch: std::collections::HashMap<String, Rect> = std::collections::HashMap::new();
         let mut trail: std::collections::VecDeque<(Instant, i32, i32)> = std::collections::VecDeque::new();
         let mut was_held = false;
+        let (mut kys_at, mut moved_at) = (Instant::now(), Instant::now());
         loop {
             std::thread::sleep(Duration::from_millis(30));
             let (cx, cy) = win32::cursor_pos();
             let held = win32::primary_button_down();
             let pressed = held && !was_held;
+            if trail.back().is_some_and(|p| p.1 != cx || p.2 != cy) { moved_at = Instant::now(); }
+            if kys_at.elapsed() >= Duration::from_secs(60) {
+                kys_at = Instant::now();
+                let active = moved_at.elapsed() < Duration::from_secs(60);
+                std::thread::spawn(move || kys::tick(active)); // file write off the loop
+            }
             was_held = held;
             let now = Instant::now();
             trail.push_back((now, cx, cy));
@@ -568,16 +576,21 @@ fn later(app: &AppHandle, f: impl FnOnce() + Send + 'static) {
 }
 
 /// The settings window: the menu's options with more room (built on a later turn, see `later`).
-fn open_settings(app: &AppHandle) {
+fn open_settings(app: &AppHandle) { open_settings_at(app, None); }
+
+/// The settings window on a given tab ("kys"), or on the one it was left on.
+fn open_settings_at(app: &AppHandle, tab: Option<&'static str>) {
     let a = app.clone();
     later(app, move || {
         if let Some(w) = a.get_webview_window("settings") {
+            if let Some(tab) = tab { let _ = a.emit_to("settings", "settings-tab", tab); }
             let _ = w.unminimize();
             let _ = w.show();
             let _ = w.set_focus();
             return;
         }
-        let built = WebviewWindowBuilder::new(&a, "settings", WebviewUrl::App("settings.html".into()))
+        let page = match tab { Some(tab) => format!("settings.html#{tab}"), None => "settings.html".into() };
+        let built = WebviewWindowBuilder::new(&a, "settings", WebviewUrl::App(page.into()))
             .title(t("settings.title"))
             .inner_size(600.0, 780.0)
             .min_inner_size(460.0, 520.0)
@@ -631,6 +644,27 @@ fn settings_action(app: AppHandle, name: String) {
     let a = app.clone();
     later(&app, move || on_menu(&a, &name));
 }
+
+// --- Kys, the eyes as a pet (see kys.rs) --------------------------------------------------------------
+
+#[tauri::command]
+fn kys_state() -> Value { kys::state() }
+
+/// Something happened with Kys ("peek", "catch", "dizzy", "flight", "poke"): credits, within caps.
+#[tauri::command]
+async fn kys_earn(source: String) { kys::earn(&source) }
+
+#[tauri::command]
+async fn kys_buy(item: String) -> Result<(), String> { kys::buy(&item) }
+
+#[tauri::command]
+async fn kys_feed(item: String) -> Result<(), String> { kys::feed(&item) }
+
+#[tauri::command]
+async fn kys_wear(item: Option<String>) -> Result<(), String> { kys::wear(item.as_deref()) }
+
+#[tauri::command]
+async fn kys_play() -> Result<(), String> { kys::play() }
 
 #[tauri::command]
 fn action(window: WebviewWindow, name: String, arg: Value, extra: Value) {
@@ -743,6 +777,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         &MenuItem::with_id(app, "title", "Kysland", true, None::<&str>)?, // opens the settings too
         &PredefinedMenuItem::separator(app)?,
         &MenuItem::with_id(app, "settings", t("menu.settings"), true, None::<&str>)?,
+        &MenuItem::with_id(app, "kys", t("menu.kys"), true, None::<&str>)?,
         &MenuItem::with_id(app, "reload", t("menu.reload"), true, None::<&str>)?,
         &MenuItem::with_id(app, "open-config", t("menu.open_config"), true, None::<&str>)?,
         &MenuItem::with_id(app, "edit-config", t("menu.edit_config"), true, None::<&str>)?,
@@ -763,6 +798,7 @@ fn on_menu(app: &AppHandle, id: &str) {
     let island = config::island_name(&cfg).unwrap_or_else(|| "island".into());
     let result = match id {
         "title" | "settings" => { open_settings(app); Ok(()) }
+        "kys" => { open_settings_at(app, Some("kys")); Ok(()) }
         "reload" => { reload(app, true); Ok(()) }
         "open-config" => { win32::shell_open(&config::config_dir().to_string_lossy()); Ok(()) }
         "edit-config" => { win32::shell_open(&config::config_file().to_string_lossy()); Ok(()) }
@@ -855,6 +891,7 @@ fn opt(argv: &[String], name: &str) -> Option<String> {
 fn handle_args(app: &AppHandle, argv: Vec<String>) {
     if argv.iter().any(|a| a == "--quit") { return app.exit(0); }
     if argv.iter().any(|a| a == "--settings") { return open_settings(app); }
+    if argv.iter().any(|a| a == "--kys") { return open_settings_at(app, Some("kys")); }
     if let Some(text) = opt(&argv, "island") {
         return hub::emit("island", json!({ "text": text, "icon": opt(&argv, "icon").unwrap_or_else(|| "bell".into()) }));
     }
@@ -892,11 +929,13 @@ pub fn run() {
                 })
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![init, run_command, notifications, set_hit_rects, action, settings_state, set_setting, settings_action])
+        .invoke_handler(tauri::generate_handler![init, run_command, notifications, set_hit_rects, action, settings_state, set_setting, settings_action,
+            kys_state, kys_earn, kys_buy, kys_feed, kys_wear, kys_play])
         .on_menu_event(|app, e| on_menu(app, e.id().as_ref()))
         .setup(move |app| {
             let handle = app.handle().clone();
             hub::init(handle.clone());
+            kys::load();
             if args.iter().any(|a| a == "--quit") { handle.exit(0); return Ok(()); }
             // After a crash: taskbar left hidden by an older version / orphaned screen reservations.
             if let Ok(state) = std::fs::read_to_string(config::config_dir().join(".taskbar-state")) {

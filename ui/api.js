@@ -12,6 +12,11 @@
     run: (cmd) => invoke('run_command', { cmd }),
     notifications: () => invoke('notifications'),
     action: (name, arg, extra) => invoke('action', { name, arg: arg ?? null, extra: extra ?? null }),
+    // Kys, the eyes as a pet (kys.rs).
+    kys: {
+      state: () => invoke('kys_state'),
+      earn: (source) => invoke('kys_earn', { source }),
+    },
     setHitRects: (rects, notch, dodgeable, grab, watch) => invoke('set_hit_rects', {
       rects, notch: notch ?? null, dodgeable: !!dodgeable, grab: !!grab, watch: !!watch,
     }),

@@ -51,6 +51,7 @@ const STRINGS: &[(&str, &str, &str)] = &[
     ("menu.edit_style", "Edit style.css", "Éditer style.css"),
     ("menu.devtools", "CSS inspector (DevTools)", "Inspecteur CSS (DevTools)"),
     ("menu.settings", "Settings…", "Réglages…"),
+    ("menu.kys", "Kys…", "Kys…"),
     ("menu.screen", "Screen", "Écran"),
     ("menu.screen_primary", "Main screen", "Écran principal"),
     ("menu.screen_all", "All screens", "Tous les écrans"),

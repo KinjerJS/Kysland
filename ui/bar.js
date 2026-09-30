@@ -651,6 +651,10 @@ api.on('dodge', ({ on }) => modules.forEach((m) => m.def.onDodge?.(m, on)));
 // Meanwhile, where the cursor is (CSS pixels of the window).
 api.on('gaze', ({ x, y }) => modules.forEach((m) => m.def.onGaze?.(m, x, y)));
 // Auto-hide: the cursor came near the island, or went away from it.
+// Kys, the eyes as a pet (kys.rs): its state (with what was just earned), eating, playing.
+api.on('kys', (p) => modules.forEach((m) => m.def.onKys?.(m, p)));
+api.on('kys-feed', (p) => modules.forEach((m) => m.def.onKysFeed?.(m, p)));
+api.on('kys-play', () => modules.forEach((m) => m.def.onKysPlay?.(m)));
 api.on('presence', ({ near }) => {
   state.near = near;
   modules.forEach((m) => m.def.onPresence?.(m, near));

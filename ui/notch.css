@@ -628,3 +628,39 @@ body.pos-bottom .notch.splash { transform-origin: 50% 100%; }
 }
 .notch.peek .n-compact > .n-date,
 .notch.peek .n-compact > .n-date ~ * { translate: var(--knock-r-x) var(--knock-r-y); rotate: var(--knock-r-r); }
+
+/* Kys (island.js, kys.rs): what it wears, asking for food, sad, eating, credits floating away. */
+.notch-eyes .hat, .notch-eyes .ask { display: none; position: absolute; left: 50%; top: 50%; line-height: 1; pointer-events: none; }
+.notch.peek .notch-eyes .hat, .notch.roaming .notch-eyes .hat, .eye-flyer .notch-eyes .hat { display: block; }
+.notch-eyes .hat { font-size: 10px; translate: calc(-50% + var(--gx) * .3) calc(-100% - 6px); }
+.notch.roaming .notch-eyes .hat, .eye-flyer .notch-eyes .hat { font-size: 17px; translate: calc(-50% + var(--gx) * .3) calc(-100% - 9px); }
+.notch-eyes[data-wear=bow] .hat::before { content: '🎀'; }
+.notch-eyes[data-wear=cap] .hat::before { content: '🧢'; }
+.notch-eyes[data-wear=crown] .hat::before { content: '👑'; }
+.notch-eyes[data-wear=glasses] .hat::before { content: '👓'; }
+.notch-eyes[data-wear=glasses] .hat,
+.notch.roaming .notch-eyes[data-wear=glasses] .hat,
+.eye-flyer .notch-eyes[data-wear=glasses] .hat { translate: calc(-50% + var(--gx) * .6) calc(-50% + var(--gy) * .6); }
+.notch-eyes[data-wear=glasses] .hat { font-size: 17px; }
+.notch.roaming .notch-eyes[data-wear=glasses] .hat, .eye-flyer .notch-eyes[data-wear=glasses] .hat { font-size: 28px; }
+.notch-eyes .ask { font-size: 10px; translate: 15px -50%; animation: kys-ask 1.4s ease-in-out infinite; }
+.notch.roaming .notch-eyes .ask { font-size: 14px; translate: 24px -50%; }
+.notch.peek .notch-eyes.hungry .ask, .notch.roaming .notch-eyes.hungry .ask { display: block; }
+@keyframes kys-ask { 50% { margin-top: -3px; } }
+.notch-eyes[data-mood=sad] { --brow: 1; --bl-y: -2px; --br-y: -2px; --bl-r: -16deg; --br-r: 16deg; --lid-l: .72; --lid-r: .72; }
+.notch-eyes.munch .eye { animation: kys-munch .3s ease-in-out 3; }
+@keyframes kys-munch { 50% { scale: 1.2 .7; } }
+.kys-food, .kys-ball, .kys-float { position: fixed; z-index: 20; pointer-events: none; line-height: 1; }
+.kys-food { font-size: 14px; translate: -50% -50%; animation: kys-food-drop .48s cubic-bezier(.5, 0, .9, .6) forwards; }
+@keyframes kys-food-drop { from { translate: -50% -280%; opacity: 0; } 20% { opacity: 1; } to { translate: -50% -50%; scale: .7; } }
+.kys-ball { font-size: 12px; translate: -50% -50%; }
+.kys-float {
+  translate: -50% 0;
+  color: #ffd66b;
+  font: 700 11px var(--notch-font);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+  animation: kys-float 1.4s ease-out forwards;
+}
+.kys-float.heart { color: #ff6b8a; font-size: 12px; }
+@keyframes kys-float { from { translate: -50% 4px; opacity: 0; } 15% { opacity: 1; } to { translate: -50% 30px; opacity: 0; } }

@@ -23,6 +23,14 @@ It can also be a full **Waybar / Hyprland-style status bar**.
 - **Auto-hide** (optional): the island tucks itself away past the screen edge while the mouse is far from it or on another screen, and comes back as the mouse gets near. Notifications and events (volume, track…) still show.
 - **Outline on dark backgrounds**: when what's around the island is mostly black, a thin outline keeps it visible.
 
+### Kys, the eyes as a pet
+
+The eyes have a name: **Kys**. It gets hungry and a little bored while Kysland runs (not while the PC is off), and shows it: it peeks in more often asking for food when hungry, and looks down when starving or miserable.
+
+- **Credits** ✦ come from what happens with it, each capped per day: it peeks in (+1), you catch it while it peeks by coming slowly and clicking its eyes (+5), you make it dizzy (+2), it comes back from being thrown out (+3), you poke it while it roams (+1), time spent together (+1 every 10 minutes), and a daily bonus that grows with the days in a row. A little "+N ✦" floats away from it.
+- **Shop**: food (cookie, apple, candy, cake) that it eats in the island, a ball to play with, and things to wear (bow, cap, glasses, crown).
+- Everything is in the **Kys** tab of the settings window (menu **Kys…**, or `kysland.exe --kys`); its state is kept in `~.configkyslandkys.json`.
+
 ### Windows notifications
 
 - New notifications show up in the island as they arrive: app icon (or a colored initial), app name, title and text.
@@ -70,7 +78,7 @@ Right-click the island, press **`Ctrl+Alt+W`** anywhere, or right-click the tray
 
 | Option | Effect |
 |---|---|
-| `--settings` | Open the settings window |
+| `--settings` / `--kys` | Open the settings window (on the Kys tab) |
 | `--quit` | Quit cleanly |
 | `--repair` | Restore the volume flyout, the taskbar and the screen space, then exit |
 | `--island="text" --icon=name` | Show a message in the island |

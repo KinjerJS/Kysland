@@ -178,8 +178,9 @@
       this.el = document.createElement('div');
       this.el.className = 'notch-eyes';
       this.el.innerHTML = '<span class="eye l"><b></b><i></i></span><span class="eye r"><b></b><i></i></span>'
-        + '<div class="stars"><span>✦</span><span>✧</span><span>✦</span></div>'; // circle while dizzy
-      this.stars = this.el.lastElementChild;
+        + '<div class="stars"><span>✦</span><span>✧</span><span>✦</span></div>' // circle while dizzy
+        + '<span class="hat"></span><span class="ask">🍪</span>'; // Kys's accessory; asking for food
+      this.stars = this.el.querySelector('.stars');
       notch.appendChild(this.el);
       this.notch = notch;
       // Thrown out of the grown island, these same eyes fly in a drop of island: they move to a
@@ -253,8 +254,29 @@
     /** Shows a mood (brows, lids); back to neutral after `ms`, or on to `then` = [mood, ms]. */
     setMood(mood, ms = 0, then = null) {
       clearTimeout(this.moodT);
+      if (mood === 'neutral' && this.sad) mood = 'sad'; // Kys starving or miserable
       this.el.dataset.mood = mood;
       if (ms) this.moodT = setTimeout(() => (then ? this.setMood(...then) : this.setMood('neutral')), ms);
+    }
+
+    /** Kys's state (kys.rs): what it wears, whether it's hungry or down. */
+    setKys(k) {
+      this.el.dataset.wear = k.wearing || '';
+      this.el.classList.toggle('hungry', k.food < 30);
+      const sad = k.food < 10 || k.joy < 15;
+      if (sad === this.sad) return;
+      this.sad = sad;
+      if (['neutral', 'sad'].includes(this.el.dataset.mood)) this.setMood('neutral');
+    }
+
+    /** Eating: a few chomps, then happy. */
+    munch() {
+      this.el.classList.remove('munch');
+      void this.el.offsetWidth;
+      this.el.classList.add('munch');
+      clearTimeout(this.munchT);
+      this.munchT = setTimeout(() => this.el.classList.remove('munch'), 950);
+      this.setMood('happy', 2200);
     }
 
     look(x, y) {
@@ -265,7 +287,7 @@
       while (this.trail.length && now - this.trail[0].t > 400) this.trail.shift();
       if (!this.flight) this.spinCheck(x, y, now);
       // While roaming, the animation loop decides where to look; dizzy, the eyes roll.
-      if (!this.elsewhere && !this.roaming && !this.isDizzy(now)) this.aim(x, y);
+      if (!this.elsewhere && !this.busy && !this.roaming && !this.isDizzy(now)) this.aim(x, y); // busy: watching the ball
     }
 
     // --- Dizzy: the cursor circling around the eyes -------------------------------------------
@@ -295,6 +317,7 @@
       const already = this.isDizzy(now);
       this.dizzyUntil = now + 2200; // as long as the circling goes on
       if (already) return;
+      api.kys.earn('dizzy');
       this.spinDir = Math.sign(this.spin) || 1;
       this.setMood('dizzy');
       this.el.classList.add('dizzy');
@@ -424,7 +447,7 @@
         this.el.style.setProperty('--ey', `${(this.pos.y + breath).toFixed(1)}px`);
         if (dizzy) {
           this.roll(now);
-        } else if (!this.elsewhere) {
+        } else if (!this.elsewhere && !this.busy) {
           const spot = this.move.look?.(now); // somewhere else than the cursor
           if (spot) this.aim(mid.x + spot.x, mid.y + spot.y);
           else if (this.cursor) this.aim(this.cursor.x, this.cursor.y);
@@ -452,6 +475,7 @@
       if (!this.roaming || this.flight) return;
       const now = performance.now();
       this.jolt();
+      api.kys.earn('poke');
       if (this.move?.kind === 'doze') {
         // Woken up by a click: jumps away, startled or cross (this mood replaces the flee's own).
         this.setMove(this.lastC ? this.flee(now, this.lastC, this.lastBox) : null);
@@ -588,6 +612,7 @@
       this.notch.appendChild(this.el);
       this.goo.classList.remove('on');
       this.splash();
+      api.kys.earn('flight');
       this.setMood('squint', 1600, ['curious', 1000]);
       for (const at of [180, 520]) {
         setTimeout(() => {
@@ -746,11 +771,12 @@
       notch.classList.toggle('eyes', m.conf['dodge-eyes'] !== false);
       S.near = state.near !== false;
       applyOutline(m, state.backdropDark);
+      api.kys.state().then((k) => onKysState(m, k));
       schedulePeek(m, 15, 40);
       let enterT = 0, leaveT = 0;
       if (m.conf['expand-on-hover']) {
         notch.addEventListener('mouseenter', () => {
-          if (S.dodged) return; // grown hidden island (roaming eyes): no expanding
+          if (S.dodged || S.peeking) return; // grown hidden island, or Kys peeking (to be caught): no expanding
           clearTimeout(leaveT);
           if (S.notif) return clearTimeout(S.notifTimer); // reading the notification: pause
           enterT = setTimeout(() => setExpanded(m, true), m.conf['hover-delay']);
@@ -765,6 +791,7 @@
       }
       notch.addEventListener('click', (e) => {
         if (S.dodged) return S.eyes.poke();
+        if (S.peeking && nearEyes(S, e)) return catchKys(m);
         if (S.notif) {
           // Click: opens the app (and removes the notification); ✕: just closes.
           if (!e.target.closest('.n-close')) openNotif(S.notif.data);
@@ -859,6 +886,20 @@
       if (!m.island) return;
       m.island.near = near;
       applyAway(m);
+    },
+
+    onKys(m, { state, gain }) {
+      if (!m.island) return;
+      onKysState(m, state);
+      if (gain) showGain(m, gain);
+    },
+
+    onKysFeed(m, { item }) {
+      if (m.island) kysEat(m, item);
+    },
+
+    onKysPlay(m) {
+      if (m.island) kysPlay(m);
     },
 
     onGaze(m, x, y) {
@@ -961,7 +1002,7 @@
     if (!S || S.dodged) return; // hidden: nothing changes until it comes back
     applyAway(m);
     // Only a resting island hides from the cursor (not while open or showing a notification).
-    S.notch.el.dataset.dodgeable = !S.expanded && !S.notif ? '1' : '0';
+    updateDodgeable(S);
     if (S.peeking && (S.expanded || S.notif || S.transient)) endPeek(m);
     S.notch.show(S.expanded ? expandedView(m) : S.notif || S.transient || compactView(m));
     if (S.peeking) placePeekEyes(S); // the view may have changed width
@@ -979,18 +1020,21 @@
     const S = m.island;
     clearTimeout(S.peekT);
     if (m.conf.peek === false) return;
-    S.peekT = setTimeout(() => startPeek(m), rand(min, max) * 1000);
+    const hurry = S.kys && S.kys.food < 30 ? 0.5 : 1; // hungry: comes asking more often
+    S.peekT = setTimeout(() => startPeek(m), rand(min, max) * hurry * 1000);
   }
 
-  function canPeek(m, S) {
-    return m.conf.peek !== false && !S.expanded && !S.notif && !S.transient && !S.dodged && S.near !== false
+  /** `force`: to eat or play, even with peeking turned off. */
+  function canPeek(m, S, force = false) {
+    return (force || m.conf.peek !== false) && !S.expanded && !S.notif && !S.transient && !S.dodged && S.near !== false
       && !document.hidden && String(S.notch.key).startsWith('compact');
   }
 
-  function startPeek(m) {
+  /** `opts`: `duration` (ms), `quiet` (no credit: not on its own), `force` (see canPeek). */
+  function startPeek(m, opts = {}) {
     const S = m.island;
-    if (m.conf.peek === false) return;
-    if (S.peeking || !canPeek(m, S)) return schedulePeek(m, 8, 20); // busy: a bit later
+    if (m.conf.peek === false && !opts.force) return;
+    if (S.peeking || !canPeek(m, S, opts.force)) return opts.force ? undefined : schedulePeek(m, 8, 20); // busy: a bit later
     S.peeking = { v: 0, last: null, x: peekSpot(S) };
     S.eyes.start(0);
     // How hard what's on either side gets knocked: sideways, down, askew.
@@ -1018,7 +1062,9 @@
       void S.notch.el.offsetWidth;
       S.notch.el.classList.add('splash'); // the bump of the landing
     }, 140);
-    S.peekEndT = setTimeout(() => endPeek(m), rand(3500, 7000));
+    S.peekEndT = setTimeout(() => endPeek(m), opts.duration ?? rand(3500, 7000));
+    updateDodgeable(S);
+    if (!opts.quiet) api.kys.earn('peek');
   }
 
   /** Middle of the gap between the time and the date, from the island's center (measured before
@@ -1039,6 +1085,7 @@
   /** The cursor rushing at them (closing in fast, already close) scares them off. */
   function watchPeek(m, x, y) {
     const S = m.island, p = S.peeking;
+    if (p.caught) return;
     const now = performance.now();
     const c = S.eyes.center();
     const d = Math.hypot(x - c.x, y - c.y);
@@ -1068,12 +1115,138 @@
       S.notch.el.classList.remove('peek');
       S.notch.extra = 0;
       S.notch.resize();
+      updateDodgeable(S);
     }, scared ? 60 : 160);
     setTimeout(() => {
       eyes.classList.remove('scared', 'leaving');
       if (!S.dodged) S.eyes.stop(); // hiding from the cursor took the eyes over meanwhile
       schedulePeek(m, scared ? 90 : 30, scared ? 180 : 80);
     }, scared ? 200 : 320);
+  }
+
+  /** Only a resting island hides from the cursor (not while open, showing a notification, or
+   *  with Kys peeking: it can be approached slowly and caught). */
+  function updateDodgeable(S) {
+    S.notch.el.dataset.dodgeable = !S.expanded && !S.notif && !S.peeking ? '1' : '0';
+  }
+
+  // --- Kys, the eyes as a pet (kys.rs) -------------------------------------------------------------
+  // Its state shows on the eyes (accessory, asking for food when hungry, sad when starving or
+  // miserable); what happens to it earns credits (the engine keeps the count, capped per day),
+  // floating away as "+N ✦"; fed or played with from the settings, it comes into the island for it.
+  const FOOD = { cookie: '🍪', apple: '🍎', candy: '🍬', cake: '🍰' };
+
+  function onKysState(m, k) {
+    m.island.kys = k;
+    m.island.eyes.setKys(k);
+  }
+
+  function nearEyes(S, e) {
+    const c = S.eyes.center();
+    return Math.hypot(e.clientX - c.x, e.clientY - c.y) < 24;
+  }
+
+  /** Caught while peeking (approached slowly, eyes clicked): delighted, and a few credits. */
+  function catchKys(m) {
+    const S = m.island, p = S.peeking;
+    if (p.caught) return;
+    p.caught = true;
+    clearTimeout(S.peekEndT);
+    S.eyes.jolt();
+    S.eyes.setMood('surprised', 400, ['happy', 1500]);
+    floatAt(S.eyes.center(), '❤', 'heart');
+    api.kys.earn('catch');
+    S.peekEndT = setTimeout(() => endPeek(m), 1300);
+  }
+
+  /** A little something floating away from a point: "+2 ✦", a heart... */
+  function floatAt(p, text, cls = '') {
+    const el = document.createElement('div');
+    el.className = `kys-float ${cls}`;
+    el.textContent = text;
+    el.style.left = `${p.x}px`;
+    el.style.top = `${p.y}px`;
+    el.addEventListener('animationend', () => el.remove());
+    document.body.appendChild(el);
+  }
+
+  function showGain(m, gain) {
+    const S = m.island;
+    const out = S.peeking || S.dodged || S.eyes.flight;
+    if (!out && gain.source === 'time') return; // quietly, when Kys isn't around
+    const r = S.notch.el.getBoundingClientRect();
+    floatAt(out ? S.eyes.center() : { x: r.left + r.width / 2, y: r.bottom - 6 }, `+${gain.amount} ✦`, 'gain');
+  }
+
+  /** Fed from the settings: the food drops onto Kys, who munches it (peeking in to eat if needed). */
+  function kysEat(m, item) {
+    const S = m.island;
+    const eat = () => {
+      const c = S.eyes.center();
+      const food = document.createElement('div');
+      food.className = 'kys-food';
+      food.textContent = FOOD[item] || '🍪';
+      food.style.left = `${c.x}px`;
+      food.style.top = `${c.y}px`;
+      document.body.appendChild(food);
+      setTimeout(() => {
+        food.remove();
+        S.eyes.munch();
+        floatAt(c, '❤', 'heart');
+      }, 480);
+    };
+    if (S.peeking) {
+      clearTimeout(S.peekEndT);
+      S.peekEndT = setTimeout(() => endPeek(m), 3500);
+      return eat();
+    }
+    if (S.dodged) return eat();
+    if (canPeek(m, S, true)) {
+      startPeek(m, { duration: 3800, quiet: true, force: true });
+      setTimeout(eat, 420);
+    }
+  }
+
+  /** Playing ball (from the settings): a ball bouncing under the island, Kys following it. */
+  function kysPlay(m) {
+    const S = m.island;
+    const play = () => {
+      const ball = document.createElement('div');
+      ball.className = 'kys-ball';
+      ball.textContent = '⚽';
+      document.body.appendChild(ball);
+      S.eyes.busy = true;
+      S.eyes.setMood('happy');
+      const t0 = performance.now(), duration = 3600;
+      const step = (t) => {
+        const u = (t - t0) / duration;
+        if (u >= 1) {
+          ball.remove();
+          S.eyes.busy = false;
+          S.eyes.setMood('happy', 1500);
+          return;
+        }
+        const r = S.notch.el.getBoundingClientRect();
+        const x = r.left + r.width / 2 + Math.sin(u * Math.PI * 4) * (r.width / 2 + 30);
+        const y = r.bottom + 14 - Math.abs(Math.sin(u * Math.PI * 9)) * 12;
+        ball.style.left = `${x}px`;
+        ball.style.top = `${y}px`;
+        ball.style.rotate = `${Math.round(u * 1080)}deg`;
+        S.eyes.aim(x, y);
+        requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    };
+    if (S.peeking) {
+      clearTimeout(S.peekEndT);
+      S.peekEndT = setTimeout(() => endPeek(m), 4200);
+      return play();
+    }
+    if (S.dodged) return play();
+    if (canPeek(m, S, true)) {
+      startPeek(m, { duration: 4400, quiet: true, force: true });
+      setTimeout(play, 400);
+    }
   }
 
   // --- Views --------------------------------------------------------------------------------
