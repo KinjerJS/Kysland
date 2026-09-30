@@ -576,7 +576,7 @@
       if (t > 0.7 && this.el.dataset.mood === 'surprised') this.setMood('worried');
     }
 
-    // Back in: eyes shut, shaking its head, then a bit dizzy.
+    // Back in: blinks and frowns, squinting to see where it is, then curious again.
     land(now, mid, box) {
       const p = this.flight.p;
       this.flight = null;
@@ -588,11 +588,15 @@
       this.notch.appendChild(this.el);
       this.goo.classList.remove('on');
       this.splash();
-      this.el.classList.add('shake');
-      this.shakeT = setTimeout(() => this.el.classList.remove('shake'), 950);
-      this.setMood('dazed', 1100, ['dizzy', 1500]);
+      this.setMood('squint', 1600, ['curious', 1000]);
+      for (const at of [180, 520]) {
+        setTimeout(() => {
+          this.el.classList.add('blink');
+          setTimeout(() => this.el.classList.remove('blink'), 110);
+        }, at);
+      }
       const still = { ...this.pos };
-      this.setMove({ kind: 'dazed', pull: 3, until: now + 2600, target: () => still, look: () => ({ x: still.x, y: still.y + 40 }) });
+      this.setMove({ kind: 'squint', pull: 3, until: now + 2600, target: () => still }); // stays put, peering at the cursor
     }
 
     nextMove(now, c, box) {

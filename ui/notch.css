@@ -567,9 +567,11 @@ body.pos-bottom .goo-island { border-radius: 46px 46px 0 0; }
 .eye-flyer .notch-eyes { opacity: 1; gap: 13px; translate: none; transition: none; }
 .eye-flyer .notch-eyes i { width: 12px; height: 15px; border-radius: 5px; }
 .eye-flyer .notch-eyes b { opacity: var(--brow); }
-/* Back in: eyes shut, shaking its head, then dizzy. */
+/* Dizzy (circled), then eyes shut shaking its head (dazed); back from a flight, frowning and
+   squinting to see where it is (squint). */
 .notch-eyes[data-mood=dazed] { --brow: 1; --bl-y: -2px; --br-y: -2px; --bl-r: -14deg; --br-r: 14deg; --lid-l: .1; --lid-r: .1; }
 .notch-eyes[data-mood=dizzy] { --brow: 1; --bl-y: -3px; --br-y: 1px; --bl-r: -8deg; --br-r: 10deg; --lid-l: .65; --lid-r: 1.1; }
+.notch-eyes[data-mood=squint] { --brow: 1; --bl-y: 3px; --br-y: 3px; --bl-r: 16deg; --br-r: -16deg; --lid-l: .45; --lid-r: .5; }
 .notch-eyes.shake .eye { animation: eyes-shake .9s ease-in-out; }
 @keyframes eyes-shake {
   0%, 100% { translate: 0 0; }
