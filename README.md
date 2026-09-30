@@ -64,7 +64,7 @@ The eyes have a name: **Kys**. It lives in the island, and it has a life of its 
 
 **Spend them** in its shop: cookies, apples, candy and cake it munches right in the island, a ball to play with, and a bow, a cap, glasses or a crown to wear.
 
-**Talk to it.** Ask it for the next song, the volume at 30, the time, or how it's doing. Out of the box it understands commands and a bit of small talk, with nothing to download. Want a real chat? Turn on its **smart brain**: a small AI (Qwen3 1.7B) that runs on your PC, never online, loaded only while you talk to Kys. It answers in about a second.
+**Talk to it.** Ask it for the next song, the volume at 30, the time, or how it's doing. Out of the box it understands commands and a bit of small talk, with nothing to download. Want a real chat? Give it a **brain**: a small AI that runs on your PC, never online, loaded only while you talk to Kys. **Light** (Qwen3 1.7B) answers in a second; **Smart** (Qwen3 4B) takes about three and is much better company. Either way it picks an emotion for each answer, and its eyes show it: its brows, its eyelids, wherever it is.
 
 Everything is on its page: click the little Kys next to the gear in the expanded island.
 
@@ -139,7 +139,7 @@ Island options (in the `"island"` section):
 | `dodge-eyes` | `true` | Eyes watching the cursor while hidden |
 | `dodge-roam` / `dodge-roam-delay` | `true` / `20` | Cursor still close after this many seconds: the island grows and the eyes roam |
 | `peek` | `true` | Kys peeking into the resting island now and then |
-| `kys-brain` | `"simple"` | What Kys understands: `"simple"` (commands and a few phrases) or `"smart"` (the local AI, downloaded from the settings) |
+| `kys-brain` | `"simple"` | What Kys understands: `"simple"` (commands and a few phrases), or a local AI downloaded from the settings: `"light"` (Qwen3 1.7B, about 1 s per answer) or `"smart"` (Qwen3 4B, about 3 s, much better company) |
 | `auto-hide` / `auto-hide-distance` | `false` / `300` | Hide while the mouse is farther than this many px or on another screen |
 | `hide-windows-osd` | `true` | Handle the volume keys and hide the Windows volume flyout |
 | `volume-step` | `2` | Percent per volume key press |
@@ -155,7 +155,7 @@ Top-level options include `language` (`"auto"`, `"en"`, `"fr"`), `monitors` (`"p
 
 Everything stays on your PC, with three optional exceptions:
 
-- **Kys's smart brain**: when you click Download in the settings, the model (Qwen3 1.7B, 1.1 GB) comes from Hugging Face. After that, it runs on your processor: what you tell Kys never leaves your PC.
+- **Kys's brain**: when you click Download in the settings, the model (Qwen3 1.7B, 1.1 GB, or Qwen3 4B, 2.5 GB) comes from Hugging Face. After that, it runs on your processor: what you tell Kys never leaves your PC.
 - **Claude usage**: Kysland reads the Claude Code sign-in token and sends it only to `api.anthropic.com` to fetch your usage. It never refreshes the token itself, so it can't sign Claude Code out. The usage endpoint is the one behind Claude Code's `/usage` command. It isn't a documented public API and may change.
 - **Weather**: the sample `custom/weather` module queries wttr.in.
 

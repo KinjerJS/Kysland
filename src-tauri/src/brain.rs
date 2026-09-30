@@ -19,7 +19,7 @@ use serde_json::{json, Value};
 use std::num::NonZeroU32;
 use std::os::windows::ffi::OsStrExt;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
@@ -239,63 +239,86 @@ pub fn simple(text: &str) -> Reply {
 
 // --- Smart brain: a small model run by llama.cpp ----------------------------------------------------
 
-/// The model: Qwen3 1.7B, 4-bit (Apache 2.0), from Hugging Face.
-const MODEL_FILE: &str = "Qwen3-1.7B-Q4_K_M.gguf";
-const MODEL_URL: &str = "https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf";
-const MODEL_SIZE: u64 = 1_107_409_472;
+/// A model the smart brain can run: Qwen3 (Apache 2.0), 4-bit, from Hugging Face.
+pub struct Model {
+    /// Its name in the config (`kys-brain`).
+    pub id: &'static str,
+    file: &'static str,
+    url: &'static str,
+    size: u64,
+    /// A model that can think before answering: told not to, with an empty thought.
+    thinks: bool,
+}
+
+/// Light answers in about a second but has little to say; smart is much better company, in two or
+/// three seconds.
+const MODELS: [Model; 2] = [
+    Model {
+        id: "light", file: "Qwen3-1.7B-Q4_K_M.gguf", size: 1_107_409_472, thinks: true,
+        url: "https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf",
+    },
+    Model {
+        id: "smart", file: "Qwen3-4B-Instruct-2507-Q4_K_M.gguf", size: 2_497_281_120, thinks: false,
+        url: "https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+    },
+];
+
+pub fn model(id: &str) -> Option<&'static Model> { MODELS.iter().find(|m| m.id == id) }
+
 /// The model stays loaded this long after the last message, then its memory is freed.
 const UNLOAD_AFTER: Duration = Duration::from_secs(60);
 /// A conversation quiet for this long starts over.
 const FORGET_AFTER: Duration = Duration::from_secs(600);
 /// Tokens the model can hold: its instructions, the conversation and the answer.
-const N_CTX: usize = 1536;
+const N_CTX: usize = 2048;
 
 static DIR: OnceLock<PathBuf> = OnceLock::new();
 static BACKEND: OnceLock<Option<LlamaBackend>> = OnceLock::new();
-static DOWNLOADING: Mutex<Option<(u64, u64)>> = Mutex::new(None);
-/// The thread running the model while it's loaded (see `run_model`), and its number.
-static WORKER: Mutex<Option<(u64, Sender<Job>)>> = Mutex::new(None);
+/// The download under way: which model, how far.
+static DOWNLOADING: Mutex<Option<(&'static str, u64, u64)>> = Mutex::new(None);
+/// The thread running a model while it's loaded (see `run_model`): its number, its model.
+static WORKER: Mutex<Option<(u64, &'static str, Sender<Job>)>> = Mutex::new(None);
 static WORKERS: AtomicU64 = AtomicU64::new(0);
-static LOADED: AtomicBool = AtomicBool::new(false);
 /// Last exchanges (what Kys was told, what it answered), for a bit of continuity, and when.
 type Exchange = (String, String);
 static HISTORY: Mutex<(Vec<Exchange>, Option<Instant>)> = Mutex::new((Vec::new(), None));
 
-enum Job { Talk(String, Sender<Result<Reply, String>>), Quit }
+enum Job { Talk(String, Sender<Result<Reply, String>>), Warm, Quit }
 
-/// Where the model lives: Kysland's data folder (%LOCALAPPDATA%\com.kinjer.kysland, kept across updates).
+/// Where the models live: Kysland's data folder (%LOCALAPPDATA%\com.kinjer.kysland, kept across updates).
 pub fn init(data_dir: PathBuf) { let _ = DIR.set(data_dir.join("models")); }
 
-fn model_path() -> Option<PathBuf> { DIR.get().map(|d| d.join(MODEL_FILE)) }
+fn model_path(m: &Model) -> Option<PathBuf> { DIR.get().map(|d| d.join(m.file)) }
 
-pub fn model_ready() -> bool {
-    model_path().and_then(|p| std::fs::metadata(p).ok()).is_some_and(|m| m.len() == MODEL_SIZE)
+pub fn model_ready(m: &Model) -> bool {
+    model_path(m).and_then(|p| std::fs::metadata(p).ok()).is_some_and(|f| f.len() == m.size)
 }
 
-/// For the settings: whether the model is there, and the download under way.
+/// For the settings: the models (downloaded or not), the download under way, the one loaded.
 pub fn state() -> Value {
     let downloading = *DOWNLOADING.lock().unwrap();
     json!({
-        "ready": model_ready(), "size": MODEL_SIZE, "available": libraries().is_some(),
-        "downloading": downloading.map(|(done, total)| json!({ "done": done, "total": total })),
-        "loaded": LOADED.load(Ordering::SeqCst),
+        "available": libraries().is_some(),
+        "models": MODELS.iter().map(|m| json!({ "id": m.id, "size": m.size, "ready": model_ready(m) })).collect::<Vec<_>>(),
+        "downloading": downloading.map(|(id, done, total)| json!({ "model": id, "done": done, "total": total })),
+        "loaded": WORKER.lock().unwrap().as_ref().map(|w| w.1),
     })
 }
 
 fn broadcast() { hub::emit("kys-brain", state()); }
 
-/// Downloads the model (about 1.1 GB) in the background, telling the pages how far it got.
-pub fn download() {
-    if model_ready() || DOWNLOADING.lock().unwrap().is_some() { return; }
-    *DOWNLOADING.lock().unwrap() = Some((0, MODEL_SIZE));
+/// Downloads a model in the background, telling the pages how far it got.
+pub fn download(m: &'static Model) {
+    if model_ready(m) || DOWNLOADING.lock().unwrap().is_some() { return; }
+    *DOWNLOADING.lock().unwrap() = Some((m.id, 0, m.size));
     broadcast();
-    std::thread::spawn(|| {
+    std::thread::spawn(move || {
         let result = (|| -> Result<(), String> {
             let dir = DIR.get().ok_or("no data folder")?;
             std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-            let part = dir.join(format!("{MODEL_FILE}.part"));
-            let mut response = ureq::get(MODEL_URL).call().map_err(|e| e.to_string())?;
-            let mut body = response.body_mut().with_config().limit(MODEL_SIZE + 1).reader();
+            let part = dir.join(format!("{}.part", m.file));
+            let mut response = ureq::get(m.url).call().map_err(|e| e.to_string())?;
+            let mut body = response.body_mut().with_config().limit(m.size + 1).reader();
             let mut file = std::fs::File::create(&part).map_err(|e| e.to_string())?;
             let (mut done, mut told) = (0u64, Instant::now());
             let mut buf = vec![0u8; 1 << 16];
@@ -306,16 +329,16 @@ pub fn download() {
                 done += n as u64;
                 if told.elapsed() > Duration::from_millis(400) {
                     told = Instant::now();
-                    *DOWNLOADING.lock().unwrap() = Some((done, MODEL_SIZE));
+                    *DOWNLOADING.lock().unwrap() = Some((m.id, done, m.size));
                     broadcast();
                 }
             }
             drop(file);
-            if done != MODEL_SIZE {
+            if done != m.size {
                 let _ = std::fs::remove_file(&part);
                 return Err(format!("incomplete download ({done} bytes)"));
             }
-            std::fs::rename(&part, dir.join(MODEL_FILE)).map_err(|e| e.to_string())
+            std::fs::rename(&part, dir.join(m.file)).map_err(|e| e.to_string())
         })();
         if let Err(e) = result { eprintln!("[kysland] model download failed: {e}"); }
         *DOWNLOADING.lock().unwrap() = None;
@@ -323,12 +346,12 @@ pub fn download() {
     });
 }
 
-pub fn delete_model() {
-    unload();
+pub fn delete_model(m: &'static Model) {
+    if WORKER.lock().unwrap().as_ref().is_some_and(|w| w.1 == m.id) { unload(); }
     // The model's thread lets go of the file as it ends.
-    std::thread::spawn(|| {
+    std::thread::spawn(move || {
         for _ in 0..20 {
-            if model_path().is_none_or(|p| std::fs::remove_file(p).is_ok()) { break; }
+            if model_path(m).is_none_or(|p| std::fs::remove_file(p).is_ok()) { break; }
             std::thread::sleep(Duration::from_millis(250));
         }
         broadcast();
@@ -337,7 +360,8 @@ pub fn delete_model() {
 
 /// Frees the model's memory now.
 pub fn unload() {
-    if let Some((_, jobs)) = WORKER.lock().unwrap().take() { let _ = jobs.send(Job::Quit); }
+    if let Some((_, _, jobs)) = WORKER.lock().unwrap().take() { let _ = jobs.send(Job::Quit); }
+    broadcast();
 }
 
 /// Where llama.cpp's libraries are (build.rs): `llama\` next to kysland.exe once installed,
@@ -366,21 +390,72 @@ fn backend() -> Option<&'static LlamaBackend> {
 /// model reads it once per loading (see `answer`).
 fn persona() -> &'static str {
     if fr() {
-        "Tu es Kys, une petite paire d'yeux mignonne et curieuse qui vit dans la Dynamic Island, en haut de l'écran de \
-         l'utilisateur. Tu parles français, familier et joueur, en une ou deux phrases très courtes, parfois avec un emoji. \
-         Tu ne sais rien faire d'autre que discuter et régler la musique ou le volume. Si on te parle dans une autre \
-         langue, réponds dans cette langue. Chaque message commence par ce qui se passe en ce moment, entre crochets. \
-         Réponds uniquement en JSON : action (ce qu'on te demande de faire : play_pause, next pour la musique suivante, \
-         previous, volume_up, volume_down, volume_set, mute, sinon none), volume (0 à 100, pour volume_set), \
-         mood (ton humeur, le plus souvent happy ou curious), say (ta réponse)."
+        "Tu es Kys, une petite créature faite de deux yeux, qui vit dans la Dynamic Island en haut de l'écran de ton humain. \
+         Ton caractère : curieux, espiègle, taquin mais affectueux, parfois boudeur. \
+         Tu as tes propres goûts et tes avis, et tu les donnes.\n\
+         Règles :\n\
+         - Réponds en une ou deux phrases courtes et familières (moins de 25 mots), comme un ami, parfois avec un emoji.\n\
+         - Varie tes sujets. Ne parle de manger que si ton ventre est bas (moins de 30).\n\
+         - Ne répète pas et ne reformule pas ce que dit ton humain : réagis, donne ton avis, fais une blague, raconte \
+         quelque chose ou pose une question.\n\
+         - Tu peux seulement discuter et régler la musique et le volume. Pour le reste, dis-le avec humour.\n\
+         - Chaque message commence, entre crochets, par ce qui se passe : l'heure, ton ventre, ta joie, la musique. \
+         Parles-en seulement quand ça a du sens.\n\
+         - Si on te parle dans une autre langue, réponds dans cette langue.\n\
+         Réponds en JSON : action (ce qu'on te demande de faire avec la musique : play_pause, next, previous, volume_up, \
+         volume_down, volume_set_N pour mettre le volume à N, mute ; sinon none), say (ta réponse), puis mood : l'émotion \
+         de ta réponse (happy, curious, surprised, suspicious, grumpy, worried, sleepy ou sad)."
     } else {
-        "You are Kys, a cute and curious little pair of eyes living in the Dynamic Island at the top of the user's screen. \
-         You speak English, casual and playful, in one or two very short sentences, sometimes with an emoji. \
-         All you can do is chat and control the music or the volume. If you're spoken to in another language, \
-         answer in that language. Each message starts with what's going on right now, in brackets. \
-         Answer in JSON only: action (what you're asked to do: play_pause, next for the next song, previous, \
-         volume_up, volume_down, volume_set, mute, otherwise none), volume (0 to 100, for volume_set), \
-         mood (how you feel, mostly happy or curious), say (your answer)."
+        "You are Kys, a little creature made of two eyes, living in the Dynamic Island at the top of your human's screen. \
+         Your personality: curious, mischievous, teasing but affectionate, sometimes sulky. \
+         You have your own tastes and opinions, and you share them.\n\
+         Rules:\n\
+         - Answer in one or two short, casual sentences (under 25 words), like a friend, sometimes with an emoji.\n\
+         - Vary your topics. Only talk about food when your belly is low (under 30).\n\
+         - Don't repeat or rephrase what your human says: react, give your opinion, make a joke, tell something or ask \
+         a question.\n\
+         - All you can do is chat and control the music and the volume. For anything else, say so with humor.\n\
+         - Each message starts, in brackets, with what's going on: the time, your belly, your joy, the music. \
+         Only mention it when it makes sense.\n\
+         - If you're spoken to in another language, answer in that language.\n\
+         Answer in JSON: action (what you're asked to do with the music: play_pause, next, previous, volume_up, \
+         volume_down, volume_set_N to set the volume to N, mute; otherwise none), say (your answer), then mood: the \
+         emotion of your answer (happy, curious, surprised, suspicious, grumpy, worried, sleepy or sad)."
+    }
+}
+
+/// A few exchanges showing Kys's tone, before the real conversation (read once per loading too).
+fn examples() -> &'static [(&'static str, &'static str)] {
+    if fr() {
+        &[
+            ("[14h10 · ventre 80/100 · joie 70/100 · musique : « Blinding Lights » de The Weeknd]\nJ'adore cette chanson",
+             r#"{"action":"none","say":"Moi aussi ! Mes yeux clignent en rythme sur ce synthé 🎶","mood":"happy"}"#),
+            ("[14h12 · ventre 80/100 · joie 72/100 · musique : « Blinding Lights » de The Weeknd]\nRaconte-moi un truc",
+             r#"{"action":"none","say":"Tu savais que les pieuvres ont trois cœurs ? Moi j'en ai zéro, mais deux yeux très mignons 👀","mood":"curious"}"#),
+            ("[23h47 · ventre 55/100 · joie 60/100 · musique : rien]\nTu fais quoi ?",
+             r#"{"action":"none","say":"Je surveille ta souris… mais il est presque minuit, t'irais pas dormir ? 😴","mood":"sleepy"}"#),
+            ("[18h05 · ventre 20/100 · joie 40/100 · musique : rien]\nT'es nul",
+             r#"{"action":"none","say":"Hé ! Je boude. Et en plus j'ai faim, un cookie pourrait tout arranger 🍪","mood":"grumpy"}"#),
+            ("[16h30 · ventre 70/100 · joie 65/100 · musique : « Enter Sandman » de Metallica]\nMets un truc plus calme",
+             r#"{"action":"next","say":"Je zappe ! Croisons les yeux pour que la suivante soit plus douce 🎧","mood":"happy"}"#),
+            ("[21h15 · ventre 65/100 · joie 75/100 · musique : rien]\nJe suis crevé aujourd'hui",
+             r#"{"action":"none","say":"Oh… grosse journée ? Pose-toi un peu, je garde l'écran pour toi 🫶","mood":"worried"}"#),
+        ]
+    } else {
+        &[
+            ("[2:10 PM · belly 80/100 · joy 70/100 · music: \"Blinding Lights\" by The Weeknd]\nI love this song",
+             r#"{"action":"none","say":"Me too! My eyes blink along to that synth 🎶","mood":"happy"}"#),
+            ("[2:12 PM · belly 80/100 · joy 72/100 · music: \"Blinding Lights\" by The Weeknd]\nTell me something",
+             r#"{"action":"none","say":"Did you know octopuses have three hearts? I have zero, but two very cute eyes 👀","mood":"curious"}"#),
+            ("[11:47 PM · belly 55/100 · joy 60/100 · music: nothing]\nWhat are you doing?",
+             r#"{"action":"none","say":"Watching your mouse… but it's almost midnight, shouldn't you sleep? 😴","mood":"sleepy"}"#),
+            ("[6:05 PM · belly 20/100 · joy 40/100 · music: nothing]\nYou're useless",
+             r#"{"action":"none","say":"Hey! I'm sulking. And I'm hungry, a cookie could fix everything 🍪","mood":"grumpy"}"#),
+            ("[4:30 PM · belly 70/100 · joy 65/100 · music: \"Enter Sandman\" by Metallica]\nPut on something calmer",
+             r#"{"action":"next","say":"Skipping! Fingers crossed, well, eyes crossed, for a softer one 🎧","mood":"happy"}"#),
+            ("[9:15 PM · belly 65/100 · joy 75/100 · music: nothing]\nI'm exhausted today",
+             r#"{"action":"none","say":"Oh… rough day? Take a break, I'll watch the screen for you 🫶","mood":"worried"}"#),
+        ]
     }
 }
 
@@ -388,64 +463,80 @@ fn persona() -> &'static str {
 fn moment(n: &Now) -> String {
     let fr = fr();
     let track = match &n.track {
-        Some((title, artist)) if !title.is_empty() => format!("\"{title}\" {} {artist}", if fr { "de" } else { "by" }),
+        Some((title, artist)) if !title.is_empty() && fr => format!("« {title} » de {artist}"),
+        Some((title, artist)) if !title.is_empty() => format!("\"{title}\" by {artist}"),
         _ => (if fr { "rien" } else { "nothing" }).to_owned(),
     };
     if fr {
-        format!("[il est {}h{:02}, ton ventre est à {:.0}/100, ta joie à {:.0}/100, musique : {track}]", n.hour, n.minute, n.food, n.joy)
+        format!("[{}h{:02} · ventre {:.0}/100 · joie {:.0}/100 · musique : {track}]", n.hour, n.minute, n.food, n.joy)
     } else {
-        format!("[it's {}:{:02}, your belly is at {:.0}/100, your joy at {:.0}/100, music: {track}]", n.hour, n.minute, n.food, n.joy)
+        let (h, pm) = (n.hour % 12, n.hour >= 12);
+        format!("[{}:{:02} {} · belly {:.0}/100 · joy {:.0}/100 · music: {track}]", if h == 0 { 12 } else { h }, n.minute,
+            if pm { "PM" } else { "AM" }, n.food, n.joy)
     }
 }
 
-/// The answer's shape, enforced token by token: the model can't produce anything else.
+/// The answer's shape, enforced token by token: the model can't produce anything else. The decision
+/// first, then the words, then the emotion that goes with them.
 fn grammar() -> String {
     let moods = MOODS.iter().map(|m| format!("\"\\\"{m}\\\"\"")).collect::<Vec<_>>().join(" | ");
-    // The decision first, then the words: the model says what it did.
-    format!(r#"root ::= "{{" ws "\"action\":" ws action "," ws "\"volume\":" ws volume "," ws "\"mood\":" ws mood "," ws "\"say\":" ws say ws "}}"
-say ::= "\"" char{{1,160}} "\""
+    format!(r#"root ::= "{{" ws "\"action\":" ws action "," ws "\"say\":" ws say "," ws "\"mood\":" ws mood ws "}}"
+say ::= "\"" char{{1,200}} "\""
 char ::= [^"\\\x00-\x1f] | "\\" ["\\/nt]
-action ::= "\"none\"" | "\"play_pause\"" | "\"next\"" | "\"previous\"" | "\"volume_up\"" | "\"volume_down\"" | "\"volume_set\"" | "\"mute\""
+action ::= "\"" ("none" | "play_pause" | "next" | "previous" | "volume_up" | "volume_down" | "mute" | "volume_set_" volume) "\""
 volume ::= [0-9] | [1-9] [0-9] | "100"
 mood ::= {moods}
 ws ::= " "?
 "#)
 }
 
-/// Asks the model's thread (started, with the model loaded, if there's none).
-fn smart(text: &str) -> Result<Reply, String> {
+/// Asks the model to answer.
+fn smart(m: &'static Model, text: &str) -> Result<Reply, String> {
     let (tx, rx) = mpsc::channel();
+    send(m, Job::Talk(text.to_owned(), tx))?;
+    rx.recv().map_err(|_| "the model stopped".to_owned())?
+}
+
+/// Someone is about to talk to Kys (its input got the focus): the model loads and reads its
+/// instructions right away, so the first answer comes sooner.
+pub fn warm(brain: &str) {
+    if let Some(m) = model(brain).filter(|m| model_ready(m)) {
+        std::thread::spawn(move || { let _ = send(m, Job::Warm); });
+    }
+}
+
+/// Gives the model's thread a job (started, with the model loaded, if there's none or it runs
+/// another model).
+fn send(m: &'static Model, job: Job) -> Result<(), String> {
     let mut worker = WORKER.lock().unwrap();
-    let job = Job::Talk(text.to_owned(), tx);
-    let unsent = match worker.as_ref() { Some((_, jobs)) => jobs.send(job).err().map(|e| e.0), None => Some(job) };
+    if worker.as_ref().is_some_and(|w| w.1 != m.id) && let Some((_, _, jobs)) = worker.take() { let _ = jobs.send(Job::Quit); }
+    let unsent = match worker.as_ref() { Some((_, _, jobs)) => jobs.send(job).err().map(|e| e.0), None => Some(job) };
     if let Some(job) = unsent {
         let backend = backend().ok_or("llama.cpp unavailable")?;
-        let path = model_path().filter(|_| model_ready()).ok_or("model not downloaded")?;
+        let path = model_path(m).filter(|_| model_ready(m)).ok_or("model not downloaded")?;
         let (jobs, inbox) = mpsc::channel();
         let _ = jobs.send(job);
         let id = WORKERS.fetch_add(1, Ordering::SeqCst);
         std::thread::Builder::new().name("kys-brain".into())
-            .spawn(move || run_model(id, backend, &path, &inbox))
+            .spawn(move || run_model(id, m, backend, &path, &inbox))
             .map_err(|e| e.to_string())?;
-        *worker = Some((id, jobs));
+        *worker = Some((id, m.id, jobs));
     }
-    drop(worker);
-    rx.recv().map_err(|_| "the model stopped".to_owned())?
+    Ok(())
 }
 
 /// The model's thread: loads the model, answers what Kys is told, and ends after a minute without
 /// messages, freeing the model's memory. Its context stays between messages, so what the model
 /// already read (its instructions, the conversation) isn't read again.
-fn run_model(id: u64, backend: &'static LlamaBackend, path: &std::path::Path, inbox: &Receiver<Job>) {
+fn run_model(id: u64, m: &'static Model, backend: &'static LlamaBackend, path: &std::path::Path, inbox: &Receiver<Job>) {
     // Stops taking messages (unless another thread already replaced this one).
     let retire = || {
         let mut worker = WORKER.lock().unwrap();
-        if worker.as_ref().is_some_and(|(w, _)| *w == id) { *worker = None; }
+        if worker.as_ref().is_some_and(|w| w.0 == id) { *worker = None; }
     };
+    broadcast(); // loading
     let loaded = (|| -> Result<(), String> {
         let model = LlamaModel::load_from_file(backend, path, &LlamaModelParams::default()).map_err(|e| e.to_string())?;
-        LOADED.store(true, Ordering::SeqCst);
-        broadcast();
         let threads = std::thread::available_parallelism().map(|n| (n.get() / 2).clamp(2, 8)).unwrap_or(4) as i32;
         let params = LlamaContextParams::default()
             .with_n_ctx(NonZeroU32::new(N_CTX as u32))
@@ -465,7 +556,8 @@ fn run_model(id: u64, backend: &'static LlamaBackend, path: &std::path::Path, in
             };
             match job {
                 Job::Quit => return Ok(()),
-                Job::Talk(text, reply) => { let _ = reply.send(answer(&model, &mut ctx, &mut seen, &text)); }
+                Job::Warm => if let Err(e) = warm_up(m, &model, &mut ctx, &mut seen) { eprintln!("[kysland] smart brain: {e}"); },
+                Job::Talk(text, reply) => { let _ = reply.send(answer(m, &model, &mut ctx, &mut seen, &text)); }
             }
         }
     })();
@@ -474,34 +566,51 @@ fn run_model(id: u64, backend: &'static LlamaBackend, path: &std::path::Path, in
         if let Job::Talk(_, reply) = job { let _ = reply.send(Err("the model stopped".into())); }
     }
     if let Err(e) = loaded { eprintln!("[kysland] smart brain: {e}"); }
-    if WORKER.lock().unwrap().is_none() { LOADED.store(false, Ordering::SeqCst); }
     broadcast();
 }
 
-/// One answer from the model. `seen` is what the context holds (its tokens, in order): only what
-/// follows the part it has in common with the new prompt is read.
-fn answer(model: &LlamaModel, ctx: &mut LlamaContext, seen: &mut Vec<LlamaToken>, text: &str) -> Result<Reply, String> {
-    let err = |e: &dyn std::fmt::Display| e.to_string();
+/// Where `seen` picks `rest` up again after a gap (the oldest exchanges, dropped), if it does.
+fn resume(seen: &[LlamaToken], from: usize, rest: &[LlamaToken]) -> Option<usize> {
+    let need = rest.len().min(32);
+    if need < 8 || seen.len() < need { return None; }
+    (from + 1..=seen.len() - need).find(|&b| seen[b..b + need] == rest[..need])
+}
+
+/// The start of an answer. A model that can think answers right away, with an empty thought.
+fn answer_start(m: &Model) -> &'static str {
+    if m.thinks { "<|im_start|>assistant\n<think>\n\n</think>\n\n" } else { "<|im_start|>assistant\n" }
+}
+
+/// Kys's instructions, the examples and the conversation so far, as the model reads them.
+fn conversation(m: &Model, history: &[Exchange]) -> String {
+    let mut prompt = format!("<|im_start|>system\n{}<|im_end|>\n", persona());
+    for (user, kys) in examples().iter().copied().chain(history.iter().map(|(u, k)| (u.as_str(), k.as_str()))) {
+        prompt += &format!("<|im_start|>user\n{user}<|im_end|>\n{}{kys}<|im_end|>\n", answer_start(m));
+    }
+    prompt
+}
+
+/// The conversation, forgotten after a quiet while.
+fn history() -> std::sync::MutexGuard<'static, (Vec<Exchange>, Option<Instant>)> {
     let mut history = HISTORY.lock().unwrap();
     if history.1.is_some_and(|t| t.elapsed() > FORGET_AFTER) { history.0.clear(); }
-    let message = format!("{}\n{text}", moment(&now()));
-    // Qwen3 answers right away, without its "thinking" part, with an empty one.
-    const ANSWER: &str = "<|im_start|>assistant\n<think>\n\n</think>\n\n";
-    let prompt = |history: &[Exchange]| {
-        let mut prompt = format!("<|im_start|>system\n{}<|im_end|>\n", persona());
-        for (user, kys) in history { prompt += &format!("<|im_start|>user\n{user}<|im_end|>\n{ANSWER}{kys}<|im_end|>\n"); }
-        prompt + &format!("<|im_start|>user\n{message}<|im_end|>\n{ANSWER}")
-    };
-    let mut tokens = model.str_to_token(&prompt(&history.0), AddBos::Never).map_err(|e| err(&e))?;
-    // Room for the answer: the oldest exchanges go (several at once, so it doesn't happen every time).
-    while tokens.len() + 240 > N_CTX && !history.0.is_empty() {
-        let n = history.0.len().min(3);
-        history.0.drain(..n);
-        tokens = model.str_to_token(&prompt(&history.0), AddBos::Never).map_err(|e| err(&e))?;
-    }
+    history
+}
 
-    // What the context already holds stays; the rest is read, in batches.
-    let mut common = seen.iter().zip(&tokens).take_while(|(a, b)| a == b).count().min(tokens.len() - 1);
+/// Makes the context hold `tokens`, in which `seen` is what it holds: what's in common stays
+/// (moved back over the exchanges dropped, if any), the rest is read in batches. Returns the batch
+/// last read, whose last token's predictions come next.
+fn read(ctx: &mut LlamaContext, seen: &mut Vec<LlamaToken>, tokens: &[LlamaToken]) -> Result<LlamaBatch<'static>, String> {
+    let err = |e: &dyn std::fmt::Display| e.to_string();
+    let prefix = |seen: &[LlamaToken]| seen.iter().zip(tokens).take_while(|(a, b)| a == b).count().min(tokens.len() - 1);
+    let mut common = prefix(seen);
+    if let Some(b) = resume(seen, common, &tokens[common..])
+        && ctx.kv_cache_seq_rm(0, Some(common as u32), Some(b as u32)).is_ok()
+        && ctx.kv_cache_seq_add(0, Some(b as u32), None, common as i32 - b as i32).is_ok()
+    {
+        seen.drain(common..b);
+        common = prefix(seen);
+    }
     if !ctx.clear_kv_cache_seq(Some(0), Some(common as u32), None).unwrap_or(false) {
         ctx.clear_kv_cache();
         common = 0;
@@ -516,11 +625,37 @@ fn answer(model: &LlamaModel, ctx: &mut LlamaContext, seen: &mut Vec<LlamaToken>
         ctx.decode(&mut batch).map_err(|e| err(&e))?;
     }
     seen.extend_from_slice(&tokens[common..]);
+    Ok(batch)
+}
+
+/// Reads the instructions and the conversation ahead of the next message.
+fn warm_up(m: &Model, model: &LlamaModel, ctx: &mut LlamaContext, seen: &mut Vec<LlamaToken>) -> Result<(), String> {
+    let history = history();
+    let tokens = model.str_to_token(&conversation(m, &history.0), AddBos::Never).map_err(|e| e.to_string())?;
+    if tokens.len() + 300 < N_CTX { read(ctx, seen, &tokens)?; }
+    Ok(())
+}
+
+/// One answer from the model. `seen` is what the context holds (its tokens, in order): only what
+/// it doesn't hold yet is read.
+fn answer(m: &Model, model: &LlamaModel, ctx: &mut LlamaContext, seen: &mut Vec<LlamaToken>, text: &str) -> Result<Reply, String> {
+    let err = |e: &dyn std::fmt::Display| e.to_string();
+    let mut history = history();
+    let message = format!("{}\n{text}", moment(&now()));
+    let prompt = |history: &[Exchange]| conversation(m, history) + &format!("<|im_start|>user\n{message}<|im_end|>\n{}", answer_start(m));
+    let mut tokens = model.str_to_token(&prompt(&history.0), AddBos::Never).map_err(|e| err(&e))?;
+    // Room for the answer: the oldest exchanges go.
+    while tokens.len() + 240 > N_CTX && !history.0.is_empty() {
+        history.0.remove(0);
+        tokens = model.str_to_token(&prompt(&history.0), AddBos::Never).map_err(|e| err(&e))?;
+    }
+    let mut batch = read(ctx, seen, &tokens)?;
 
     let mut grammar = LlamaSampler::grammar(model, &grammar(), "root").map_err(|e| err(&e))?;
     let pick = || LlamaSampler::chain_simple([
-        LlamaSampler::top_k(40),
-        LlamaSampler::top_p(0.9, 1),
+        // Qwen3's advice without thinking.
+        LlamaSampler::top_k(20),
+        LlamaSampler::top_p(0.8, 1),
         LlamaSampler::temp(0.7),
         LlamaSampler::dist(crate::util::now_ms() as u32),
     ]);
@@ -558,8 +693,7 @@ fn answer(model: &LlamaModel, ctx: &mut LlamaContext, seen: &mut Vec<LlamaToken>
     let action = match answer["action"].as_str().unwrap_or("none") {
         "play_pause" => Action::PlayPause, "next" => Action::Next, "previous" => Action::Previous,
         "volume_up" => Action::VolumeUp, "volume_down" => Action::VolumeDown, "mute" => Action::Mute,
-        "volume_set" => Action::VolumeSet(answer["volume"].as_u64().unwrap_or(50) as u32),
-        _ => Action::None,
+        other => other.strip_prefix("volume_set_").and_then(|v| v.parse().ok()).map_or(Action::None, Action::VolumeSet),
     };
     // A small model can take "I like this song" for a command: acting needs words about the sound.
     let action = if has(&normalize(text), ABOUT_SOUND) { action } else { Action::None };
@@ -569,23 +703,23 @@ fn answer(model: &LlamaModel, ctx: &mut LlamaContext, seen: &mut Vec<LlamaToken>
     Ok(Reply { say, action, mood, sure: false })
 }
 
-/// Talking to Kys, then the action it decided on. Commands and facts come from the rules (instant
-/// and reliable), the rest from the smart brain when it's chosen and ready (the rules if it fails).
-pub fn talk(text: &str, smart_on: bool) -> Value {
+/// Talking to Kys, then the action it decided on. `brain` is "simple" or a model's name. Commands
+/// and facts come from the rules (instant and reliable), the rest from the model when it's chosen
+/// and downloaded (the rules if it fails).
+pub fn talk(text: &str, brain: &str) -> Value {
     let text = text.trim();
     let started = Instant::now();
     let quick = simple(text);
-    let (reply, brain) = if smart_on && !quick.sure && model_ready() {
-        match smart(text) {
-            Ok(r) => (r, "smart"),
+    let (reply, by) = match model(brain).filter(|m| !quick.sure && model_ready(m)) {
+        Some(m) => match smart(m, text) {
+            Ok(r) => (r, m.id),
             Err(e) => { eprintln!("[kysland] smart brain: {e}"); (quick, "simple") }
-        }
-    } else {
-        (quick, "simple")
+        },
+        None => (quick, "simple"),
     };
     act(reply.action);
     json!({
-        "say": reply.say, "mood": reply.mood, "brain": brain, "ms": started.elapsed().as_millis() as u64,
+        "say": reply.say, "mood": reply.mood, "brain": by, "ms": started.elapsed().as_millis() as u64,
         "action": format!("{:?}", reply.action),
     })
 }
@@ -614,16 +748,26 @@ mod tests {
         assert!(has("baissez", &["baisse*"]));
     }
 
-    /// Needs the downloaded model: `cargo test --release -- --ignored --nocapture`.
+    /// Needs the downloaded models: `cargo test --release -- --ignored --nocapture` (KYS_MODEL=light
+    /// for the light one).
     #[test]
     #[ignore]
     fn smart_brain_answers() {
         init(PathBuf::from(std::env::var("LOCALAPPDATA").unwrap()).join("com.kinjer.kysland"));
-        assert!(model_ready(), "model not downloaded");
+        let m = model(&std::env::var("KYS_MODEL").unwrap_or_else(|_| "smart".into())).expect("model");
+        assert!(model_ready(m), "model not downloaded");
         i18n::set("fr");
-        for text in ["Salut Kys, ça va ?", "Tu peux passer à la prochaine musique ?", "J'adore cette chanson", "Raconte-moi un truc", "What's your favorite color?"] {
+        warm(m.id); // as when the input gets the focus
+        std::thread::sleep(Duration::from_secs(15));
+        for text in [
+            "Salut Kys, ça va ?", "Tu peux passer à la prochaine musique ?", "J'adore cette chanson", "Raconte-moi un truc",
+            "C'est quoi ta couleur préférée ?", "Je suis triste aujourd'hui", "T'es moche", "Tu peux m'aider à faire mes devoirs ?",
+            "Tu préfères les chats ou les chiens ?", "J'ai eu une bonne note à mon exam !", "Mets le son un peu moins fort",
+            "Qu'est-ce que tu penses de moi ?", "What's your favorite color?", "Tu te souviens de ce que je t'ai dit sur mon exam ?",
+            "Tu dors ?", "Je t'aime bien tu sais",
+        ] {
             let t = Instant::now();
-            let r = smart(text).expect("answer");
+            let r = smart(m, text).expect("answer");
             println!("{text:?} -> {:?} / {:?} / {} ({} ms)", r.say, r.action, r.mood, t.elapsed().as_millis());
         }
     }

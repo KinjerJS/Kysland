@@ -47,7 +47,7 @@ const SOURCES: &[(&str, u32, f64, u32)] = &[
     ("dizzy", 2, -3.0, 10), // made dizzy by circling it
     ("flight", 3, 2.0, 5),  // back from being thrown out of the island
     ("poke", 1, 2.0, 10),   // poked while roaming
-    ("talk", 1, 2.0, 10),   // talked to (its page)
+    ("talk", 1, 2.0, 10),   // talked to nicely (its page)
     ("time", 1, 0.0, 30),   // every 10 minutes of use (the engine's own)
 ];
 
@@ -193,6 +193,16 @@ pub fn earn(source: &str) {
         gain
     });
     broadcast(gain.map(|c| (c, source)));
+}
+
+/// Talked to: a credit and a bit of joy, unless it was to be mean (its answer is grumpy).
+pub fn talked(mood: &str) {
+    if mood != "grumpy" { return earn("talk"); }
+    with(|kys| {
+        kys.joy = (kys.joy - 4.0).max(0.0);
+        save(kys);
+    });
+    broadcast(None);
 }
 
 pub fn buy(item: &str) -> Result<(), String> {

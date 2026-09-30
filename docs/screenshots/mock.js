@@ -45,7 +45,10 @@
     [/hungry|eat/i, { say: 'A little… that cake looks amazing though. 🍰', mood: 'curious' }],
     [/crown/i, { say: 'Right? I feel like the king of the island. 👑', mood: 'happy' }],
   ];
-  const brain = { ready: true, size: 1107409472, downloading: null, loaded: false };
+  const brain = {
+    available: true, downloading: null, loaded: null,
+    models: [{ id: 'light', size: 1107409472, ready: false }, { id: 'smart', size: 2497281120, ready: true }],
+  };
 
   const responses = {
     init: () => ({
@@ -81,6 +84,7 @@
     kys_talk: async ({ text }) => {
       await new Promise((resolve) => setTimeout(resolve, 500));
       const reply = replies.find(([re]) => re.test(text))?.[1] || { say: 'Hehe. 👀', mood: 'happy' };
+      setTimeout(() => window.demo.emit('kys-mood', { mood: reply.mood })); // as the engine does
       return { ...reply, brain: 'smart', ms: 2400, action: 'None' };
     },
     kys_brain: () => brain,

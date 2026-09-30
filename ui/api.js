@@ -23,7 +23,8 @@
       // Its brain (brain.rs): an answer { say, mood, action, brain, ms }, the smart brain's model.
       talk: (text) => invoke('kys_talk', { text }),
       brain: () => invoke('kys_brain'),
-      model: (action) => invoke('kys_brain_model', { action }),
+      model: (action, model) => invoke('kys_brain_model', { action, model }),
+      warm: () => invoke('kys_warm'),
       typing: (on) => invoke('kys_typing', { on }),
     },
     setHitRects: (rects, notch, dodgeable, grab, watch) => invoke('set_hit_rects', {

@@ -229,27 +229,37 @@
   const size = (bytes) => (bytes >= 1e9 ? t('kys.size_gb', { n: (bytes / 1e9).toLocaleString(i18n.lang, { maximumFractionDigits: 1 }) })
     : t('kys.size_mb', { n: Math.round(bytes / 1e6).toLocaleString(i18n.lang) }));
 
+  // About how long each model takes to answer, in seconds (brain.rs).
+  const SECONDS = { light: 1, smart: 3 };
+
   function brainRows() {
-    const b = S.brain || {};
-    const smart = S.island['kys-brain'] === 'smart';
-    const rows = [row(t('kys.brain'), t('kys.brain_desc'), seg('kys-brain', [['simple', t('kys.brain_simple')], ['smart', t('kys.brain_smart')]]))];
-    if (!smart && !b.ready && !b.downloading) return rows;
-    let desc, control;
-    if (b.downloading) {
-      const { done, total } = b.downloading;
-      desc = `<span class="dl-text">${esc(t('kys.model_progress', { done: size(done), total: size(total) }))}</span>`
-        + `<div class="dl"><div class="dl-fill" style="width:${((done / total) * 100).toFixed(1)}%"></div></div>`;
-      control = '';
-    } else if (b.ready) {
-      desc = esc(t('kys.model_ready', { size: size(b.size) }));
-      control = `<button class="btn" data-model="delete">${esc(t('kys.delete'))}</button>`;
+    const b = S.brain || { models: [] };
+    const brain = S.island['kys-brain'];
+    const rows = [row(t('kys.brain'), t('kys.brain_desc'), seg('kys-brain', [
+      ['simple', t('kys.brain_simple')], ['light', t('kys.brain_light')], ['smart', t('kys.brain_smart')],
+    ]))];
+    // The chosen model, then the other ones downloaded (to free their space).
+    const shown = b.models.filter((m) => m.id === brain || m.ready || b.downloading?.model === m.id)
+      .sort((x, y) => (y.id === brain) - (x.id === brain));
+    return rows.concat(shown.map((m) => modelRow(m, b, m.id === brain)));
+  }
+
+  function modelRow(m, b, chosen) {
+    const dl = b.downloading?.model === m.id ? b.downloading : null;
+    let desc, control = '';
+    if (dl) {
+      desc = `<span class="dl-text">${esc(t('kys.model_progress', { done: size(dl.done), total: size(dl.total) }))}</span>`
+        + `<div class="dl"><div class="dl-fill" style="width:${((dl.done / dl.total) * 100).toFixed(1)}%"></div></div>`;
+    } else if (m.ready) {
+      desc = esc(t(chosen ? 'kys.model_ready' : 'kys.model_other', { size: size(m.size) }));
+      control = `<button class="btn" data-model="delete" data-model-id="${m.id}">${esc(t('kys.delete'))}</button>`;
     } else {
-      desc = esc(t('kys.model_missing', { size: size(b.size) })) + (smart ? `<br><span class="warn">${esc(t('kys.model_needed'))}</span>` : '');
-      control = `<button class="btn on" data-model="download"><i class="icon icon-download"></i> ${esc(t('kys.download'))}</button>`;
+      desc = `${esc(t('kys.model_missing', { size: size(m.size), s: SECONDS[m.id] }))}<br><span class="warn">${esc(t('kys.model_needed'))}</span>`;
+      control = `<button class="btn on" data-model="download" data-model-id="${m.id}" ${b.downloading ? 'disabled' : ''}>`
+        + `<i class="icon icon-download"></i> ${esc(t('kys.download'))}</button>`;
     }
-    rows.push(`<div class="row sub model"><div class="text"><div class="title">${esc(t('kys.model'))}</div><div class="desc">${desc}</div></div>`
-      + `<div class="control">${control}</div></div>`);
-    return rows;
+    return `<div class="row sub model"><div class="text"><div class="title">${esc(t(`kys.model_${m.id}`))}</div>`
+      + `<div class="desc">${desc}</div></div><div class="control">${control}</div></div>`;
   }
 
   async function talk(text) {
@@ -260,12 +270,8 @@
     let reply = null;
     try { reply = await invoke('kys_talk', { text }); } catch (e) { toast(String(e)); }
     thinking = false;
-    if (reply?.say) {
-      chat.push({ who: 'kys', text: reply.say });
-      buddy.setMood(reply.mood || 'happy', 2600);
-    } else {
-      buddy.setMood('neutral');
-    }
+    if (reply?.say) chat.push({ who: 'kys', text: reply.say }); // its mood comes with the "kys-mood" event
+    else buddy.setMood('neutral');
     while (chat.length > 12) chat.shift();
     render();
   }
@@ -277,7 +283,7 @@
     S.brain = b;
     if (tab !== 'kys') return;
     const fill = $('.dl-fill');
-    if (was?.downloading && b.downloading && fill) {
+    if (was?.downloading && b.downloading?.model === was.downloading.model && fill) {
       fill.style.width = `${((b.downloading.done / b.downloading.total) * 100).toFixed(1)}%`;
       $('.dl-text').textContent = t('kys.model_progress', { done: size(b.downloading.done), total: size(b.downloading.total) });
       return;
@@ -331,7 +337,7 @@
       return render();
     }
     if (kysAction(d)) return;
-    if (d.model) return invoke('kys_brain_model', { action: d.model });
+    if (d.model) return invoke('kys_brain_model', { action: d.model, model: d.modelId });
     if (d.toggle) return set(d.toggle, val(d.toggle) !== true);
     if (d.key) return set(d.key, JSON.parse(d.value));
     if (d.screens) {
@@ -698,6 +704,9 @@
   listen('kys-feed', (e) => buddy.eat(e.payload.item));
   listen('kys-play', () => buddy.play());
   listen('kys-brain', (e) => onBrain(e.payload));
+  listen('kys-mood', (e) => buddy.setMood(e.payload.mood, 4000));
+  // The smart brain gets ready while you type.
+  document.addEventListener('focusin', (e) => { if (e.target.matches('.talk input')) invoke('kys_warm'); });
   listen('settings-tab', (e) => {
     tab = e.payload;
     if (S) render();

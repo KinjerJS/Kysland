@@ -672,20 +672,31 @@ async fn kys_play() -> Result<(), String> { kys::play() }
 /// seconds of CPU, off the command threads.
 #[tauri::command]
 async fn kys_talk(text: String) -> Value {
-    let smart = with(|s| config::island_conf(&s.cfg)["kys-brain"] == "smart");
+    let brain = with(|s| config::island_conf(&s.cfg)["kys-brain"].as_str().unwrap_or("simple").to_owned());
     let text: String = text.chars().take(300).collect();
-    let reply = tauri::async_runtime::spawn_blocking(move || brain::talk(&text, smart)).await.unwrap_or(Value::Null);
-    kys::earn("talk");
+    let reply = tauri::async_runtime::spawn_blocking(move || brain::talk(&text, &brain)).await.unwrap_or(Value::Null);
+    // Every Kys shows the answer's emotion (the island's eyes, the settings' buddy), and feels it.
+    let mood = reply["mood"].as_str().unwrap_or("happy");
+    hub::emit("kys-mood", json!({ "mood": mood }));
+    kys::talked(mood);
     reply
 }
 
 #[tauri::command]
 fn kys_brain() -> Value { brain::state() }
 
-/// The smart brain's model: "download" (progress as "kys-brain" events) or "delete".
+/// Kys's input got the focus: the smart brain gets ready (see brain::warm).
 #[tauri::command]
-fn kys_brain_model(action: String) {
-    match action.as_str() { "download" => brain::download(), "delete" => brain::delete_model(), _ => {} }
+fn kys_warm() {
+    let brain = with(|s| config::island_conf(&s.cfg)["kys-brain"].as_str().unwrap_or("simple").to_owned());
+    brain::warm(&brain);
+}
+
+/// A smart brain's model ("light", "smart"): "download" (progress as "kys-brain" events) or "delete".
+#[tauri::command]
+fn kys_brain_model(action: String, model: String) {
+    let Some(m) = brain::model(&model) else { return };
+    match action.as_str() { "download" => brain::download(m), "delete" => brain::delete_model(m), _ => {} }
 }
 
 /// Typing to Kys in the island: the island never takes the focus, except while its input is in
@@ -969,7 +980,7 @@ pub fn run() {
                 .build(),
         )
         .invoke_handler(tauri::generate_handler![init, run_command, notifications, set_hit_rects, action, settings_state, set_setting, settings_action,
-            kys_state, kys_earn, kys_buy, kys_feed, kys_wear, kys_play, kys_talk, kys_brain, kys_brain_model, kys_typing])
+            kys_state, kys_earn, kys_buy, kys_feed, kys_wear, kys_play, kys_talk, kys_brain, kys_brain_model, kys_typing, kys_warm])
         .on_menu_event(|app, e| on_menu(app, e.id().as_ref()))
         .setup(move |app| {
             let handle = app.handle().clone();

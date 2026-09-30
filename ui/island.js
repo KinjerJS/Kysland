@@ -754,7 +754,7 @@
       'auto-hide-distance': 300,     // px around the island where it comes back
       notifications: true,           // Windows notifications in the island
       claude: false,                 // Claude plan usage (if Claude Code is installed)
-      'kys-brain': 'simple',         // what Kys understands: "simple" (rules) or "smart" (the local model, brain.rs)
+      'kys-brain': 'simple',         // what Kys understands: "simple" (rules), "light" or "smart" (a local model, brain.rs)
       'notification-duration': 6,    // seconds
       transients: { volume: true, media: true, battery: true, network: true, workspace: true },
     },
@@ -904,6 +904,10 @@
 
     onKysPlay(m) {
       if (m.island) kysPlay(m);
+    },
+
+    onKysMood(m, { mood }) {
+      if (m.island) kysFeel(m, mood);
     },
 
     onGaze(m, x, y) {
@@ -1215,6 +1219,28 @@
     }
   }
 
+  /**
+   * What Kys felt while answering (brain.rs), on every Kys: the face of its page when it's open,
+   * otherwise the island's own eyes, which drop in to show it (when it was talked to from the
+   * settings).
+   */
+  function kysFeel(m, mood) {
+    const S = m.island;
+    const face = S.notch.current?.querySelector('.n-kys-face');
+    if (face) return faceMood(face, mood, 4000);
+    const feel = () => S.eyes.setMood(mood, 3400);
+    if (S.peeking) {
+      clearTimeout(S.peekEndT);
+      S.peekEndT = setTimeout(() => endPeek(m), 3800);
+      return feel();
+    }
+    if (S.dodged) return feel();
+    if (!S.expanded && canPeek(m, S, true)) {
+      startPeek(m, { duration: 4000, quiet: true, force: true });
+      setTimeout(feel, 420);
+    }
+  }
+
   /** Playing ball (from the settings): a ball bouncing under the island, Kys following it. */
   function kysPlay(m) {
     const S = m.island;
@@ -1276,7 +1302,7 @@
         </div>
         <div class="k-msg"></div>
         <div class="n-kys-top">
-          <div class="n-kys-face"><span class="f-eye"></span><span class="f-eye"></span><span class="hat"></span><span class="ask">🍪</span></div>
+          <div class="n-kys-face">${FACE_EYES}<span class="hat"></span><span class="ask">🍪</span></div>
           <div class="n-kys-gauges"></div>
         </div>
         <div class="k-say"></div>
@@ -1290,6 +1316,7 @@
         el.querySelector('.n-back').onclick = () => { stopTyping(m); S.page = 'main'; render(m); };
         el.querySelector('.n-kys-body').onclick = (e) => kysPageClick(m, el, e);
         el.addEventListener('mousemove', (e) => faceAim(el, e.clientX, e.clientY));
+        faceBlink(el.querySelector('.n-kys-face'));
         mountTalk(m, el);
       },
       update(el) {
@@ -1302,6 +1329,7 @@
         face.dataset.wear = k.wearing || '';
         face.classList.toggle('hungry', hungry);
         face.classList.toggle('sad', sad);
+        if (!face.moodT) faceMood(face, 'neutral');
         const status = sad ? 'kys.status_sad' : hungry ? 'kys.status_hungry' : k.food > 60 && k.joy > 70 ? 'kys.status_great' : 'kys.status_ok';
         const bar = (label, value, cls) => `<div class="k-bar"><span>${esc(label)}</span>`
           + `<div class="track"><div class="fill ${cls}" style="width:${value}%"></div></div><b>${value}</b></div>`;
@@ -1378,7 +1406,10 @@
       S.typing = true;
       api.kys.typing(true).then(() => input.focus());
     });
-    input.addEventListener('focus', () => { S.typing = true; });
+    input.addEventListener('focus', () => {
+      S.typing = true;
+      api.kys.warm(); // the smart brain gets ready while you type
+    });
     input.addEventListener('blur', () => {
       stopTyping(m);
       const out = () => !S.hover;
@@ -1411,11 +1442,7 @@
     say.innerHTML = thinking ? '<i></i><i></i><i></i>' : esc(text);
     say.classList.add('show');
     face.classList.toggle('think', thinking);
-    if (!thinking) {
-      clearTimeout(S.kysMoodT);
-      face.dataset.mood = mood;
-      S.kysMoodT = setTimeout(() => { delete face.dataset.mood; }, 2600);
-    }
+    faceMood(face, thinking ? 'curious' : mood, thinking ? 0 : 4000);
     requestAnimationFrame(() => S.notch.resize());
   }
 
@@ -1428,13 +1455,38 @@
 
   /** The face's eyes follow the cursor over the page. */
   function faceAim(view, x, y) {
-    const face = view.querySelector('.n-kys-face');
-    if (!face) return;
-    const r = face.getBoundingClientRect();
+    const eyes = view.querySelector('.n-kys-face .notch-eyes');
+    if (!eyes) return;
+    const r = eyes.getBoundingClientRect();
     const dx = x - (r.left + r.width / 2), dy = y - (r.top + r.height / 2);
     const len = Math.hypot(dx, dy) || 1, k = Math.min(1, len / 80);
-    face.style.setProperty('--fx', `${((dx / len) * k * 4).toFixed(2)}px`);
-    face.style.setProperty('--fy', `${((dy / len) * k * 3).toFixed(2)}px`);
+    eyes.style.setProperty('--gx', `${((dx / len) * k * 4).toFixed(2)}px`);
+    eyes.style.setProperty('--gy', `${((dy / len) * k * 3).toFixed(2)}px`);
+  }
+
+  // The page's face has Kys's own eyes (the markup and the moods of the Eyes class: brows, lids).
+  const FACE_EYES = '<div class="notch-eyes"><span class="eye l"><b></b><i></i></span><span class="eye r"><b></b><i></i></span></div>';
+
+  /** A mood on the face, for a while (then back to its usual one: sad when it's miserable). */
+  function faceMood(face, mood, ms = 0) {
+    const eyes = face.querySelector('.notch-eyes');
+    if (!eyes) return;
+    clearTimeout(face.moodT);
+    face.moodT = 0;
+    eyes.dataset.mood = mood === 'neutral' && face.classList.contains('sad') ? 'sad' : mood;
+    if (ms) face.moodT = setTimeout(() => { face.moodT = 0; faceMood(face, 'neutral'); }, ms);
+  }
+
+  /** The face blinks now and then, as long as it's on screen. */
+  function faceBlink(face) {
+    const eyes = face.querySelector('.notch-eyes');
+    const blink = () => {
+      if (!face.isConnected) return;
+      eyes.classList.add('blink');
+      setTimeout(() => eyes.classList.remove('blink'), 120);
+      setTimeout(blink, 2200 + Math.random() * 3300);
+    };
+    setTimeout(blink, 1500 + Math.random() * 1500);
   }
 
   /** Fed while its page is open: the food drops onto the face, a few chomps, a heart. */
@@ -1453,9 +1505,9 @@
       food.remove();
       face.classList.remove('munch');
       void face.offsetWidth;
-      face.classList.add('munch', 'happy');
+      face.classList.add('munch');
+      faceMood(face, 'happy', 2200);
       setTimeout(() => face.classList.remove('munch'), 950);
-      setTimeout(() => face.classList.remove('happy'), 2200);
       floatAt(c, '❤', 'heart');
     }, 480);
   }
@@ -1469,13 +1521,12 @@
     ball.className = 'kys-ball';
     ball.textContent = '⚽';
     document.body.appendChild(ball);
-    face.classList.add('happy');
+    faceMood(face, 'happy', 3600);
     const t0 = performance.now(), duration = 3600;
     const step = (now) => {
       const u = (now - t0) / duration;
       if (u >= 1 || !view.isConnected) {
         ball.remove();
-        face.classList.remove('happy');
         return;
       }
       const r = view.getBoundingClientRect(), f = face.getBoundingClientRect();
