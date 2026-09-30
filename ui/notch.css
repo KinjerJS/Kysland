@@ -648,7 +648,7 @@ body.pos-bottom .notch.splash { transform-origin: 50% 100%; }
   scale: var(--ss);
   opacity: var(--so);
 }
-.notch.roaming .notch-eyes .stars span { font-size: 12px; }
+.notch.roaming .notch-eyes .stars span, .eye-flyer .notch-eyes .stars span { font-size: 12px; }
 
 /* Peeking eyes (island.js): they drop in from the top (the screen edge) into the middle of the
    resting island and land on its content, knocking what's on either side down and askew

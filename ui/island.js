@@ -722,6 +722,10 @@
       this.flyer.setPointerCapture(e.pointerId);
       F.held = { x: e.clientX, y: e.clientY };
       F.caught = true;
+      // Caught while dizzy: no time for that, it panics.
+      this.dizzyUntil = 0;
+      this.spin = 0;
+      this.el.classList.remove('dizzy');
       F.move?.end?.();
       F.move = null;
       this.flyer.classList.add('held');
@@ -820,6 +824,7 @@
       this.el.classList.toggle('peek-l', side === 'l');
       this.el.classList.toggle('peek-r', side === 'r');
       F.cracked = side;
+      if (this.dizzyUntil && !this.isDizzy(now)) this.recover(); // the circling stopped: stars gone, a shake of the head
       if (this.isDizzy(now)) return this.roll(now);
       if (F.held && F.caught) {
         // Panicking: eyes darting everywhere.
