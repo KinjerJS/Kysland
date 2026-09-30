@@ -438,7 +438,7 @@ h2 {
    wider (--open, 0 to 1) and the eyes go up a little to make room. Eating, it's a C chomping round
    and round in a small circle. */
 .buddy .mouth {
-  --mouth-y: 10px; --mw: 14px; --mh: 10px; --mc: 10px; --ms: 2.5px; --orbit: 2px; --mx: 7px; /* --mx: the C's side step */
+  --mouth-y: 10px; --mw: 14px; --mh: 10px; --mc: 8px; --ms: 2px; --orbit: 1.6px; --mx: 7px; /* --mx: the C's side step */
   position: absolute;
   left: 50%;
   top: calc(50% + var(--mouth-y, 6px));
@@ -465,7 +465,7 @@ h2 {
   border-right-color: transparent;
   border-radius: 50%;
   background: none;
-  scale: 1;
+  scale: var(--side, 1) 1; /* on the left, the C faces the other way */
   transition: none;
   animation: kys-chew .32s linear 4;
 }
