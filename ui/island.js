@@ -177,7 +177,9 @@
     constructor(notch) {
       this.el = document.createElement('div');
       this.el.className = 'notch-eyes';
-      this.el.innerHTML = '<span class="eye l"><b></b><i></i></span><span class="eye r"><b></b><i></i></span>';
+      this.el.innerHTML = '<span class="eye l"><b></b><i></i></span><span class="eye r"><b></b><i></i></span>'
+        + '<div class="stars"><span>✦</span><span>✧</span><span>✦</span></div>'; // circle while dizzy
+      this.stars = this.el.lastElementChild;
       notch.appendChild(this.el);
       this.notch = notch;
       // Thrown out of the grown island, these same eyes fly in a drop of island: they move to a
@@ -239,7 +241,7 @@
       this.flight = null;
       if (this.el.parentElement !== this.notch) this.notch.appendChild(this.el); // was flying
       this.goo.classList.remove('on');
-      this.el.classList.remove('shake', 'opened');
+      this.el.classList.remove('shake', 'opened', 'dizzy');
       this.elsewhere = false;
       this.roaming = false;
       this.notch.classList.remove('roaming');
@@ -295,6 +297,7 @@
       if (already) return;
       this.spinDir = Math.sign(this.spin) || 1;
       this.setMood('dizzy');
+      this.el.classList.add('dizzy');
       if (this.roaming) {
         // Sways on the spot (the loop rolls the eyes).
         const base = { ...this.pos };
@@ -312,15 +315,28 @@
 
     /** Rolling eyes, turning the way the cursor went round. */
     roll(t) {
-      const [rx, ry] = this.roaming ? [5, 4] : [3, 1.5];
+      const [gx, gy] = this.roaming ? [5, 4] : [3, 1.5];
       const a = (t / 90) * this.spinDir;
-      this.el.style.setProperty('--gx', `${(Math.cos(a) * rx).toFixed(2)}px`);
-      this.el.style.setProperty('--gy', `${(Math.sin(a) * ry).toFixed(2)}px`);
+      this.el.style.setProperty('--gx', `${(Math.cos(a) * gx).toFixed(2)}px`);
+      this.el.style.setProperty('--gy', `${(Math.sin(a) * gy).toFixed(2)}px`);
+      // Stars circling: below the thin strip (above it is the screen edge), above the eyes on the
+      // grown island, or below them when they're up against the edge.
+      const [rx, ry] = this.roaming ? [30, 7] : [34, 5];
+      const cy = !this.roaming ? 13 : this.pos.y < -20 ? 26 : -26;
+      [...this.stars.children].forEach((star, i) => {
+        const b = (t / 240) * this.spinDir + (i * 2 * Math.PI) / 3;
+        const depth = (Math.sin(b) + 1) / 2; // 1: in front, 0: behind
+        star.style.setProperty('--sx', `${(Math.cos(b) * rx).toFixed(1)}px`);
+        star.style.setProperty('--sy', `${(cy + Math.sin(b) * ry).toFixed(1)}px`);
+        star.style.setProperty('--ss', (0.6 + depth * 0.5).toFixed(2));
+        star.style.setProperty('--so', (0.45 + depth * 0.55).toFixed(2));
+      });
     }
 
     /** The circling stopped: eyes shut, shaking its head, a bit cross. */
     recover() {
       this.dizzyUntil = 0;
+      this.el.classList.remove('dizzy');
       this.spin = 0;
       if (this.move?.kind === 'dizzy') this.setMove(null);
       this.el.classList.remove('shake');

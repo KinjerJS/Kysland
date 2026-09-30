@@ -173,9 +173,11 @@
       this.el = document.createElement('div');
       this.el.className = 'buddy';
       this.el.setAttribute('aria-hidden', 'true');
-      this.el.innerHTML = '<div class="buddy-eyes"><span class="eye l"><b></b><i></i></span><span class="eye r"><b></b><i></i></span></div>';
+      this.el.innerHTML = '<div class="buddy-eyes"><span class="eye l"><b></b><i></i></span><span class="eye r"><b></b><i></i></span></div>'
+        + '<div class="stars"><span>✦</span><span>✧</span><span>✦</span></div>'; // circle while dizzy
       document.body.appendChild(this.el);
       this.eyes = this.el.firstElementChild;
+      this.stars = this.el.lastElementChild;
       this.mode = 'home';
       this.settled = true;
       this.pos = this.homeSpot();
@@ -231,7 +233,7 @@
       }
       this.spinAngle = a;
       if (Math.abs(this.spin) > 8) {
-        if (!this.dizzyUntil) { this.spinDir = Math.sign(this.spin) || 1; this.setMood('dizzy'); }
+        if (!this.dizzyUntil) { this.spinDir = Math.sign(this.spin) || 1; this.setMood('dizzy'); this.el.classList.add('dizzy'); }
         this.dizzyUntil = now + 2200;
       }
     }
@@ -284,6 +286,7 @@
       if (this.dizzyUntil && now > this.dizzyUntil) {
         // Over: a bit cross.
         this.dizzyUntil = 0;
+        this.el.classList.remove('dizzy');
         this.spin = 0;
         this.setMood('grumpy', 1600);
       }
@@ -292,6 +295,16 @@
         const a = (now / 90) * this.spinDir;
         this.eyes.style.setProperty('--gx', `${(Math.cos(a) * 4).toFixed(2)}px`);
         this.eyes.style.setProperty('--gy', `${(Math.sin(a) * 3).toFixed(2)}px`);
+        // Stars circling above it.
+        const t = now, rx = 32, ry = 6, cy = -27;
+        [...this.stars.children].forEach((star, i) => {
+          const b = (t / 240) * this.spinDir + (i * 2 * Math.PI) / 3;
+          const depth = (Math.sin(b) + 1) / 2; // 1: in front, 0: behind
+          star.style.setProperty('--sx', `${(Math.cos(b) * rx).toFixed(1)}px`);
+          star.style.setProperty('--sy', `${(cy + Math.sin(b) * ry).toFixed(1)}px`);
+          star.style.setProperty('--ss', (0.6 + depth * 0.5).toFixed(2));
+          star.style.setProperty('--so', (0.45 + depth * 0.55).toFixed(2));
+        });
         return;
       }
       const spot = this.move.look?.(now) ?? c;

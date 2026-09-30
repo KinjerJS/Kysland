@@ -590,3 +590,20 @@ body.pos-bottom .notch.splash { transform-origin: 50% 100%; }
   50% { scale: .985 1.03; }
   75% { scale: 1.01 .99; }
 }
+
+/* Dizzy: little stars circling (positions from island.js). */
+.notch-eyes .stars { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; opacity: 0; transition: opacity .25s ease; }
+.notch-eyes.dizzy .stars { opacity: 1; }
+.notch-eyes .stars span {
+  --sx: 0px; --sy: 0px; --ss: 1; --so: 1;
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: #ffd66b;
+  font: 9px / 1 'Segoe UI Symbol', 'Segoe UI', sans-serif;
+  text-shadow: 0 0 4px rgba(255, 214, 107, 0.6);
+  translate: calc(-50% + var(--sx)) calc(-50% + var(--sy));
+  scale: var(--ss);
+  opacity: var(--so);
+}
+.notch.roaming .notch-eyes .stars span { font-size: 12px; }
