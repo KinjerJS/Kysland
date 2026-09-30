@@ -539,11 +539,18 @@ fn set_hit_rects(window: WebviewWindow, rects: Vec<Rect>, notch: Option<Rect>, d
 
 // --- Settings window ---------------------------------------------------------------------------------
 
-/// The settings window: the menu's options with more room. Created on the next turn of the event
-/// loop (building a window from inside a command or a menu handler can deadlock on Windows).
+/// Runs `f` on the main thread, on a later turn of the event loop. `run_on_main_thread` runs it
+/// right away when already on the main thread, and a sync command runs there, inside the WebView's
+/// message callback: building a window (or rebuilding them) from there leaves a blank white window.
+fn later(app: &AppHandle, f: impl FnOnce() + Send + 'static) {
+    let a = app.clone();
+    std::thread::spawn(move || { let _ = a.run_on_main_thread(f); });
+}
+
+/// The settings window: the menu's options with more room (built on a later turn, see `later`).
 fn open_settings(app: &AppHandle) {
     let a = app.clone();
-    let _ = app.run_on_main_thread(move || {
+    later(app, move || {
         if let Some(w) = a.get_webview_window("settings") {
             let _ = w.unminimize();
             let _ = w.show();
@@ -602,7 +609,7 @@ fn set_setting(app: AppHandle, key: String, value: Value) -> Result<(), String> 
 fn settings_action(app: AppHandle, name: String) {
     if !matches!(name.as_str(), "reload" | "open-config" | "edit-config" | "edit-style" | "devtools") { return; }
     let a = app.clone();
-    let _ = app.run_on_main_thread(move || on_menu(&a, &name));
+    later(&app, move || on_menu(&a, &name));
 }
 
 #[tauri::command]
@@ -643,7 +650,7 @@ fn action(window: WebviewWindow, name: String, arg: Value, extra: Value) {
             "shutdown" => util::spawn_shell("shutdown /s /t 0"),
             _ => {}
         },
-        "reload" => { let a = app.clone(); let _ = app.run_on_main_thread(move || reload(&a, true)); }
+        "reload" => { let a = app.clone(); later(&app, move || reload(&a, true)); }
         "open-config" => win32::shell_open(&config::config_dir().to_string_lossy()),
         "notification-center" => win32::press_keys(&[win32::VK_LWIN, 0x4E]), // Win+N
         "notif-remove" => if let Some(id) = arg.as_u64() { notifs::remove(vec![id as u32]) },
