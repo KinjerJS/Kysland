@@ -43,6 +43,17 @@ jobs:
           node -e "const f='src-tauri/tauri.conf.json';const c=require('./'+f);c.version='$VERSION';require('fs').writeFileSync(f,JSON.stringify(c,null,2)+'\n')"
           npm version --no-git-tag-version --allow-same-version "$VERSION"
 
+      # The release text is this version's section of CHANGELOG.md (no section, no release).
+      - name: Release notes
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v v="$VERSION" '/^## /{p = ($2 == v)} p' CHANGELOG.md | tail -n +2 > release-notes.md
+          if ! grep -q '[^[:space:]]' release-notes.md; then echo "::error::No section for $VERSION in CHANGELOG.md"; exit 1; fi
+          printf '\n---\nDownload **Kysland_%s_x64-setup.exe** below and run it.\n' "$VERSION" >> release-notes.md
+          { echo 'RELEASE_NOTES<<KYSLAND_NOTES_END'; cat release-notes.md; echo 'KYSLAND_NOTES_END'; } >> "$GITHUB_ENV"
+
       - name: Build (and release on tags)
         uses: tauri-apps/tauri-action@v0
         env:
@@ -50,7 +61,7 @@ jobs:
         with:
           tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
           releaseName: Kysland __VERSION__
-          releaseBody: See the assets below to download the installer.
+          releaseBody: ${{ env.RELEASE_NOTES || 'See the assets below to download the installer.' }}
           releaseDraft: false
 
       - name: Artifact

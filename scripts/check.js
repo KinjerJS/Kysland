@@ -25,5 +25,12 @@ for (const file of scanned) {
     console.error(`✗ ${path.relative(root, file)}: invisible control character`);
   }
 }
+// The current version has its section in CHANGELOG.md (it becomes the text of its release).
+const { version } = require(path.join(root, 'package.json'));
+const changelog = fs.readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8');
+if (!changelog.split('\n').some((line) => line.startsWith(`## ${version} `) || line.trim() === `## ${version}`)) {
+  failed++;
+  console.error(`✗ CHANGELOG.md: no section for ${version} (what changed in this version)`);
+}
 if (failed) process.exit(1);
-console.log(`✓ ${scanned.length} files checked`);
+console.log(`✓ ${scanned.length} files checked, CHANGELOG.md has ${version}`);

@@ -146,11 +146,15 @@ Layout:
 
 ## Releasing
 
-The GitHub Actions workflow runs the checks and builds the installer on every push and pull request. Pushing a version tag also publishes a GitHub Release with the installer attached:
+The GitHub Actions workflow runs the checks and builds the installer on every push and pull request. Pushing a version tag also publishes a GitHub Release with the installer attached, and that version's section of [CHANGELOG.md](CHANGELOG.md) as its text:
+
+1. Bump the version in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`.
+2. Add a `## x.y.z — date` section to `CHANGELOG.md` saying what changed (`npm run check` and the release build both refuse a version without one).
+3. Tag and push:
 
 ```sh
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.4.0
+git push origin main v0.4.0
 ```
 
 ## License
