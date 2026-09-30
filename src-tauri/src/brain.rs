@@ -93,6 +93,7 @@ const LINES: &[(&str, &[&str], &[&str])] = &[
     ("thanks", &["You're welcome!", "Anytime! 😊"], &["Avec plaisir !", "De rien ! 😊"]),
     ("love", &["Aww… 🥰", "You're nice too!", "Stop it, I'm blushing. ☺️"], &["Ohh… 🥰", "T'es gentil aussi !", "Arrête, je rougis. ☺️"]),
     ("mean", &["Hey! That's not nice. 😠", "Hmph."], &["Hé ! C'est pas gentil. 😠", "Pff."]),
+    ("sixseven", &["Six… seveeen! 🙌", "6… 7! 👐", "SIX SEVEN! 😎"], &["Six… seveeen ! 🙌", "6… 7 ! 👐", "SIX SEVEN ! 😎"]),
     ("joke", &[
         "Why do eyes never lie? They'd look bad. 👀",
         "I told the mouse a joke. It clicked.",
@@ -147,6 +148,11 @@ fn has(text: &str, words: &[&str]) -> bool {
 
 /// Words about the music or the sound: the smart brain may only act on those when they're there.
 const ABOUT_SOUND: &[&str] = &["musique", "music", "son", "sound", "volume", "chanson", "song", "morceau", "track", "titre", "spotify", "audio"];
+
+/// "6 7" (the meme): Kys does it (the pages play it, see the "emote" of `talk`).
+fn is_67(text: &str) -> bool {
+    has(&normalize(text), &["67", "6 7", "6-7", "six seven", "six-seven", "sixseven", "six sept"])
+}
 
 /// The simple brain: intents recognized from a set of phrasings.
 pub fn simple(text: &str) -> Reply {
@@ -232,6 +238,7 @@ pub fn simple(text: &str) -> Reply {
         return chat(line("love"), "happy");
     }
     if has(&t, &["nul", "idiot", "stupid", "bete", "je te deteste", "hate you", "moche", "ugly"]) { return chat(line("mean"), "grumpy"); }
+    if is_67(text) { return sure(line("sixseven"), Action::None, "happy"); }
     if has(&t, &["blague", "joke", "drole", "funny"]) { return chat(line("joke"), "happy"); }
     if has(&t, &["bonjour", "salut", "coucou", "hello", "hey", "hi", "yo", "bonsoir"]) { return chat(line("hello"), "happy"); }
     chat(line("huh"), "curious")
@@ -719,6 +726,7 @@ pub fn talk(text: &str, brain: &str) -> Value {
     };
     act(reply.action);
     json!({
+        "emote": (is_67(text) || is_67(&reply.say)).then_some("67"),
         "say": reply.say, "mood": reply.mood, "brain": by, "ms": started.elapsed().as_millis() as u64,
         "action": format!("{:?}", reply.action),
     })
@@ -746,6 +754,8 @@ mod tests {
         assert!(has("salut toi", &["salut"]));
         assert!(!has("salutations", &["salut"]));
         assert!(has("baissez", &["baisse*"]));
+        assert!(is_67("SIX SEVEN") && is_67("mets le volume à 67") && !is_67("1967") && !is_67("6 heures"));
+        assert!(simple("67 !").sure);
     }
 
     /// Needs the downloaded models: `cargo test --release -- --ignored --nocapture` (KYS_MODEL=light

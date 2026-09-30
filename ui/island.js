@@ -657,8 +657,17 @@
       const roll = Math.random();
       if (c && roll < 0.35) return this.approach(now, c, box);
       if (roll < 0.6) return this.explore(now, box);
-      if (roll < 0.78) return this.circle(now, box);
+      if (roll < 0.74) return this.circle(now, box);
+      if (roll < 0.8) return this.sixSevenMove(now);
       return this.watch(now);
+    }
+
+    // The "6 7" (the meme), where it stands.
+    sixSevenMove(now) {
+      const base = { ...this.pos };
+      this.setMood('happy', SIX_SEVEN);
+      sixSeven(this.el);
+      return { kind: 'sixseven', pull: 4, until: now + SIX_SEVEN + 300, target: () => base };
     }
 
     // Sneaks up next to the cursor (beside it, never right under it), a few hops at a time.
@@ -846,6 +855,13 @@
         api.action('audio', e.deltaY < 0 ? 'up' : 'down', m.conf['scroll-step']);
       }, { passive: true });
       setInterval(() => render(m), 500);
+      setInterval(() => {
+        const now = dayjs(), hm = now.format('HH:mm');
+        if ((hm === '06:07' || hm === '18:07') && S.last67 !== now.format('YYYY-MM-DD HH:mm')) {
+          S.last67 = now.format('YYYY-MM-DD HH:mm');
+          kys67(m);
+        }
+      }, 15000);
       if (S.data.media?.thumb) updateTint(m, S.data.media);
       render(m);
     },
@@ -864,6 +880,10 @@
       const prev = S.data[topic];
       S.data[topic] = data;
       const t = m.conf.transients || {};
+      if (topic === 'audio' && prev && prev.volume !== data.volume) {
+        clearTimeout(S.volume67T);
+        if (data.volume === 67) S.volume67T = setTimeout(() => S.data.audio?.volume === 67 && kys67(m), 2000);
+      }
       if (topic === 'audio' && prev && t.volume && (prev.volume !== data.volume || prev.muted !== data.muted)) {
         pushTransient(m, volumeView(data), 1600);
       } else if (topic === 'media') {
@@ -936,8 +956,10 @@
       if (m.island) kysPlay(m);
     },
 
-    onKysMood(m, { mood }) {
-      if (m.island) kysFeel(m, mood);
+    onKysMood(m, { mood, emote }) {
+      if (!m.island) return;
+      if (emote === '67') kys67(m);
+      else kysFeel(m, mood);
     },
 
     onGaze(m, x, y) {
@@ -1103,6 +1125,15 @@
     S.peekEndT = setTimeout(() => endPeek(m), opts.duration ?? rand(3500, 7000));
     updateDodgeable(S);
     if (!opts.quiet) api.kys.earn('peek');
+    if (!opts.force && Math.random() < 0.12) {
+      setTimeout(() => {
+        if (!S.peeking || S.peeking.caught) return;
+        clearTimeout(S.peekEndT);
+        S.peekEndT = setTimeout(() => endPeek(m), SIX_SEVEN + 600);
+        S.eyes.setMood('happy', SIX_SEVEN);
+        sixSeven(S.eyes.el);
+      }, 700);
+    }
   }
 
   /** Middle of the gap between the time and the date, from the island's center (measured before
@@ -1270,6 +1301,42 @@
     if (!S.expanded && canPeek(m, S, true)) {
       startPeek(m, { duration: 4000, quiet: true, force: true });
       setTimeout(feel, 420);
+    }
+  }
+
+  /** How long the "6 7" lasts, in ms. */
+  const SIX_SEVEN = 2400;
+
+  /** The "6 7" (the meme) on a pair of eyes: they bob up and down in turn, like hands weighing
+   *  something, a 6 over one and a 7 over the other. */
+  function sixSeven(eyes) {
+    if (!eyes || eyes.classList.contains('sixseven') || eyes.classList.contains('chewing')) return;
+    eyes.classList.add('sixseven');
+    setTimeout(() => eyes.classList.remove('sixseven'), SIX_SEVEN);
+  }
+
+  /** 67 came up (the volume, the time, the chat): Kys does the "6 7", on its page if it's open,
+   *  otherwise dropping into the island for it. */
+  function kys67(m) {
+    const S = m.island;
+    const face = S.notch.current?.querySelector('.n-kys-face');
+    if (face) {
+      faceMood(face, 'happy', SIX_SEVEN);
+      return sixSeven(face.querySelector('.notch-eyes'));
+    }
+    const go = () => {
+      S.eyes.setMood('happy', SIX_SEVEN);
+      sixSeven(S.eyes.el);
+    };
+    if (S.peeking) {
+      clearTimeout(S.peekEndT);
+      S.peekEndT = setTimeout(() => endPeek(m), SIX_SEVEN + 600);
+      return go();
+    }
+    if (S.dodged) return go();
+    if (!S.expanded && canPeek(m, S, true)) {
+      startPeek(m, { duration: SIX_SEVEN + 1100, quiet: true, force: true });
+      setTimeout(go, 450);
     }
   }
 

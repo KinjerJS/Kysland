@@ -771,11 +771,24 @@
     nextMove(now) {
       const c = this.cursor;
       if (now - this.cursorAt > 12000) return this.doze(now);
-      if (this.mode === 'home') return this.rest(now);
+      if (this.mode === 'home') return Math.random() < 0.01 ? this.sixSeven(now) : this.rest(now);
       const roll = Math.random();
+      if (roll < 0.06) return this.sixSeven(now);
       if (c && roll < 0.3) return this.approach(now);
       if (roll < 0.7) return this.wander(now);
       return this.watch(now);
+    }
+
+    // The "6 7" (the meme): its eyes bob up and down in turn, like hands weighing something, a 6
+    // over one and a 7 over the other.
+    sixSeven(now) {
+      if (!this.eyes.classList.contains('sixseven') && !this.eating()) {
+        this.eyes.classList.add('sixseven');
+        setTimeout(() => this.eyes.classList.remove('sixseven'), 2400);
+        this.setMood('happy', 2400);
+      }
+      const base = this.mode === 'home' ? null : { ...this.pos };
+      return { kind: 'sixseven', pull: 6, until: now + 2700, target: () => base || this.homeSpot() };
     }
 
     // At home: stays in its spot in the header.
@@ -878,7 +891,10 @@
   listen('kys-feed', (e) => buddy.eat(e.payload.item));
   listen('kys-play', () => buddy.play());
   listen('kys-brain', (e) => onBrain(e.payload));
-  listen('kys-mood', (e) => buddy.setMood(e.payload.mood, 4000));
+  listen('kys-mood', (e) => {
+    if (e.payload.emote === '67') buddy.setMove(buddy.sixSeven(performance.now())); // 67 came up in the chat
+    else buddy.setMood(e.payload.mood, 4000);
+  });
   // The smart brain gets ready while you type.
   document.addEventListener('focusin', (e) => { if (e.target.matches('.talk input')) invoke('kys_warm'); });
   listen('settings-tab', (e) => {

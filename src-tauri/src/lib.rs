@@ -677,7 +677,7 @@ async fn kys_talk(text: String) -> Value {
     let reply = tauri::async_runtime::spawn_blocking(move || brain::talk(&text, &brain)).await.unwrap_or(Value::Null);
     // Every Kys shows the answer's emotion (the island's eyes, the settings' buddy), and feels it.
     let mood = reply["mood"].as_str().unwrap_or("happy");
-    hub::emit("kys-mood", json!({ "mood": mood }));
+    hub::emit("kys-mood", json!({ "mood": mood, "emote": reply["emote"] }));
     kys::talked(mood);
     reply
 }

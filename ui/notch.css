@@ -488,6 +488,23 @@ body.pos-bottom .notch.dodged.eyes { border-radius: 6px 6px 0 0; }
 .notch-eyes[data-mood=happy]      { --brow: 1; --bl-y: -4px; --br-y: -4px; --lid-l: .45; --lid-r: .45; }
 .notch-eyes[data-mood=happy] i    { border-radius: 50% 50% 2px 2px / 90% 90% 2px 2px; } /* ^ ^ */
 .notch-eyes[data-mood=sleepy]     { --lid-l: .3; --lid-r: .3; }
+/* The "6 7" (island.js): the eyes bob up and down in turn, like hands weighing something, a 6
+   over one and a 7 over the other (where the brows usually are). */
+.notch-eyes.sixseven { --brow: 0 !important; }
+.notch-eyes.sixseven .eye { animation: k67 .44s ease-in-out infinite; }
+.notch-eyes.sixseven .eye.r { animation-delay: -.22s; }
+@keyframes k67 { 0%, 100% { translate: 0 calc(var(--b67, 2.5px) * -1); } 50% { translate: 0 var(--b67, 2.5px); } }
+.notch-eyes.sixseven .eye::after {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  translate: -50% -2px;
+  color: var(--notch-fg);
+  font: 800 var(--n67, 8px)/1 var(--notch-font);
+}
+.notch-eyes.sixseven .eye.l::after { content: '6'; }
+.notch-eyes.sixseven .eye.r::after { content: '7'; }
+.notch.roaming .notch-eyes { --b67: 4px; --n67: 12px; }
 /* Asleep, a cursor sneaking right up: the eye on that side opens a crack (island.js). */
 .notch-eyes[data-mood=sleepy].peek-l { --lid-l: .65; }
 .notch-eyes[data-mood=sleepy].peek-r { --lid-r: .65; }
@@ -770,7 +787,7 @@ body.pos-bottom .notch.splash { transform-origin: 50% 100%; }
 .n-kys-face .notch-eyes i { width: 9px; height: 11px; border-radius: 3.5px; }
 .n-kys-face .notch-eyes[data-mood=happy] i { border-radius: 50% 50% 2px 2px / 90% 90% 2px 2px; }
 .n-kys-face .notch-eyes b { opacity: var(--brow); width: 12px; margin-bottom: 3px; }
-.n-kys-face .notch-eyes { --mouth-y: 8px; --mouth-lift: -5px; }
+.n-kys-face .notch-eyes { --mouth-y: 8px; --mouth-lift: -5px; --b67: 3px; --n67: 10px; }
 .n-kys-face .notch-eyes .mouth { --mw: 12px; --mh: 9px; --mc: 7px; --ms: 2px; --orbit: 1.2px; --mx: 5px; }
 .n-kys-face.think .notch-eyes { --gx: 3px !important; --gy: -3px !important; } /* looks up while it thinks */
 .n-kys-face .hat, .n-kys-face .ask { position: absolute; left: 50%; top: 50%; line-height: 1; pointer-events: none; }
