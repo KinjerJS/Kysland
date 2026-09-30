@@ -754,6 +754,7 @@
       'auto-hide-distance': 300,     // px around the island where it comes back
       notifications: true,           // Windows notifications in the island
       claude: false,                 // Claude plan usage (if Claude Code is installed)
+      'kys-brain': 'simple',         // what Kys understands: "simple" (rules) or "smart" (the local model, brain.rs)
       'notification-duration': 6,    // seconds
       transients: { volume: true, media: true, battery: true, network: true, workspace: true },
     },
@@ -767,6 +768,9 @@
         queue: [], notif: null, notifTimer: 0, claudeOn: m.conf.claude === true, unread: 0, page: 'main', history: null,
       });
       const notch = S.notch.el;
+      // Whether the cursor is over the island (the engine reports the exits the page misses).
+      notch.addEventListener('mouseenter', () => { S.hover = true; });
+      notch.addEventListener('mouseleave', () => { S.hover = false; });
       S.eyes = new Eyes(notch);
       notch.classList.toggle('eyes', m.conf['dodge-eyes'] !== false);
       S.near = state.near !== false;
@@ -783,7 +787,7 @@
         });
         notch.addEventListener('mouseleave', () => {
           S.dragging = false; // a drag can't go on without the mouse
-          if (S.dodged) return;
+          if (S.dodged || S.typing) return; // typing to Kys: stays open until the input is left
           clearTimeout(enterT);
           if (S.notif) return startNotifTimer(m, 2500);
           leaveT = setTimeout(() => setExpanded(m, false), m.conf['collapse-delay']);
@@ -945,7 +949,7 @@
     if (S.expanded === v) return;
     S.expanded = v;
     S.dragging = false;
-    if (!v) S.page = 'main';
+    if (!v) { S.page = 'main'; stopTyping(m); }
     if (!v && !S.notif && S.queue.length) return showNextNotif(m); // notifications that arrived while expanded
     render(m);
   }
@@ -1275,12 +1279,18 @@
           <div class="n-kys-face"><span class="f-eye"></span><span class="f-eye"></span><span class="hat"></span><span class="ask">🍪</span></div>
           <div class="n-kys-gauges"></div>
         </div>
+        <div class="k-say"></div>
+        <form class="k-talk">
+          <input type="text" maxlength="200" spellcheck="false" autocomplete="off" placeholder="${esc(t('kys.talk_placeholder'))}">
+          <button type="submit" title="${esc(t('kys.send'))}">${icon('send-horizontal')}</button>
+        </form>
         <div class="n-kys-body"></div>
       </div>`,
       mount(el) {
-        el.querySelector('.n-back').onclick = () => { S.page = 'main'; render(m); };
+        el.querySelector('.n-back').onclick = () => { stopTyping(m); S.page = 'main'; render(m); };
         el.querySelector('.n-kys-body').onclick = (e) => kysPageClick(m, el, e);
         el.addEventListener('mousemove', (e) => faceAim(el, e.clientX, e.clientY));
+        mountTalk(m, el);
       },
       update(el) {
         const k = S.kys;
@@ -1351,6 +1361,69 @@
       m.island.kysMsgT = setTimeout(() => { msg.classList.remove('show'); m.island.notch.resize(); }, 2500);
       m.island.notch.resize();
     });
+  }
+
+  /**
+   * Talking to Kys from its page (brain.rs). The island never takes the keyboard, except while
+   * this input is in use: a click on it brings the island to the foreground, and leaving it
+   * (Escape, a click elsewhere, the island closing) gives the keyboard back to the window that had it.
+   */
+  function mountTalk(m, el) {
+    const S = m.island;
+    const form = el.querySelector('.k-talk');
+    const input = form.querySelector('input');
+    if (S.kysSay) showSay(m, el, S.kysSay.text, S.kysSay.mood, false);
+    input.addEventListener('pointerdown', () => {
+      if (S.typing) return;
+      S.typing = true;
+      api.kys.typing(true).then(() => input.focus());
+    });
+    input.addEventListener('focus', () => { S.typing = true; });
+    input.addEventListener('blur', () => {
+      stopTyping(m);
+      const out = () => !S.hover;
+      if (out()) setTimeout(() => { if (!S.typing && out()) setExpanded(m, false); }, m.conf['collapse-delay']);
+    });
+    input.addEventListener('keydown', (e) => { if (e.key === 'Escape') input.blur(); });
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (!text || S.kysThinking) return;
+      input.value = '';
+      S.kysThinking = true;
+      showSay(m, el, '', null, true);
+      let reply = null;
+      try { reply = await api.kys.talk(text); } catch { /* shown as no answer */ }
+      S.kysThinking = false;
+      // The island may have closed and reopened meanwhile: the answer goes to the page shown now.
+      showSay(m, S.notch.current || el, reply?.say || '…', reply?.mood || 'curious', false);
+    });
+  }
+
+  /** Kys's answer in a bubble next to its face, which takes the answer's mood for a moment. */
+  function showSay(m, el, text, mood, thinking) {
+    const S = m.island;
+    if (!thinking) S.kysSay = { text, mood }; // still there when the page opens again
+    const say = el.querySelector('.k-say');
+    const face = el.querySelector('.n-kys-face');
+    if (!say || !face) return;
+    say.classList.toggle('thinking', thinking);
+    say.innerHTML = thinking ? '<i></i><i></i><i></i>' : esc(text);
+    say.classList.add('show');
+    face.classList.toggle('think', thinking);
+    if (!thinking) {
+      clearTimeout(S.kysMoodT);
+      face.dataset.mood = mood;
+      S.kysMoodT = setTimeout(() => { delete face.dataset.mood; }, 2600);
+    }
+    requestAnimationFrame(() => S.notch.resize());
+  }
+
+  function stopTyping(m) {
+    const S = m.island;
+    if (!S.typing) return;
+    S.typing = false;
+    api.kys.typing(false);
   }
 
   /** The face's eyes follow the cursor over the page. */

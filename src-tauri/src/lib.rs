@@ -1,6 +1,7 @@
 //! Kysland: a Dynamic Island (and optional status bar) for Windows.
 mod audio;
 mod autostart;
+mod brain;
 mod config;
 mod glaze;
 mod hub;
@@ -618,6 +619,7 @@ fn settings_state(app: AppHandle) -> Value {
         "autostart": with(|s| s.autostart_on),
         "claudeInstalled": system::claude_installed(),
         "island": config::island_conf(&cfg),
+        "brain": brain::state(),
     })
 }
 
@@ -628,7 +630,7 @@ fn set_setting(app: AppHandle, key: String, value: Value) -> Result<(), String> 
     match key.as_str() {
         "language" | "monitors" | "hide-on-fullscreen" => config::set_value(&[&key], value),
         "dodge" | "dodge-eyes" | "dodge-roam" | "dodge-roam-delay" | "dodge-speed" | "auto-hide" | "auto-hide-distance" | "peek" | "outline"
-        | "claude" | "notifications"
+        | "claude" | "notifications" | "kys-brain"
         | "hide-windows-osd" | "expand-on-hover" => {
             config::set_value(&[&island, &key], value)
         }
@@ -665,6 +667,43 @@ async fn kys_wear(item: Option<String>) -> Result<(), String> { kys::wear(item.a
 
 #[tauri::command]
 async fn kys_play() -> Result<(), String> { kys::play() }
+
+/// Talking to Kys: its answer, once it acted on it (see brain.rs). The smart brain takes a few
+/// seconds of CPU, off the command threads.
+#[tauri::command]
+async fn kys_talk(text: String) -> Value {
+    let smart = with(|s| config::island_conf(&s.cfg)["kys-brain"] == "smart");
+    let text: String = text.chars().take(300).collect();
+    let reply = tauri::async_runtime::spawn_blocking(move || brain::talk(&text, smart)).await.unwrap_or(Value::Null);
+    kys::earn("talk");
+    reply
+}
+
+#[tauri::command]
+fn kys_brain() -> Value { brain::state() }
+
+/// The smart brain's model: "download" (progress as "kys-brain" events) or "delete".
+#[tauri::command]
+fn kys_brain_model(action: String) {
+    match action.as_str() { "download" => brain::download(), "delete" => brain::delete_model(), _ => {} }
+}
+
+/// Typing to Kys in the island: the island never takes the focus, except while its input is in
+/// use; the window that had it gets it back afterwards.
+#[tauri::command]
+fn kys_typing(window: WebviewWindow, on: bool) {
+    static PREVIOUS: Mutex<isize> = Mutex::new(0);
+    let Ok(h) = window.hwnd() else { return };
+    let h = h.0 as isize;
+    if on {
+        let prev = win32::set_foreground(h);
+        if prev != h { *PREVIOUS.lock().unwrap() = prev; }
+        let _ = window.set_focus();
+    } else {
+        let prev = std::mem::take(&mut *PREVIOUS.lock().unwrap());
+        if prev != 0 && win32::foreground() == h { win32::set_foreground(prev); }
+    }
+}
 
 #[tauri::command]
 fn action(window: WebviewWindow, name: String, arg: Value, extra: Value) {
@@ -930,12 +969,13 @@ pub fn run() {
                 .build(),
         )
         .invoke_handler(tauri::generate_handler![init, run_command, notifications, set_hit_rects, action, settings_state, set_setting, settings_action,
-            kys_state, kys_earn, kys_buy, kys_feed, kys_wear, kys_play])
+            kys_state, kys_earn, kys_buy, kys_feed, kys_wear, kys_play, kys_talk, kys_brain, kys_brain_model, kys_typing])
         .on_menu_event(|app, e| on_menu(app, e.id().as_ref()))
         .setup(move |app| {
             let handle = app.handle().clone();
             hub::init(handle.clone());
             kys::load();
+            if let Ok(dir) = handle.path().app_local_data_dir() { brain::init(dir); }
             if args.iter().any(|a| a == "--quit") { handle.exit(0); return Ok(()); }
             // After a crash: taskbar left hidden by an older version / orphaned screen reservations.
             if let Ok(state) = std::fs::read_to_string(config::config_dir().join(".taskbar-state")) {

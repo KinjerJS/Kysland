@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Kysland",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "identifier": "com.kinjer.kysland",
   "build": {
     "frontendDist": "../ui",
@@ -32,7 +32,8 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "../defaults/*": "defaults/"
+      "../defaults/*": "defaults/",
+      "llama/*": "llama/"
     },
     "windows": {
       "nsis": {

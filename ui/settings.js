@@ -12,7 +12,7 @@
   const ISLAND = {
     'expand-on-hover': true, outline: 'auto', dodge: true, 'dodge-speed': 450, 'dodge-eyes': true,
     'dodge-roam': true, 'dodge-roam-delay': 20, 'auto-hide': false, 'auto-hide-distance': 300, peek: true,
-    notifications: true, 'hide-windows-osd': true, claude: false,
+    notifications: true, 'hide-windows-osd': true, claude: false, 'kys-brain': 'simple',
   };
   // Top-level options, as named in the state sent by the engine.
   const TOP = { language: 'language', monitors: 'monitors', 'hide-on-fullscreen': 'hideOnFullscreen', autostart: 'autostart' };
@@ -102,6 +102,9 @@
     const roamOff = eyesOff || !I['dodge-roam'];
     document.title = t('set.window_title');
     $('.version').textContent = t('set.version', { version: S.version });
+    // What's being typed to Kys survives the redraws (its state changes while you talk).
+    const input = $('.talk input');
+    const draft = input && { value: input.value, focused: document.activeElement === input, at: input.selectionStart };
     $('#sections').innerHTML = tabsBar() + (tab === 'kys' && K ? kysTab() : [
       section(t('set.general'), [
         row(t('set.language'), '', seg('language', [['auto', t('set.lang_auto')], ['en', 'English'], ['fr', 'Français']])),
@@ -138,6 +141,13 @@
         ].join('')}</div>`,
       ]),
     ].join(''));
+    const talk = $('.talk input');
+    if (talk && draft) {
+      talk.value = draft.value;
+      if (draft.focused) { talk.focus(); talk.setSelectionRange(draft.at, draft.at); }
+    }
+    const log = $('.chat-log');
+    if (log) log.scrollTop = log.scrollHeight;
   }
 
   // --- Kys tab: the eyes as a pet (kys.rs) ----------------------------------------------------------
@@ -197,11 +207,92 @@
     ];
     return [
       section('Kys', [`<div class="kys-card">${top}</div>`]),
+      section(t('kys.talk'), [chatBox(), ...brainRows()]),
       section(t('kys.inventory'), inventory.length ? inventory : [`<div class="row"><div class="desc">${esc(t('kys.inventory_empty'))}</div></div>`]),
       section(t('kys.shop'), [`<div class="shop">${shop}</div>`]),
       section(t('kys.earn'), earn),
     ].join('');
   }
+
+  // --- Talking to Kys (brain.rs): what was said since the window opened, the brain, its model -------
+  const chat = [];
+  let thinking = false;
+
+  function chatBox() {
+    const lines = chat.map((c) => `<div class="bubble ${c.who}">${esc(c.text)}</div>`).join('')
+      || `<div class="chat-hint">${esc(t('kys.talk_hint'))}</div>`;
+    return `<div class="chat"><div class="chat-log">${lines}${thinking ? '<div class="bubble kys thinking"><i></i><i></i><i></i></div>' : ''}</div>`
+      + `<form class="talk"><input type="text" maxlength="200" spellcheck="false" autocomplete="off" placeholder="${esc(t('kys.talk_placeholder'))}">`
+      + `<button class="send" type="submit" title="${esc(t('kys.send'))}"><i class="icon icon-send-horizontal"></i></button></form></div>`;
+  }
+
+  const size = (bytes) => (bytes >= 1e9 ? t('kys.size_gb', { n: (bytes / 1e9).toLocaleString(i18n.lang, { maximumFractionDigits: 1 }) })
+    : t('kys.size_mb', { n: Math.round(bytes / 1e6).toLocaleString(i18n.lang) }));
+
+  function brainRows() {
+    const b = S.brain || {};
+    const smart = S.island['kys-brain'] === 'smart';
+    const rows = [row(t('kys.brain'), t('kys.brain_desc'), seg('kys-brain', [['simple', t('kys.brain_simple')], ['smart', t('kys.brain_smart')]]))];
+    if (!smart && !b.ready && !b.downloading) return rows;
+    let desc, control;
+    if (b.downloading) {
+      const { done, total } = b.downloading;
+      desc = `<span class="dl-text">${esc(t('kys.model_progress', { done: size(done), total: size(total) }))}</span>`
+        + `<div class="dl"><div class="dl-fill" style="width:${((done / total) * 100).toFixed(1)}%"></div></div>`;
+      control = '';
+    } else if (b.ready) {
+      desc = esc(t('kys.model_ready', { size: size(b.size) }));
+      control = `<button class="btn" data-model="delete">${esc(t('kys.delete'))}</button>`;
+    } else {
+      desc = esc(t('kys.model_missing', { size: size(b.size) })) + (smart ? `<br><span class="warn">${esc(t('kys.model_needed'))}</span>` : '');
+      control = `<button class="btn on" data-model="download"><i class="icon icon-download"></i> ${esc(t('kys.download'))}</button>`;
+    }
+    rows.push(`<div class="row sub model"><div class="text"><div class="title">${esc(t('kys.model'))}</div><div class="desc">${desc}</div></div>`
+      + `<div class="control">${control}</div></div>`);
+    return rows;
+  }
+
+  async function talk(text) {
+    chat.push({ who: 'you', text });
+    thinking = true;
+    render();
+    buddy.setMood('curious');
+    let reply = null;
+    try { reply = await invoke('kys_talk', { text }); } catch (e) { toast(String(e)); }
+    thinking = false;
+    if (reply?.say) {
+      chat.push({ who: 'kys', text: reply.say });
+      buddy.setMood(reply.mood || 'happy', 2600);
+    } else {
+      buddy.setMood('neutral');
+    }
+    while (chat.length > 12) chat.shift();
+    render();
+  }
+
+  /** The model's download goes on in the engine: only the bar moves, the rest stays put. */
+  function onBrain(b) {
+    const was = S?.brain;
+    if (!S) return;
+    S.brain = b;
+    if (tab !== 'kys') return;
+    const fill = $('.dl-fill');
+    if (was?.downloading && b.downloading && fill) {
+      fill.style.width = `${((b.downloading.done / b.downloading.total) * 100).toFixed(1)}%`;
+      $('.dl-text').textContent = t('kys.model_progress', { done: size(b.downloading.done), total: size(b.downloading.total) });
+      return;
+    }
+    render();
+  }
+
+  document.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const input = e.target.querySelector('input');
+    const text = input?.value.trim();
+    if (!text || thinking) return;
+    input.value = '';
+    talk(text);
+  });
 
   /** Buttons of the Kys tab; the engine answers with the new state (event "kys"). */
   function kysAction(d) {
@@ -240,6 +331,7 @@
       return render();
     }
     if (kysAction(d)) return;
+    if (d.model) return invoke('kys_brain_model', { action: d.model });
     if (d.toggle) return set(d.toggle, val(d.toggle) !== true);
     if (d.key) return set(d.key, JSON.parse(d.value));
     if (d.screens) {
@@ -605,6 +697,7 @@
   listen('kys', (e) => onKys(e.payload.state, e.payload.gain));
   listen('kys-feed', (e) => buddy.eat(e.payload.item));
   listen('kys-play', () => buddy.play());
+  listen('kys-brain', (e) => onBrain(e.payload));
   listen('settings-tab', (e) => {
     tab = e.payload;
     if (S) render();

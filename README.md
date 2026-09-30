@@ -11,7 +11,7 @@ and **Kys**, a little pair of eyes that lives in it.
 [![Download](https://img.shields.io/github/v/release/KinjerJS/Kysland?label=download&color=cba6f7)](https://github.com/KinjerJS/Kysland/releases/latest)
 ![Windows 10 and 11](https://img.shields.io/badge/Windows-10%20%7C%2011-1a1a22)
 ![Tauri 2](https://img.shields.io/badge/Tauri-2-24c8db)
-![Installer 4.5 MB](https://img.shields.io/badge/installer-4.5%20MB-555)
+![Installer 6 MB](https://img.shields.io/badge/installer-6%20MB-555)
 [![MIT](https://img.shields.io/badge/license-MIT-lightgrey)](#license)
 
 </div>
@@ -53,7 +53,7 @@ The eyes have a name: **Kys**. It lives in the island, and it has a life of its 
 </tr>
 </table>
 
-<img src="docs/images/kys-page.png" width="400" align="right" alt="Kys's page in the island: its face, belly and joy gauges, inventory and shop">
+<img src="docs/images/kys-page.png" width="400" align="right" alt="Kys's page in the island: its face, its answer in a bubble, the input to talk to it, and its shop">
 
 **Look after it.** Kys gets hungry and a bit bored while you use your PC (never while it's off), and shows it: it asks for food, and looks down when it's miserable.
 
@@ -63,6 +63,8 @@ The eyes have a name: **Kys**. It lives in the island, and it has a life of its 
 - spend **time** together, and come back **every day** for a growing bonus.
 
 **Spend them** in its shop: cookies, apples, candy and cake it munches right in the island, a ball to play with, and a bow, a cap, glasses or a crown to wear.
+
+**Talk to it.** Ask it for the next song, the volume at 30, the time, or how it's doing. Out of the box it understands commands and a bit of small talk, with nothing to download. Want a real chat? Turn on its **smart brain**: a small AI (Qwen3 1.7B) that runs on your PC, never online, loaded only while you talk to Kys. It answers in about a second.
 
 Everything is on its page: click the little Kys next to the gear in the expanded island.
 
@@ -84,7 +86,7 @@ Everything is on its page: click the little Kys next to the gear in the expanded
 <table>
 <tr>
 <td width="50%"><img src="docs/images/settings.png" alt="The settings window: language, start with Windows, screens, island options"></td>
-<td width="50%"><img src="docs/images/settings-kys.png" alt="The Kys tab of the settings window: credits, gauges, inventory and shop"></td>
+<td width="50%"><img src="docs/images/settings-kys.png" alt="The Kys tab of the settings window: credits, gauges, a chat with Kys and the choice of its brain"></td>
 </tr>
 </table>
 
@@ -137,6 +139,7 @@ Island options (in the `"island"` section):
 | `dodge-eyes` | `true` | Eyes watching the cursor while hidden |
 | `dodge-roam` / `dodge-roam-delay` | `true` / `20` | Cursor still close after this many seconds: the island grows and the eyes roam |
 | `peek` | `true` | Kys peeking into the resting island now and then |
+| `kys-brain` | `"simple"` | What Kys understands: `"simple"` (commands and a few phrases) or `"smart"` (the local AI, downloaded from the settings) |
 | `auto-hide` / `auto-hide-distance` | `false` / `300` | Hide while the mouse is farther than this many px or on another screen |
 | `hide-windows-osd` | `true` | Handle the volume keys and hide the Windows volume flyout |
 | `volume-step` | `2` | Percent per volume key press |
@@ -150,8 +153,9 @@ Top-level options include `language` (`"auto"`, `"en"`, `"fr"`), `monitors` (`"p
 
 ## Privacy
 
-Everything stays on your PC, with two optional exceptions:
+Everything stays on your PC, with three optional exceptions:
 
+- **Kys's smart brain**: when you click Download in the settings, the model (Qwen3 1.7B, 1.1 GB) comes from Hugging Face. After that, it runs on your processor: what you tell Kys never leaves your PC.
 - **Claude usage**: Kysland reads the Claude Code sign-in token and sends it only to `api.anthropic.com` to fetch your usage. It never refreshes the token itself, so it can't sign Claude Code out. The usage endpoint is the one behind Claude Code's `/usage` command. It isn't a documented public API and may change.
 - **Weather**: the sample `custom/weather` module queries wttr.in.
 
@@ -161,7 +165,7 @@ Notifications are read locally from the Windows notification database.
 
 Kysland is built with [Tauri](https://tauri.app): the interface is HTML/CSS/JS, and the engine is Rust, calling Windows APIs directly (Core Audio, media controls, notifications, window management).
 
-Requirements: Node.js, Rust (stable, MSVC) and the Visual Studio C++ build tools.
+Requirements: Node.js, Rust (stable, MSVC), the Visual Studio C++ build tools (with CMake), and LLVM for llama.cpp's bindings (`winget install LLVM.LLVM`, or set `LIBCLANG_PATH` to a folder holding `libclang.dll`).
 
 ```sh
 npm install
@@ -174,7 +178,7 @@ npm run screenshots  # regenerate the README images (headless Chrome, sample dat
 Layout:
 
 - `ui/`: the interface, served by the WebView. `index.html` / `island.js` / `notch.css` are the island, `settings.*` the settings window, `api.js` the bridge to the engine, `i18n.js` the displayed strings.
-- `src-tauri/src/`: the engine. `lib.rs` (windows, menu, commands, background loop), `kys.rs` (Kys), `audio.rs`, `media.rs`, `notifs.rs`, `system.rs`, `glaze.rs`, `win32.rs`, `config.rs`, `autostart.rs`, `i18n.rs` (menu strings).
+- `src-tauri/src/`: the engine. `lib.rs` (windows, menu, commands, background loop), `kys.rs` (Kys), `brain.rs` (talking to Kys: the rules and the local model), `audio.rs`, `media.rs`, `notifs.rs`, `system.rs`, `glaze.rs`, `win32.rs`, `config.rs`, `autostart.rs`, `i18n.rs` (menu strings).
 - `defaults/`: default configuration, bundled as a resource.
 - `docs/screenshots/`: the pages behind the README images: the real interface with sample data.
 - Code, comments and commits are in English; only displayed text is translated (`ui/i18n.js`, `src-tauri/src/i18n.rs`).

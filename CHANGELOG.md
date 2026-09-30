@@ -2,6 +2,15 @@
 
 What changed in each version. The section of a version is also the text of its GitHub release.
 
+## 0.5.0 — 2026-09-30
+
+### Talk to Kys
+
+- **Kys's page has an input**, in the island (the little Kys next to the gear) and in the Kys tab of the settings. It answers in a bubble, and its face follows along. Talking to it earns a credit (10 a day).
+- **Simple brain**, the default: it understands commands ("next song", "pause", "volume 30", "louder", "mute"), questions ("what time is it?", "what's playing?", "are you hungry?") and a bit of small talk, in English and French. Nothing to download, nothing running.
+- **Smart brain**, an option (settings, Kys tab, Brain): a small AI (Qwen3 1.7B) running on your PC, to really chat. Download it once from the settings (1.1 GB). It's loaded only while you talk to Kys, answers in about a second, and is freed a minute later. Nothing leaves your PC. Commands still go through the simple brain: instant and reliable.
+- The installer includes llama.cpp, which runs the model with the best instructions your processor has (6 MB installer instead of 4.7 MB).
+
 ## 0.4.1 — 2026-09-30
 
 - Fixed: on Kys's page in the expanded island, the buttons (give, play, wear) and the shop tiles had lost their look.

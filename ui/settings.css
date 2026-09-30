@@ -337,6 +337,49 @@ h2 {
 .shop-effect { color: var(--faint); font-size: 11.5px; min-height: 16px; }
 .shop-item .btn { margin-top: 6px; }
 
+/* Talking to Kys: the conversation, the input, the brain and its model's download. */
+.chat { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; }
+.chat-log { display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto; user-select: text; }
+.chat-hint { color: var(--faint); font-size: 12.5px; }
+.bubble {
+  max-width: 82%;
+  padding: 7px 12px;
+  border-radius: 14px;
+  font-size: 13.5px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  animation: bubble-in .25s var(--spring);
+}
+.bubble.you { align-self: flex-end; background: var(--accent); color: var(--accent-fg); border-bottom-right-radius: 5px; }
+.bubble.kys { align-self: flex-start; background: #202027; border-bottom-left-radius: 5px; }
+.bubble.thinking { display: flex; gap: 4px; padding: 11px 13px; }
+.bubble.thinking i { width: 6px; height: 6px; border-radius: 50%; background: var(--dim); animation: think-dot 1s ease-in-out infinite; }
+.bubble.thinking i:nth-child(2) { animation-delay: .15s; }
+.bubble.thinking i:nth-child(3) { animation-delay: .3s; }
+@keyframes think-dot { 0%, 60%, 100% { translate: 0 0; opacity: .5; } 30% { translate: 0 -4px; opacity: 1; } }
+@keyframes bubble-in { from { scale: .85; opacity: 0; } }
+.talk { display: flex; gap: 8px; }
+.talk input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #0e0e12;
+  color: var(--fg);
+  font: inherit;
+  outline: none;
+  transition: border-color .2s ease;
+}
+.talk input:focus { border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
+.talk input::placeholder { color: var(--faint); }
+.talk .send { display: grid; place-items: center; width: 38px; border-radius: 12px; background: var(--accent); color: var(--accent-fg); font-size: 16px; }
+.row.model .text { flex: 1; }
+.row.model .desc .warn { color: #ffb86b; }
+.row.model .btn .icon { vertical-align: -2px; }
+.dl { height: 6px; margin-top: 8px; border-radius: 3px; background: #24242b; overflow: hidden; }
+.dl-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #cba6f7, #89b4fa); transition: width .4s ease; }
+
 .control.earn { gap: 12px; align-items: baseline; }
 .earn .plus { color: #ffd66b; font-weight: 600; }
 .earn .today { color: var(--faint); font-size: 12px; min-width: 38px; text-align: right; font-variant-numeric: tabular-nums; }

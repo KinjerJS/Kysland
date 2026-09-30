@@ -21,6 +21,22 @@
   <script src="mock.js"></script>
   <script src="../../ui/i18n.js"></script>
   <script src="../../ui/settings.js"></script>
-  <script>window.demo.wait(1200).then(() => window.demo.ready());</script>
+  <script>
+    // Kys tab: a little conversation first.
+    (async () => {
+      const { scene, wait, ready } = window.demo;
+      await wait(800);
+      if (scene === 'kys') {
+        for (const text of ['Nice crown!', 'Are you hungry?']) {
+          const input = document.querySelector('.talk input');
+          input.value = text;
+          input.form.requestSubmit();
+          await wait(900);
+        }
+      }
+      await wait(400);
+      ready();
+    })();
+  </script>
 </body>
 </html>

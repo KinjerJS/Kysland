@@ -93,6 +93,8 @@ pub fn raise_topmost(h: isize) {
     }
 }
 
+pub fn foreground() -> isize { unsafe { GetForegroundWindow().0 as isize } }
+
 pub fn set_foreground(h: isize) -> isize {
     unsafe {
         let prev = GetForegroundWindow();

@@ -20,6 +20,11 @@
       feed: (item) => invoke('kys_feed', { item }),
       wear: (item) => invoke('kys_wear', { item }),
       play: () => invoke('kys_play'),
+      // Its brain (brain.rs): an answer { say, mood, action, brain, ms }, the smart brain's model.
+      talk: (text) => invoke('kys_talk', { text }),
+      brain: () => invoke('kys_brain'),
+      model: (action) => invoke('kys_brain_model', { action }),
+      typing: (on) => invoke('kys_typing', { on }),
     },
     setHitRects: (rects, notch, dodgeable, grab, watch) => invoke('set_hit_rects', {
       rects, notch: notch ?? null, dodgeable: !!dodgeable, grab: !!grab, watch: !!watch,

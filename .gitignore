@@ -3,3 +3,4 @@ ui/vendor/
 src-tauri/target/
 src-tauri/gen/
 *.log
+src-tauri/llama/

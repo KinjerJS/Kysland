@@ -33,13 +33,19 @@
       await wait(700);
       document.querySelector('.n-kysbtn').click();
       await wait(1100);
+      // A word with Kys, its answer in a bubble.
+      const input = document.querySelector('.k-talk input');
+      input.value = 'Can you skip to the next song?';
+      input.form.requestSubmit();
+      input.value = 'Are you hungry?';
+      await wait(900);
       const face = document.querySelector('.n-kys-face');
       const c = center(face);
       face.closest('.notch-view').dispatchEvent(new MouseEvent('mousemove', { clientX: c.x + 120, clientY: c.y + 60, bubbles: true }));
-      // Down to the shop, a bit of the inventory above it.
+      // Down to the shop.
       const body = document.querySelector('.n-kys-body');
       const shop = [...body.querySelectorAll('.k-title')][1];
-      body.scrollTop += rect(shop).top - rect(body).top - 96;
+      body.scrollTop += rect(shop).top - rect(body).top;
       await wait(400);
       return ready(around(60, 40));
     }

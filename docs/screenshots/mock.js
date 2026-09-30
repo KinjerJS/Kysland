@@ -34,9 +34,18 @@
       { id: 'dizzy', credits: 2, cap: 10, today: 3 },
       { id: 'flight', credits: 3, cap: 5, today: 1 },
       { id: 'poke', credits: 1, cap: 10, today: 4 },
+      { id: 'talk', credits: 1, cap: 10, today: 5 },
       { id: 'time', credits: 1, cap: 30, today: 12 },
     ],
   };
+
+  // Kys's answers (brain.rs), by what it's told.
+  const replies = [
+    [/next|skip/i, { say: 'Next one coming up! ⏭️ This one’s a banger.', mood: 'happy' }],
+    [/hungry|eat/i, { say: 'A little… that cake looks amazing though. 🍰', mood: 'curious' }],
+    [/crown/i, { say: 'Right? I feel like the king of the island. 👑', mood: 'happy' }],
+  ];
+  const brain = { ready: true, size: 1107409472, downloading: null, loaded: false };
 
   const responses = {
     init: () => ({
@@ -69,10 +78,16 @@
       },
     }),
     kys_state: () => kys,
+    kys_talk: async ({ text }) => {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const reply = replies.find(([re]) => re.test(text))?.[1] || { say: 'Hehe. 👀', mood: 'happy' };
+      return { ...reply, brain: 'smart', ms: 2400, action: 'None' };
+    },
+    kys_brain: () => brain,
     notifications: () => [],
     settings_state: () => ({
-      lang: 'en', version: '0.4.0', language: 'auto', monitors: 'primary', hideOnFullscreen: true, autostart: true,
-      claudeInstalled: true, island: { claude: true },
+      lang: 'en', version: '0.5.0', language: 'auto', monitors: 'primary', hideOnFullscreen: true, autostart: true,
+      claudeInstalled: true, island: { claude: true, 'kys-brain': 'smart' }, brain,
       screens: [
         { index: 0, name: 'DELL U2723QE', width: 3840, height: 2160, primary: true },
         { index: 1, name: 'LG ULTRAGEAR', width: 2560, height: 1440, primary: false },

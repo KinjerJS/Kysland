@@ -47,6 +47,7 @@ const SOURCES: &[(&str, u32, f64, u32)] = &[
     ("dizzy", 2, -3.0, 10), // made dizzy by circling it
     ("flight", 3, 2.0, 5),  // back from being thrown out of the island
     ("poke", 1, 2.0, 10),   // poked while roaming
+    ("talk", 1, 2.0, 10),   // talked to (its page)
     ("time", 1, 0.0, 30),   // every 10 minutes of use (the engine's own)
 ];
 
