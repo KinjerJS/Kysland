@@ -16,6 +16,10 @@
     kys: {
       state: () => invoke('kys_state'),
       earn: (source) => invoke('kys_earn', { source }),
+      buy: (item) => invoke('kys_buy', { item }),
+      feed: (item) => invoke('kys_feed', { item }),
+      wear: (item) => invoke('kys_wear', { item }),
+      play: () => invoke('kys_play'),
     },
     setHitRects: (rects, notch, dodgeable, grab, watch) => invoke('set_hit_rects', {
       rects, notch: notch ?? null, dodgeable: !!dodgeable, grab: !!grab, watch: !!watch,

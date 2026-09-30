@@ -808,7 +808,7 @@
         api.action('menu');
       });
       notch.addEventListener('wheel', (e) => {
-        if (S.dodged || e.target.closest('input, .n-history')) return; // the history scrolls, not the volume
+        if (S.dodged || e.target.closest('input, .n-history, .n-kys-body')) return; // lists scroll, not the volume
         api.action('audio', e.deltaY < 0 ? 'up' : 'down', m.conf['scroll-step']);
       }, { passive: true });
       setInterval(() => render(m), 500);
@@ -1137,8 +1137,11 @@
   const FOOD = { cookie: '🍪', apple: '🍎', candy: '🍬', cake: '🍰' };
 
   function onKysState(m, k) {
-    m.island.kys = k;
-    m.island.eyes.setKys(k);
+    const S = m.island;
+    S.kys = k;
+    S.kysStamp = (S.kysStamp || 0) + 1;
+    S.eyes.setKys(k);
+    if (S.expanded && S.page === 'kys') render(m); // its page, open
   }
 
   function nearEyes(S, e) {
@@ -1181,6 +1184,7 @@
   /** Fed from the settings: the food drops onto Kys, who munches it (peeking in to eat if needed). */
   function kysEat(m, item) {
     const S = m.island;
+    if (S.expanded && S.page === 'kys') return faceEat(m, item); // on its page, open
     const eat = () => {
       const c = S.eyes.center();
       const food = document.createElement('div');
@@ -1210,6 +1214,7 @@
   /** Playing ball (from the settings): a ball bouncing under the island, Kys following it. */
   function kysPlay(m) {
     const S = m.island;
+    if (S.expanded && S.page === 'kys') return facePlay(m); // on its page, open
     const play = () => {
       const ball = document.createElement('div');
       ball.className = 'kys-ball';
@@ -1249,6 +1254,169 @@
     }
   }
 
+  // --- Kys page (expanded island) ------------------------------------------------------------------
+  // The settings window's Kys tab, in the island: Kys's face (watching the cursor, eating and
+  // playing right there), credits, belly and joy, inventory, shop and ways to earn, live.
+  const KYS_ICON = { cookie: '🍪', apple: '🍎', candy: '🍬', cake: '🍰', ball: '⚽', bow: '🎀', cap: '🧢', glasses: '👓', crown: '👑' };
+
+  function kysView(m) {
+    const S = m.island;
+    return {
+      key: 'kys',
+      size: 'expanded',
+      html: `<div class="n-expanded n-kys-view">
+        <div class="n-hist-head">
+          <button class="n-back" title="${t('island.back')}">${icon('chevron-left')}</button>
+          <span class="n-hist-title">Kys</span>
+          <span class="n-kys-credits"></span>
+        </div>
+        <div class="k-msg"></div>
+        <div class="n-kys-top">
+          <div class="n-kys-face"><span class="f-eye"></span><span class="f-eye"></span><span class="hat"></span><span class="ask">🍪</span></div>
+          <div class="n-kys-gauges"></div>
+        </div>
+        <div class="n-kys-body"></div>
+      </div>`,
+      mount(el) {
+        el.querySelector('.n-back').onclick = () => { S.page = 'main'; render(m); };
+        el.querySelector('.n-kys-body').onclick = (e) => kysPageClick(m, el, e);
+        el.addEventListener('mousemove', (e) => faceAim(el, e.clientX, e.clientY));
+      },
+      update(el) {
+        const k = S.kys;
+        if (!k || el.dataset.stamp === String(S.kysStamp)) return; // redrawn only when Kys changes
+        el.dataset.stamp = S.kysStamp;
+        const hungry = k.food < 30, sad = k.food < 10 || k.joy < 15;
+        el.querySelector('.n-kys-credits').textContent = `✦ ${k.credits}`;
+        const face = el.querySelector('.n-kys-face');
+        face.dataset.wear = k.wearing || '';
+        face.classList.toggle('hungry', hungry);
+        face.classList.toggle('sad', sad);
+        const status = sad ? 'kys.status_sad' : hungry ? 'kys.status_hungry' : k.food > 60 && k.joy > 70 ? 'kys.status_great' : 'kys.status_ok';
+        const bar = (label, value, cls) => `<div class="k-bar"><span>${esc(label)}</span>`
+          + `<div class="track"><div class="fill ${cls}" style="width:${value}%"></div></div><b>${value}</b></div>`;
+        el.querySelector('.n-kys-gauges').innerHTML = bar(t('kys.food'), k.food, 'food') + bar(t('kys.joy'), k.joy, 'joy')
+          + `<div class="k-status${sad || hungry ? ' warn' : ''}">${esc(t(status))}</div>`;
+        const body = el.querySelector('.n-kys-body');
+        const scroll = body.scrollTop;
+        body.innerHTML = kysPageBody(k);
+        body.scrollTop = scroll;
+        requestAnimationFrame(() => S.notch.resize());
+      },
+    };
+  }
+
+  function kysPageBody(k) {
+    const name = (id) => esc(t(`kys.item.${id}`));
+    const row = (i, extra, button) => `<div class="k-row"><span>${KYS_ICON[i.id]} ${name(i.id)}${extra}</span>${button}</div>`;
+    const inventory = [
+      ...k.items.filter((i) => i.kind === 'food' && (k.inventory[i.id] || 0) > 0)
+        .map((i) => row(i, ` <em>×${k.inventory[i.id]}</em>`, `<button class="k-btn" data-kys-feed="${i.id}">${esc(t('kys.give'))}</button>`)),
+      ...k.items.filter((i) => i.kind !== 'food' && k.owned.includes(i.id)).map((i) => {
+        if (i.kind === 'toy') {
+          return row(i, '', `<button class="k-btn" data-kys-play="1" ${k.canPlay ? '' : 'disabled'}>${esc(t(k.canPlay ? 'kys.play' : 'kys.resting'))}</button>`);
+        }
+        const worn = k.wearing === i.id;
+        return row(i, '', `<button class="k-btn${worn ? ' on' : ''}" data-kys-wear="${worn ? '-' : i.id}">${esc(t(worn ? 'kys.take_off' : 'kys.wear'))}</button>`);
+      }),
+    ].join('') || `<div class="n-empty">${esc(t('kys.inventory_empty'))}</div>`;
+    const shop = k.items.map((i) => {
+      const have = i.kind !== 'food' && k.owned.includes(i.id);
+      const effect = i.kind === 'toy' ? t('kys.effect_toy') : i.kind === 'wear' ? t('kys.effect_wear')
+        : [i.food && t('kys.effect_food', { n: i.food }), i.joy && t('kys.effect_joy', { n: i.joy })].filter(Boolean).join(' · ');
+      return `<button class="k-shop${have ? ' have' : ''}" data-kys-buy="${i.id}" ${have || k.credits < i.price ? 'disabled' : ''}`
+        + ` title="${name(i.id)} · ${esc(effect)}"><span class="k-shop-icon">${KYS_ICON[i.id]}</span>`
+        + `<span class="k-shop-price">${have ? '✓' : `✦ ${i.price}`}</span></button>`;
+    }).join('');
+    const earn = [...k.sources.map((s) => [t(`kys.source.${s.id}`), `+${s.credits}`, `${s.today}/${s.cap}`]), [t('kys.source.daily'), '+10', '']]
+      .map(([label, plus, today]) => `<div class="k-earn"><span>${esc(label)}</span><b>${plus} ✦</b><em>${today}</em></div>`).join('');
+    return `<div class="k-title">${esc(t('kys.inventory'))}</div>${inventory}`
+      + `<div class="k-title">${esc(t('kys.shop'))}</div><div class="k-shop-grid">${shop}</div>`
+      + `<div class="k-title">${esc(t('kys.earn'))}</div>${earn}`;
+  }
+
+  /** Buttons of the Kys page; the engine answers with the new state (event "kys"). */
+  function kysPageClick(m, el, e) {
+    const b = e.target.closest('button');
+    if (!b || b.disabled) return;
+    const d = b.dataset;
+    const call = d.kysBuy ? api.kys.buy(d.kysBuy) : d.kysFeed ? api.kys.feed(d.kysFeed)
+      : d.kysWear ? api.kys.wear(d.kysWear === '-' ? null : d.kysWear) : d.kysPlay ? api.kys.play() : null;
+    call?.catch((err) => {
+      const text = String(err);
+      const msg = el.querySelector('.k-msg');
+      msg.textContent = text.includes('credits') ? t('kys.poor') : text.includes('tired') ? t('kys.tired') : text;
+      msg.classList.add('show');
+      clearTimeout(m.island.kysMsgT);
+      m.island.kysMsgT = setTimeout(() => { msg.classList.remove('show'); m.island.notch.resize(); }, 2500);
+      m.island.notch.resize();
+    });
+  }
+
+  /** The face's eyes follow the cursor over the page. */
+  function faceAim(view, x, y) {
+    const face = view.querySelector('.n-kys-face');
+    if (!face) return;
+    const r = face.getBoundingClientRect();
+    const dx = x - (r.left + r.width / 2), dy = y - (r.top + r.height / 2);
+    const len = Math.hypot(dx, dy) || 1, k = Math.min(1, len / 80);
+    face.style.setProperty('--fx', `${((dx / len) * k * 4).toFixed(2)}px`);
+    face.style.setProperty('--fy', `${((dy / len) * k * 3).toFixed(2)}px`);
+  }
+
+  /** Fed while its page is open: the food drops onto the face, a few chomps, a heart. */
+  function faceEat(m, item) {
+    const face = m.island.notch.current?.querySelector('.n-kys-face');
+    if (!face) return;
+    const r = face.getBoundingClientRect();
+    const c = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    const food = document.createElement('div');
+    food.className = 'kys-food';
+    food.textContent = FOOD[item] || '🍪';
+    food.style.left = `${c.x}px`;
+    food.style.top = `${c.y}px`;
+    document.body.appendChild(food);
+    setTimeout(() => {
+      food.remove();
+      face.classList.remove('munch');
+      void face.offsetWidth;
+      face.classList.add('munch', 'happy');
+      setTimeout(() => face.classList.remove('munch'), 950);
+      setTimeout(() => face.classList.remove('happy'), 2200);
+      floatAt(c, '❤', 'heart');
+    }, 480);
+  }
+
+  /** Playing while its page is open: a ball bouncing across the page, the face following it. */
+  function facePlay(m) {
+    const view = m.island.notch.current;
+    const face = view?.querySelector('.n-kys-face');
+    if (!face) return;
+    const ball = document.createElement('div');
+    ball.className = 'kys-ball';
+    ball.textContent = '⚽';
+    document.body.appendChild(ball);
+    face.classList.add('happy');
+    const t0 = performance.now(), duration = 3600;
+    const step = (now) => {
+      const u = (now - t0) / duration;
+      if (u >= 1 || !view.isConnected) {
+        ball.remove();
+        face.classList.remove('happy');
+        return;
+      }
+      const r = view.getBoundingClientRect(), f = face.getBoundingClientRect();
+      const x = r.left + r.width / 2 + Math.sin(u * Math.PI * 4) * (r.width / 2 - 30);
+      const y = f.bottom + 16 - Math.abs(Math.sin(u * Math.PI * 9)) * 14;
+      ball.style.left = `${x}px`;
+      ball.style.top = `${y}px`;
+      ball.style.rotate = `${Math.round(u * 1080)}deg`;
+      faceAim(view, x, y);
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
   // --- Views --------------------------------------------------------------------------------
   function compactView(m) {
     const md = activeMedia(m);
@@ -1272,6 +1440,7 @@
     const S = m.island;
     if (S.page === 'notifs') return historyView(m);
     if (S.page === 'calendar') return calendarView(m);
+    if (S.page === 'kys') return kysView(m);
     const md = S.data.media?.has ? S.data.media : null;
     const now = dayjs();
     return {
@@ -1279,6 +1448,7 @@
       size: 'expanded',
       html: `<div class="n-expanded">
         <div class="n-head"><span class="n-date-long" data-morph="date"></span><div class="n-head-right">
+          <button class="n-kysbtn" title="Kys"><span class="mini-kys"><i></i><i></i></span></button>
           <button class="n-gear" title="${t('island.settings')}">${icon('settings')}</button>
           <button class="n-bell" title="${t('island.notifications')}">${icon('bell')}<span class="n-badge"></span></button>
           <span class="n-time-big" data-morph="time"></span></div></div>
@@ -1302,6 +1472,7 @@
       </div>`,
       mount(el) {
         el.querySelector('.n-bell').onclick = () => openHistory(m);
+        el.querySelector('.n-kysbtn').onclick = () => { S.page = 'kys'; render(m); };
         el.querySelector('.n-gear').onclick = () => { setExpanded(m, false); api.action('settings'); };
         el.querySelector('.n-date-long').onclick = () => openCalendar(m);
         el.querySelectorAll('.n-claude-refresh').forEach((b) => {
@@ -1352,6 +1523,7 @@
         const badge = el.querySelector('.n-badge');
         badge.textContent = S.unread > 9 ? '9+' : S.unread;
         badge.hidden = !S.unread;
+        el.querySelector('.n-kysbtn').classList.toggle('hungry', (S.kys?.food ?? 100) < 30); // asking for food
         const cur = d.media;
         if (cur?.has && el.querySelector('.n-media')) {
           updateTrack(el, cur, 'lg', true);
