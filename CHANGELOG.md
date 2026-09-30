@@ -10,6 +10,7 @@ What changed in each version. The section of a version is also the text of its G
 - **Simple brain**, the default: it understands commands ("next song", "pause", "volume 30", "louder", "mute"), questions ("what time is it?", "what's playing?", "are you hungry?") and a bit of small talk, in English and French. Nothing to download, nothing running.
 - **Light and Smart brains**, an option (settings, Kys tab, Brain): a small AI running on your PC, to really chat. **Light** (Qwen3 1.7B, 1.1 GB) answers in about a second; **Smart** (Qwen3 4B, 2.5 GB) takes about three and is much better company, with a real personality and a memory of the conversation. Download the one you want from the settings. It starts loading as soon as you click the input, and is freed a minute after you stop talking. Nothing leaves your PC. Commands still go through the simple brain: instant and reliable.
 - **Emotions**: each answer comes with an emotion (happy, curious, surprised, suspicious, grumpy, worried, sleepy, sad), shown by Kys's own eyes: brows and eyelids on the face of its page, on the buddy of the settings, and on the island itself, where Kys drops in to show it when you talk to it from the settings. Be mean to it and its joy goes down.
+- When Kys drops into the island, the time and the date now tip into a V around it.
 - The installer includes llama.cpp, which runs the model with the best instructions your processor has (6 MB installer instead of 4.7 MB).
 
 ## 0.4.1 — 2026-09-30

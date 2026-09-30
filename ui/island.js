@@ -1048,11 +1048,11 @@
     // How hard what's on either side gets knocked: sideways, down, askew.
     const n = S.notch.el.style;
     n.setProperty('--knock-l-x', `${-rand(6, 10).toFixed(1)}px`);
-    n.setProperty('--knock-l-y', `${rand(5, 8).toFixed(1)}px`);
-    n.setProperty('--knock-l-r', `${-rand(8, 16).toFixed(1)}deg`);
+    n.setProperty('--knock-l-y', `${rand(3, 5).toFixed(1)}px`);
+    n.setProperty('--knock-l-r', `${rand(8, 16).toFixed(1)}deg`); // inner ends down: a V
     n.setProperty('--knock-r-x', `${rand(6, 10).toFixed(1)}px`);
-    n.setProperty('--knock-r-y', `${rand(5, 8).toFixed(1)}px`);
-    n.setProperty('--knock-r-r', `${rand(7, 14).toFixed(1)}deg`);
+    n.setProperty('--knock-r-y', `${rand(3, 5).toFixed(1)}px`);
+    n.setProperty('--knock-r-r', `${-rand(7, 14).toFixed(1)}deg`);
     // Above the island first (off the screen), right over the spot they land on...
     const eyes = S.eyes.el;
     eyes.style.transition = 'none';
