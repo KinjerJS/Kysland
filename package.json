@@ -1,6 +1,6 @@
 {
   "name": "kysland",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Dynamic Island for Windows (Tauri)",
   "scripts": {
     "tauri": "tauri",

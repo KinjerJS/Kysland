@@ -630,6 +630,8 @@
       'dodge-eyes': true,            // two little eyes watch the cursor while it's hidden
       'dodge-roam': true,            // ...and roam around a grown island if the cursor stays close
       'dodge-roam-delay': 20,        // seconds
+      'auto-hide': false,            // hides while the mouse is far away or on another screen (read by the engine)
+      'auto-hide-distance': 300,     // px around the island where it comes back
       notifications: true,           // Windows notifications in the island
       claude: false,                 // Claude plan usage (if Claude Code is installed)
       'notification-duration': 6,    // seconds
@@ -647,6 +649,7 @@
       const notch = S.notch.el;
       S.eyes = new Eyes(notch);
       notch.classList.toggle('eyes', m.conf['dodge-eyes'] !== false);
+      S.near = state.near !== false;
       applyOutline(m, state.backdropDark);
       let enterT = 0, leaveT = 0;
       if (m.conf['expand-on-hover']) {
@@ -754,6 +757,12 @@
       }
     },
 
+    onPresence(m, near) {
+      if (!m.island) return;
+      m.island.near = near;
+      applyAway(m);
+    },
+
     onGaze(m, x, y) {
       m.island?.eyes.look(x, y);
     },
@@ -771,6 +780,14 @@
   function applyOutline(m, dark) {
     const o = m.conf.outline;
     m.island.notch.el.classList.toggle('outlined', o === true || (o !== false && dark === true));
+  }
+
+  // Auto-hide: tucked away above the screen edge while the mouse is far, except to show something
+  // (a notification, an event such as the volume), or while open or hiding from the cursor.
+  function applyAway(m) {
+    const S = m.island;
+    const away = m.conf['auto-hide'] === true && !S.near && !S.expanded && !S.notif && !S.transient && !S.dodged;
+    S.notch.el.classList.toggle('away', away);
   }
 
   function setExpanded(m, v) {
@@ -832,6 +849,7 @@
   function render(m) {
     const S = m.island;
     if (!S || S.dodged) return; // hidden: nothing changes until it comes back
+    applyAway(m);
     // Only a resting island hides from the cursor (not while open or showing a notification).
     S.notch.el.dataset.dodgeable = !S.expanded && !S.notif ? '1' : '0';
     S.notch.show(S.expanded ? expandedView(m) : S.notif || S.transient || compactView(m));

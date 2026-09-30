@@ -36,6 +36,8 @@
     "dodge-eyes": true,                  // two little eyes watch the cursor while it's hidden
     "dodge-roam": true,                  // cursor still close after a while: the notch grows and the eyes roam around
     "dodge-roam-delay": 20,              // seconds
+    "auto-hide": false,                  // hides while the mouse is far away or on another screen; comes back as it gets near
+    "auto-hide-distance": 300,           // px around the notch where it comes back
     "hide-windows-osd": true,           // volume keys no longer show the Windows flyout (Kysland handles them)
     "volume-step": 2,                   // % per volume key press
     "notifications": true,              // Windows notifications shown in the notch

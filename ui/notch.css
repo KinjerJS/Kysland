@@ -42,8 +42,11 @@
   border-radius: 0 0 var(--notch-radius) var(--notch-radius);
   box-shadow: 0 0 0 1px var(--notch-outline), 0 4px 14px rgba(0, 0, 0, 0.22);
   transition: width .5s var(--spring), height .5s var(--spring), border-radius .5s var(--spring), box-shadow .4s ease, --notch-outline .4s ease,
-    --notch-ear .5s var(--spring);
+    --notch-ear .5s var(--spring), translate .5s var(--spring), opacity .3s ease;
 }
+/* Auto-hide: tucked away past the screen edge while the mouse is far (island.js). */
+.notch.away { translate: -50% calc(-100% - 14px); opacity: 0; }
+body.pos-bottom .notch.away { translate: -50% calc(100% + 14px); }
 /* Mostly black around the island (or "outline": true): thin outline so it stays visible. */
 .notch.outlined { --notch-outline: var(--notch-outline-color); }
 .notch[data-size=wide] { border-radius: 0 0 18px 18px; }

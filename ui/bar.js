@@ -649,6 +649,11 @@ api.on('backdrop', ({ dark }) => {
 api.on('dodge', ({ on }) => modules.forEach((m) => m.def.onDodge?.(m, on)));
 // Meanwhile, where the cursor is (CSS pixels of the window).
 api.on('gaze', ({ x, y }) => modules.forEach((m) => m.def.onGaze?.(m, x, y)));
+// Auto-hide: the cursor came near the island, or went away from it.
+api.on('presence', ({ near }) => {
+  state.near = near;
+  modules.forEach((m) => m.def.onPresence?.(m, near));
+});
 api.on('reload', () => location.reload());
 
 // island.js (and other modules) register themselves in TYPES before boot.
