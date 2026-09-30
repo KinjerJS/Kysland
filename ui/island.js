@@ -685,7 +685,8 @@
       this.dizzyUntil = 0;
       this.el.classList.remove('dizzy');
       const at = this.center();
-      this.free = { pos: at, held: at, from, since: performance.now(), move: null, fledAt: 0, left: false, caught: false };
+      // panic: held and panicking (pulled out, caught); caught: caught while free (credits once home).
+      this.free = { pos: at, held: at, from, since: performance.now(), move: null, fledAt: 0, left: false, panic: true, caught: false };
       this.place(at, 0);
       this.shapeIsland(from);
       this.gooIsland.classList.remove('gone');
@@ -693,7 +694,7 @@
       this.flyer.classList.add('free', 'held');
       this.goo.classList.add('on');
       this.splash();
-      this.setMood('surprised');
+      this.setMood('panic');
       let last = 0;
       const tick = (now) => {
         if (!this.free) return;
@@ -722,6 +723,7 @@
       this.flyer.setPointerCapture(e.pointerId);
       F.held = { x: e.clientX, y: e.clientY };
       F.caught = true;
+      F.panic = true;
       // Caught while dizzy: no time for that, it panics.
       this.dizzyUntil = 0;
       this.spin = 0;
@@ -748,6 +750,7 @@
       const F = this.free;
       if (!F) return;
       F.held = null;
+      F.panic = false;
       this.flyer.classList.remove('held');
       const home = this.homeSpot();
       if (!F.left || Math.hypot(p.x - home.x, p.y - home.y) < 150) {
@@ -812,11 +815,11 @@
       this.goo.classList.toggle('on', near || toHome < 260);
       this.flyer.classList.toggle('pill', !this.goo.classList.contains('on'));
       // Wriggling when held; a slow breath otherwise.
-      const wriggle = F.held && F.caught ? Math.sin(now / 38) * 9 : 0;
+      const wriggle = F.held && F.panic ? Math.sin(now / 38) * 9 : 0;
       const breath = F.held || F.homing ? 0 : Math.sin(now / 800) * 1.5;
       const speed = Math.hypot(vx, vy);
       this.place({ x: p.x, y: p.y + breath }, wriggle, (Math.atan2(vy, vx) * 180) / Math.PI, Math.min(0.35, speed / 1800),
-        F.held && F.caught ? Math.sin(now / 33) * 0.06 : 0);
+        F.held && F.panic ? Math.sin(now / 33) * 0.06 : 0);
       // Asleep, a cursor sneaking right up to it: the eye on that side opens a crack.
       const asleep = F.move?.kind === 'doze';
       const side = asleep && c && Math.hypot(Math.max(0, Math.abs(c.x - p.x) - 32), Math.max(0, Math.abs(c.y - p.y) - 20)) < 18
@@ -826,7 +829,7 @@
       F.cracked = side;
       if (this.dizzyUntil && !this.isDizzy(now)) this.recover(); // the circling stopped: stars gone, a shake of the head
       if (this.isDizzy(now)) return this.roll(now);
-      if (F.held && F.caught) {
+      if (F.held && F.panic) {
         // Panicking: eyes darting everywhere.
         if (!F.dartAt || now > F.dartAt) {
           F.dart = { x: p.x + rand(-80, 80), y: p.y + rand(-50, 50) };
