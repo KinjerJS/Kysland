@@ -347,7 +347,7 @@ pub fn download(m: &'static Model) {
             }
             std::fs::rename(&part, dir.join(m.file)).map_err(|e| e.to_string())
         })();
-        if let Err(e) = result { eprintln!("[kysland] model download failed: {e}"); }
+        if let Err(e) = result { crate::util::log(&format!("model download failed: {e}")); }
         *DOWNLOADING.lock().unwrap() = None;
         broadcast();
     });
@@ -563,7 +563,7 @@ fn run_model(id: u64, m: &'static Model, backend: &'static LlamaBackend, path: &
             };
             match job {
                 Job::Quit => return Ok(()),
-                Job::Warm => if let Err(e) = warm_up(m, &model, &mut ctx, &mut seen) { eprintln!("[kysland] smart brain: {e}"); },
+                Job::Warm => if let Err(e) = warm_up(m, &model, &mut ctx, &mut seen) { crate::util::log(&format!("smart brain: {e}")); },
                 Job::Talk(text, reply) => { let _ = reply.send(answer(m, &model, &mut ctx, &mut seen, &text)); }
             }
         }
@@ -572,7 +572,7 @@ fn run_model(id: u64, m: &'static Model, backend: &'static LlamaBackend, path: &
     for job in inbox.try_iter() {
         if let Job::Talk(_, reply) = job { let _ = reply.send(Err("the model stopped".into())); }
     }
-    if let Err(e) = loaded { eprintln!("[kysland] smart brain: {e}"); }
+    if let Err(e) = loaded { crate::util::log(&format!("smart brain: {e}")); }
     broadcast();
 }
 
@@ -720,7 +720,7 @@ pub fn talk(text: &str, brain: &str) -> Value {
     let (reply, by) = match model(brain).filter(|m| !quick.sure && model_ready(m)) {
         Some(m) => match smart(m, text) {
             Ok(r) => (r, m.id),
-            Err(e) => { eprintln!("[kysland] smart brain: {e}"); (quick, "simple") }
+            Err(e) => { crate::util::log(&format!("smart brain: {e}")); (quick, "simple") }
         },
         None => (quick, "simple"),
     };

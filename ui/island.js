@@ -1438,10 +1438,22 @@
         const body = el.querySelector('.n-kys-body');
         const scroll = body.scrollTop;
         body.innerHTML = kysPageBody(k);
+        fitKysPage(S, el);
         body.scrollTop = scroll;
         requestAnimationFrame(() => S.notch.resize());
       },
     };
+  }
+
+  /** The page fits in the window (the island can't be taller than it): its lower part (inventory,
+   *  shop...) gets shorter and scrolls. */
+  function fitKysPage(S, view) {
+    const body = view.querySelector('.n-kys-body');
+    if (!body) return;
+    body.style.maxHeight = '';
+    const room = window.innerHeight - Math.max(0, S.notch.el.getBoundingClientRect().top) - 16; // room for the shadow
+    const over = view.offsetHeight - room;
+    if (over > 0) body.style.maxHeight = `${Math.max(80, body.offsetHeight - over)}px`;
   }
 
   function kysPageBody(k) {
@@ -1487,8 +1499,13 @@
     if (!msg) return;
     msg.textContent = text.includes('credits') ? t('kys.poor') : text.includes('tired') ? t('kys.tired') : text;
     msg.classList.add('show');
+    fitKysPage(m.island, el);
     clearTimeout(m.island.kysMsgT);
-    m.island.kysMsgT = setTimeout(() => { msg.classList.remove('show'); m.island.notch.resize(); }, 2500);
+    m.island.kysMsgT = setTimeout(() => {
+      msg.classList.remove('show');
+      fitKysPage(m.island, el);
+      m.island.notch.resize();
+    }, 2500);
     m.island.notch.resize();
   }
 
@@ -1542,6 +1559,7 @@
     say.classList.toggle('thinking', thinking);
     say.innerHTML = thinking ? '<i></i><i></i><i></i>' : esc(text);
     say.classList.add('show');
+    fitKysPage(S, el);
     face.classList.toggle('think', thinking);
     faceMood(face, thinking ? 'curious' : mood, thinking ? 0 : 4000);
     requestAnimationFrame(() => S.notch.resize());

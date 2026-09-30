@@ -18,7 +18,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use tauri::menu::{CheckMenuItem, IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -95,7 +95,7 @@ fn styles() -> Value {
 
 /// Message shown in the island (config errors, scripts using --island="...").
 fn island_message(text: &str, icon: &str) {
-    eprintln!("[kysland] {text}");
+    util::log(text);
     hub::emit("island", json!({ "text": text, "icon": icon }));
 }
 
@@ -287,6 +287,63 @@ fn start_pollers(cfg: &Value) {
 
 // --- Background loop: mouse, fullscreen, z-order -----------------------------------------------------
 
+/// Clicks through a Kysland window or not, from a thread of its own: Windows applies it even while
+/// the main thread is busy waiting (a window being created...), which would otherwise leave the
+/// window catching every click over the top of the screen.
+fn click_through(h: isize, on: bool) {
+    static TX: OnceLock<std::sync::mpsc::Sender<(isize, bool)>> = OnceLock::new();
+    let tx = TX.get_or_init(|| {
+        let (tx, rx) = std::sync::mpsc::channel::<(isize, bool)>();
+        std::thread::spawn(move || for (h, on) in rx { win32::set_click_through(h, on) });
+        tx
+    });
+    let _ = tx.send((h, on));
+}
+
+/// The sync command being run by the main thread, and since when (for the log when it's stuck).
+static RUNNING: Mutex<Option<(String, Instant)>> = Mutex::new(None);
+
+/// Checks on the main thread every half second: stuck for more than 2 s, it goes in the log (with
+/// the command it was running). A settings window whose page hasn't loaded after 8 s is recreated.
+fn watchdog(app: AppHandle) {
+    std::thread::spawn(move || {
+        let answered = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let (mut asked_at, mut stuck) = (Instant::now(), false);
+        let mut retried = false;
+        loop {
+            std::thread::sleep(Duration::from_millis(500));
+            if answered.load(Ordering::SeqCst) {
+                if stuck { util::log(&format!("main thread free again after {:.1} s", asked_at.elapsed().as_secs_f64())); }
+                stuck = false;
+                answered.store(false, Ordering::SeqCst);
+                asked_at = Instant::now();
+                let a = answered.clone();
+                if app.run_on_main_thread(move || a.store(true, Ordering::SeqCst)).is_err() { return; }
+            } else if !stuck && asked_at.elapsed() > Duration::from_secs(2) {
+                stuck = true;
+                let running = RUNNING.lock().unwrap().as_ref().map(|(c, t)| format!("{c} for {:.1} s", t.elapsed().as_secs_f64()));
+                util::log(&format!("main thread stuck for 2 s (command: {})", running.as_deref().unwrap_or("none")));
+            }
+            let loading = *SETTINGS_LOADING.lock().unwrap();
+            if let Some((since, tab)) = loading && since.elapsed() > Duration::from_secs(8) {
+                SETTINGS_LOADING.lock().unwrap().take();
+                if retried {
+                    util::log("settings page still blank after a second try");
+                    continue;
+                }
+                retried = true;
+                util::log("settings page not loaded after 8 s: recreating the window");
+                let a = app.clone();
+                later(&app, move || {
+                    if let Some(w) = a.get_webview_window("settings") { let _ = w.destroy(); }
+                    let b = a.clone();
+                    later(&a, move || open_settings_at(&b, tab));
+                });
+            }
+        }
+    });
+}
+
 /// The window covers the top of the screen but only captures the mouse over the areas reported
 /// by the page (island, popups, modules): anywhere else, clicks go through to the windows below.
 fn background_loop(app: AppHandle) {
@@ -351,7 +408,10 @@ fn background_loop(app: AppHandle) {
                 }
             });
             for (label, inside) in toggles {
-                if let Some(w) = app.get_webview_window(&label) { let _ = w.set_ignore_cursor_events(!inside); }
+                if let Some(w) = app.get_webview_window(&label) {
+                    let _ = w.set_ignore_cursor_events(!inside); // applied by the main thread...
+                    if let Ok(h) = w.hwnd() { click_through(h.0 as isize, !inside); } // ...and right now
+                }
                 if !inside { let _ = app.emit("pointer-left", json!({ "label": label })); }
             }
             for (label, on) in dodges { let _ = app.emit("dodge", json!({ "label": label, "on": on })); }
@@ -598,7 +658,10 @@ fn open_settings_at(app: &AppHandle, tab: Option<&'static str>) {
             .center()
             .theme(Some(tauri::Theme::Dark))
             .build();
-        if let Err(e) = built { eprintln!("[kysland] settings window: {e}"); }
+        match built {
+            Ok(_) => *SETTINGS_LOADING.lock().unwrap() = Some((Instant::now(), tab)),
+            Err(e) => util::log(&format!("settings window: {e}")),
+        }
     });
 }
 
@@ -608,8 +671,13 @@ fn settings_changed(app: &AppHandle) {
     let _ = app.emit_to("settings", "settings-changed", ());
 }
 
+/// The settings window being created and when (with its tab), until its page checks in (see
+/// `watchdog`): a window left blank gets recreated.
+static SETTINGS_LOADING: Mutex<Option<(Instant, Option<&'static str>)>> = Mutex::new(None);
+
 #[tauri::command]
 fn settings_state(app: AppHandle) -> Value {
+    SETTINGS_LOADING.lock().unwrap().take();
     let cfg = with(|s| s.cfg.clone());
     json!({
         "lang": i18n::lang(),
@@ -979,11 +1047,22 @@ pub fn run() {
                 })
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![init, run_command, notifications, set_hit_rects, action, settings_state, set_setting, settings_action,
-            kys_state, kys_earn, kys_buy, kys_feed, kys_wear, kys_play, kys_talk, kys_brain, kys_brain_model, kys_typing, kys_warm])
+        .invoke_handler({
+            let commands: Box<dyn Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync> = Box::new(tauri::generate_handler![init, run_command, notifications, set_hit_rects, action, settings_state, set_setting, settings_action,
+                kys_state, kys_earn, kys_buy, kys_feed, kys_wear, kys_play, kys_talk, kys_brain, kys_brain_model, kys_typing, kys_warm]);
+            // Which command runs (sync ones run on the main thread), for the watchdog's log.
+            move |invoke: tauri::ipc::Invoke<tauri::Wry>| {
+                *RUNNING.lock().unwrap() = Some((invoke.message.command().to_owned(), Instant::now()));
+                let handled = commands(invoke);
+                RUNNING.lock().unwrap().take();
+                handled
+            }
+        })
         .on_menu_event(|app, e| on_menu(app, e.id().as_ref()))
         .setup(move |app| {
             let handle = app.handle().clone();
+            if let Ok(dir) = handle.path().app_local_data_dir() { util::init_log(dir); }
+            util::log(&format!("Kysland {} started", handle.package_info().version));
             hub::init(handle.clone());
             kys::load();
             if let Ok(dir) = handle.path().app_local_data_dir() { brain::init(dir); }
@@ -997,6 +1076,7 @@ pub fn run() {
             reload(&handle, true);
             ensure_autostart(&handle);
             background_loop(handle.clone());
+            watchdog(handle.clone());
             watch_config(handle);
             Ok(())
         })

@@ -33,18 +33,18 @@ struct Row { ord: i64, nid: i64, at: i64, aumid: String, payload: Vec<u8>, name:
 fn rows(sql_tail: &str, param: i64) -> Vec<Row> {
     let guard = DB.lock().unwrap();
     let Some(db) = guard.as_ref() else { return vec![] };
-    let mut stmt = match db.prepare(&format!("{QUERY} {sql_tail}")) { Ok(s) => s, Err(e) => { eprintln!("[kysland] notifications query failed: {e}"); return vec![]; } };
+    let mut stmt = match db.prepare(&format!("{QUERY} {sql_tail}")) { Ok(s) => s, Err(e) => { crate::util::log(&format!("notifications query failed: {e}")); return vec![]; } };
     stmt.query_map([param], |r| Ok(Row {
         ord: r.get(0)?, nid: r.get(1)?, at: r.get(2)?, aumid: r.get(3)?, payload: r.get(4).unwrap_or_default(),
         name: r.get(5).ok(), launch_args: r.get(6).ok(),
     }))
-    .map(|it| it.filter_map(|r| r.map_err(|e| eprintln!("[kysland] unreadable notification: {e}")).ok()).collect())
+    .map(|it| it.filter_map(|r| r.map_err(|e| crate::util::log(&format!("unreadable notification: {e}"))).ok()).collect())
     .unwrap_or_default()
 }
 
 pub fn start(epoch: u64) {
     let conn = Connection::open_with_flags(dir().join("wpndatabase.db"), OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX);
-    let Ok(conn) = conn else { return eprintln!("[kysland] notification database unavailable") };
+    let Ok(conn) = conn else { return crate::util::log("notification database unavailable") };
     let mut last: i64 = conn.query_row("select coalesce(max([Order]), 0) from Notification", [], |r| r.get(0)).unwrap_or(0);
     *DB.lock().unwrap() = Some(conn);
     std::thread::spawn(move || {

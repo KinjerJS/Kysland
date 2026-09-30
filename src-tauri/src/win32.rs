@@ -38,6 +38,17 @@ pub fn make_tool_window(h: isize) {
     unsafe { SetWindowLongPtrW(h, GWL_EXSTYLE, ex) };
 }
 
+/// Clicks go through the window, or not: the styles tao sets for `set_ignore_cursor_events`,
+/// written here directly so they apply even while the main thread is busy (Windows handles the
+/// style change as soon as that thread looks at its messages, even in a nested loop).
+pub fn set_click_through(h: isize, on: bool) {
+    let h = hwnd(h);
+    let bits = (WS_EX_TRANSPARENT.0 | WS_EX_LAYERED.0) as isize;
+    let ex = ex_style(h);
+    let ex = if on { ex | bits } else { ex & !bits };
+    if ex != ex_style(h) { unsafe { SetWindowLongPtrW(h, GWL_EXSTYLE, ex) }; }
+}
+
 /// Placement in physical pixels, without Windows snapping the window back into the work area.
 pub fn place_window(h: isize, rc: (i32, i32, i32, i32), topmost: bool) {
     let after = if topmost { HWND_TOPMOST } else { HWND_NOTOPMOST };
