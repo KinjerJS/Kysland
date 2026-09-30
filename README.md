@@ -29,7 +29,7 @@ The eyes have a name: **Kys**. It gets hungry and a little bored while Kysland r
 
 - **Credits** ✦ come from what happens with it, each capped per day: it peeks in (+1), you catch it while it peeks by coming slowly and clicking its eyes (+5), you make it dizzy (+2), it comes back from being thrown out (+3), you poke it while it roams (+1), time spent together (+1 every 10 minutes), and a daily bonus that grows with the days in a row. A little "+N ✦" floats away from it.
 - **Shop**: food (cookie, apple, candy, cake) that it eats in the island, a ball to play with, and things to wear (bow, cap, glasses, crown).
-- Everything is in the **Kys** tab of the settings window (menu **Kys…**, or `kysland.exe --kys`); its state is kept in `~.configkyslandkys.json`.
+- Everything is in the **Kys** tab of the settings window (menu **Kys…**, or `kysland.exe --kys`); its state is kept in `~\.config\kysland\kys.json`.
 
 ### Windows notifications
 
