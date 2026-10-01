@@ -205,6 +205,8 @@ h2 {
   animation: buddy-in .5s var(--spring) .1s backwards;
 }
 @keyframes buddy-in { from { opacity: 0; scale: .5; } }
+/* Out on the screen (settings.js, setAway): gone from here meanwhile. */
+.buddy.away { opacity: 0; scale: .4; transition: opacity .25s ease, scale .3s ease; }
 .buddy-eyes {
   --gx: 0px; --gy: 0px; --sl: 1; --sr: 1; --lid: 1;
   --brow: 0; --bl-y: 0px; --br-y: 0px; --bl-r: 0deg; --br-r: 0deg; --lid-l: 1; --lid-r: 1;

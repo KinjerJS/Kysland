@@ -27,6 +27,7 @@
   async function load() {
     [S, K] = await Promise.all([invoke('settings_state'), invoke('kys_state')]);
     buddy.setKys(K);
+    buddy.setAway(S.kysFree === true);
     S.island = { ...ISLAND, ...S.island };
     S.language = S.language ?? 'auto';
     S.monitors = S.monitors ?? 'primary';
@@ -376,7 +377,7 @@
     e.preventDefault();
     tile.setPointerCapture(e.pointerId);
     const from = { x: e.clientX, y: e.clientY };
-    const reach = (x, y) => { const c = buddy.mouthAt(); return Math.hypot(x - c.x, y - c.y); };
+    const reach = (x, y) => { const c = buddy.mouthAt(); return buddy.away ? Infinity : Math.hypot(x - c.x, y - c.y); };
     let ghost = null, outside = false;
     const out = (ev) => ev.clientX < 0 || ev.clientY < 0 || ev.clientX >= innerWidth || ev.clientY >= innerHeight;
     const move = (ev) => {
@@ -398,7 +399,7 @@
       }
       ghost.style.left = `${ev.clientX}px`;
       ghost.style.top = `${ev.clientY}px`;
-      buddy.want({ x: ev.clientX, y: ev.clientY });
+      if (!buddy.away) buddy.want({ x: ev.clientX, y: ev.clientY });
       const d = reach(ev.clientX, ev.clientY);
       if (item.kind === 'food') buddy.mouth(Math.max(0, Math.min(1, 1 - (d - 25) / 110)));
       ghost.classList.toggle('near', d < 50);
@@ -556,6 +557,7 @@
     }
 
     step(now, dt) {
+      if (this.away) return;
       const home = this.homeSpot();
       // Leaves home when the header scrolls past the top, comes back when it's there again.
       if (this.mode === 'home' && home.y < STICK && !this.calm) {
@@ -656,6 +658,19 @@
     /** Where its mouth is. */
     mouthAt() { return { x: this.pos.x, y: this.pos.y + 10 }; }
 
+    /** Out on the screen (Kys pulled out of the island, option "kys-grab"): there's only one Kys,
+     *  so it's not here meanwhile; back, it pops in again. */
+    setAway(on) {
+      if (on === !!this.away) return;
+      this.away = on;
+      this.el.classList.toggle('away', on);
+      if (on) return;
+      this.el.style.animation = 'none';
+      void this.el.offsetWidth;
+      this.el.style.animation = '';
+      this.setMood('happy', 1500);
+    }
+
     /** Its mouth: hidden at 0, wide open at 1 (food coming near). */
     mouth(open) {
       this.el.style.setProperty('--open', open.toFixed(2));
@@ -711,6 +726,7 @@
 
     /** Fed: it chews (the food drops into its open mouth first when it wasn't given by hand), a heart. */
     eat(item) {
+      if (this.away) return; // Kys running free on the screen eats it there
       const chew = () => {
         this.chew();
         this.eatingUntil = 0;
@@ -741,6 +757,7 @@
 
     /** Playing ball: a ball bouncing around it, its eyes following it. */
     play() {
+      if (this.away) return; // played with out on the screen
       const ball = document.createElement('div');
       ball.className = 'kys-ball';
       ball.textContent = '⚽';
@@ -909,6 +926,7 @@
   listen('kys-feed', (e) => buddy.eat(e.payload.item));
   listen('kys-play', () => buddy.play());
   listen('kys-brain', (e) => onBrain(e.payload));
+  listen('kys-free', (e) => buddy.setAway(e.payload.on === true));
   listen('kys-mood', (e) => {
     if (e.payload.emote === '67') buddy.setMove(buddy.sixSeven(performance.now())); // 67 came up in the chat
     else buddy.setMood(e.payload.mood, 4000);

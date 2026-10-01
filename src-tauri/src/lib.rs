@@ -697,6 +697,7 @@ fn settings_state(app: AppHandle) -> Value {
         "language": cfg["language"], "monitors": cfg["monitors"], "hideOnFullscreen": cfg["hide-on-fullscreen"] != false,
         "screens": screen_list(&app),
         "autostart": with(|s| s.autostart_on),
+        "kysFree": with(|s| s.bars.iter().any(|b| b.free)), // Kys out on the screen: not in the settings too
         "claudeInstalled": system::claude_installed(),
         "island": config::island_conf(&cfg),
         "brain": brain::state(),
@@ -764,6 +765,7 @@ fn kys_free(window: WebviewWindow, on: bool) {
         }));
         // Moved outside the lock: resizing the window lets its page run meanwhile.
         if let Some((hwnd, rc, topmost)) = placed { win32::place_window(hwnd, rc, topmost); }
+        hub::emit("kys-free", json!({ "on": with(|s| s.bars.iter().any(|b| b.free)) })); // the settings' buddy steps aside
     });
 }
 
