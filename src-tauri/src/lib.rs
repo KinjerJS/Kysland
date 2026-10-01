@@ -346,9 +346,16 @@ fn watchdog(app: AppHandle) {
                 util::log("settings page not loaded after 8 s: recreating the window");
                 let a = app.clone();
                 later(&app, move || {
-                    if let Some(w) = a.get_webview_window("settings") { let _ = w.destroy(); }
+                    let shown = a.get_webview_window("settings").is_some_and(|w| {
+                        let shown = w.is_visible().unwrap_or(false);
+                        let _ = w.destroy();
+                        shown
+                    });
                     let b = a.clone();
-                    later(&a, move || open_settings_at(&b, tab));
+                    later(&a, move || {
+                        create_settings(&b);
+                        if shown { open_settings_at(&b, tab); }
+                    });
                 });
             }
         }
@@ -655,26 +662,42 @@ fn open_settings(app: &AppHandle) { open_settings_at(app, None); }
 fn open_settings_at(app: &AppHandle, tab: Option<&'static str>) {
     let a = app.clone();
     later(app, move || {
-        if let Some(w) = a.get_webview_window("settings") {
-            if let Some(tab) = tab { let _ = a.emit_to("settings", "settings-tab", tab); }
-            let _ = w.unminimize();
-            let _ = w.show();
-            let _ = w.set_focus();
-            return;
-        }
-        let page = match tab { Some(tab) => format!("settings.html#{tab}"), None => "settings.html".into() };
-        let built = WebviewWindowBuilder::new(&a, "settings", WebviewUrl::App(page.into()))
-            .title(t("settings.title"))
-            .inner_size(600.0, 780.0)
-            .min_inner_size(460.0, 520.0)
-            .center()
-            .theme(Some(tauri::Theme::Dark))
-            .build();
-        match built {
-            Ok(_) => *SETTINGS_LOADING.lock().unwrap() = Some((Instant::now(), tab)),
-            Err(e) => util::log(&format!("settings window: {e}")),
-        }
+        if a.get_webview_window("settings").is_none() { create_settings(&a); } // gone after a failure
+        let Some(w) = a.get_webview_window("settings") else { return };
+        if let Some(tab) = tab { let _ = a.emit_to("settings", "settings-tab", tab); }
+        let _ = w.unminimize();
+        let _ = w.show();
+        let _ = w.set_focus();
     });
+}
+
+/// The settings window, created hidden as Kysland starts, then only shown and hidden: creating a
+/// WebView2 window while Kysland runs could leave the main thread waiting for good (a blank window,
+/// nothing else moving: "main thread stuck" in the log).
+fn create_settings(app: &AppHandle) {
+    if app.get_webview_window("settings").is_some() { return; }
+    let built = WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("settings.html".into()))
+        .title(t("settings.title"))
+        .inner_size(600.0, 780.0)
+        .min_inner_size(460.0, 520.0)
+        .center()
+        .theme(Some(tauri::Theme::Dark))
+        .visible(false)
+        .build();
+    match built {
+        Ok(w) => {
+            *SETTINGS_LOADING.lock().unwrap() = Some((Instant::now(), None));
+            // Closed: hidden, ready for next time.
+            let window = w.clone();
+            w.on_window_event(move |e| {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = e {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            });
+        }
+        Err(e) => util::log(&format!("settings window: {e}")),
+    }
 }
 
 /// The config (or start with Windows) changed: the settings window reads everything again.
@@ -1116,6 +1139,7 @@ pub fn run() {
             config::ensure(&resources(&handle).join("defaults"));
             reload(&handle, true);
             ensure_autostart(&handle);
+            create_settings(&handle); // hidden, until it's opened
             background_loop(handle.clone());
             watchdog(handle.clone());
             watch_config(handle);
