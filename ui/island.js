@@ -957,6 +957,15 @@
       return { kind: 'flee', pull: 9, until: now + 1100, target: () => away };
     }
 
+    /** The "6 7" asked for (the chat, the volume, the clock): where it floats, unless it's busy
+     *  being carried or going home. */
+    sixSevenFree() {
+      const F = this.free;
+      if (!F || F.held || F.homing) return;
+      F.move?.end?.();
+      F.move = this.freeSixSeven(performance.now());
+    }
+
     // The "6 7", where it floats.
     freeSixSeven(now) {
       const base = { ...this.free.pos };
@@ -1629,6 +1638,7 @@
     const face = S.notch.current?.querySelector('.n-kys-face');
     if (face) return faceMood(face, mood, 4000);
     const feel = () => S.eyes.setMood(mood, 3400);
+    if (S.kysFree) return feel(); // running free on the screen: right where it is
     if (S.peeking) {
       clearTimeout(S.peekEndT);
       S.peekEndT = setTimeout(() => endPeek(m), 3800);
@@ -1776,6 +1786,7 @@
       S.eyes.setMood('happy', SIX_SEVEN);
       sixSeven(S.eyes.el);
     };
+    if (S.kysFree) return S.eyes.sixSevenFree(); // running free on the screen: right where it is
     if (S.peeking) {
       clearTimeout(S.peekEndT);
       S.peekEndT = setTimeout(() => endPeek(m), SIX_SEVEN + 600);
