@@ -1133,7 +1133,7 @@
       let enterT = 0, leaveT = 0;
       if (m.conf['expand-on-hover']) {
         notch.addEventListener('mouseenter', () => {
-          if (S.dodged || S.peeking) return; // grown hidden island, or Kys peeking (to be caught): no expanding
+          if (S.dodged || S.peeking || S.kysFree) return; // hidden island, Kys peeking (to be caught) or gone with it: no expanding
           clearTimeout(leaveT);
           if (S.notif) return clearTimeout(S.notifTimer); // reading the notification: pause
           enterT = setTimeout(() => setExpanded(m, true), m.conf['hover-delay']);
@@ -1333,11 +1333,12 @@
 
   function setExpanded(m, v) {
     const S = m.island;
+    if (v && S.kysFree) return; // gone with Kys: nothing to expand (and its spot keeps its resting size)
     if (S.expanded === v) return;
     S.expanded = v;
     S.dragging = false;
     if (!v) { S.page = 'main'; stopTyping(m); }
-    if (!v && !S.notif && S.queue.length) return showNextNotif(m); // notifications that arrived while expanded
+    if (!v && !S.notif && S.queue.length && !S.kysFree) return showNextNotif(m); // notifications that arrived while expanded
     render(m);
   }
 
@@ -1360,7 +1361,7 @@
 
   function pushTransient(m, view, ms) {
     const S = m.island;
-    if (S.expanded || S.dodged) return; // the expanded view already shows everything; hidden: skipped
+    if (S.expanded || S.dodged || S.kysFree) return; // the expanded view already shows everything; hidden or gone with Kys: skipped
     S.transient = view;
     clearTimeout(S.transientTimer);
     S.transientTimer = setTimeout(() => { S.transient = null; render(m); }, ms);
@@ -1661,6 +1662,10 @@
         S.dodged = false;
         notch.classList.remove('dodged');
         notch.dataset.grab = '0';
+        setExpanded(m, false);
+        clearTimeout(S.transientTimer);
+        S.transient = null;
+        render(m);
         updateDodgeable(S);
         api.kys.free(true); // the window covers the screen, for it to run around
       }

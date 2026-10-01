@@ -319,7 +319,7 @@
     if (dragging) redraw = true; // after the drop: the tile being dragged stays
     else if (S && tab === 'kys') render();
     if (gain?.amount) requestAnimationFrame(() => $('.kys-credits')?.classList.add('bump'));
-    else if (gain && ['talk', 'dizzy'].includes(gain.source)) floatAt(buddy.pos, t('kys.capped'), 'capped'); // today's cap reached
+    else if (gain && !buddy.away && ['talk', 'dizzy'].includes(gain.source)) floatAt(buddy.pos, t('kys.capped'), 'capped'); // today's cap reached
   }
 
   /** A little something floating away from a point (a heart when Kys eats). */
