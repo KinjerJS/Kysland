@@ -2,7 +2,7 @@
 
 What changed in each version. The section of a version is also the text of its GitHub release.
 
-## 0.7.0 — 2026-10-01
+## 0.6.1 — 2026-10-01
 
 - **Kys running free** (option "Grab Kys"): right-click it for the island's menu (settings, Kys's page...). And give it things from the settings: drag a cookie, the ball or a hat out of the settings window onto it; it comes to meet you, opens its mouth for food, and eats it, plays or puts it on. Meanwhile, the settings window's Kys steps aside: there's only one Kys. What you tell it in the chat shows on the Kys running free too: its emotions, and the 6 7.
 
