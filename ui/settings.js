@@ -6,6 +6,9 @@
   const { listen } = window.__TAURI__.event;
   const { t } = window.i18n;
   const $ = (s) => document.querySelector(s);
+  // No browser menu (back, reload, print, inspect...) outside text fields, and no printing.
+  document.addEventListener('contextmenu', (e) => { if (!e.target.closest('input, textarea')) e.preventDefault(); });
+  document.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') e.preventDefault(); });
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
   // Island options and their defaults (same as island.js / the engine).

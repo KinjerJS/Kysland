@@ -3,6 +3,12 @@ const api = window.kysland;
 const { t } = window.i18n;
 
 let state = { config: null, data: {}, glaze: { connected: false, monitors: [] }, monitor: null };
+
+// No browser menu (back, reload, print, inspect...) outside text fields, and no printing: the
+// window covers the top of the screen (all of it while Kys runs free) and lets clicks through, so
+// a print preview opened there couldn't even be closed.
+document.addEventListener('contextmenu', (e) => { if (!e.target.closest('input, textarea')) e.preventDefault(); });
+document.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') e.preventDefault(); });
 let modules = [];
 
 // --- Helpers --------------------------------------------------------------------
