@@ -733,8 +733,8 @@ body.pos-bottom .notch.splash { transform-origin: 50% 100%; }
   75% { translate: 0 calc(var(--orbit) * -1); rotate: -12deg; }
   87.5% { translate: calc(var(--orbit) * 0.71) calc(var(--orbit) * -0.71); rotate: -4deg; }
 }
-.notch.roaming .notch-eyes { --mouth-y: 11px; --mouth-lift: -5px; }
-.notch.roaming .notch-eyes .mouth { --mw: 13px; --mh: 10px; --mc: 7px; --ms: 2px; --orbit: 1.5px; --mx: 6px; }
+.notch.roaming .notch-eyes, .eye-flyer .notch-eyes { --mouth-y: 11px; --mouth-lift: -5px; }
+.notch.roaming .notch-eyes .mouth, .eye-flyer .notch-eyes .mouth { --mw: 13px; --mh: 10px; --mc: 7px; --ms: 2px; --orbit: 1.5px; --mx: 6px; }
 .kys-crumb {
   position: fixed;
   z-index: 20;

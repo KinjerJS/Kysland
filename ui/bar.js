@@ -658,6 +658,7 @@ api.on('kys', (p) => modules.forEach((m) => m.def.onKys?.(m, p)));
 api.on('kys-feed', (p) => modules.forEach((m) => m.def.onKysFeed?.(m, p)));
 api.on('kys-play', () => modules.forEach((m) => m.def.onKysPlay?.(m)));
 api.on('kys-mood', (p) => modules.forEach((m) => m.def.onKysMood?.(m, p)));
+api.on('kys-offer', (p) => modules.forEach((m) => m.def.onKysOffer?.(m, p)));
 api.on('presence', ({ near }) => {
   state.near = near;
   modules.forEach((m) => m.def.onPresence?.(m, near));

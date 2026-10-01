@@ -772,6 +772,13 @@
       } else if (F.homing) {
         target = home;
         pull = 8;
+      } else if (this.offered && c) {
+        // Something held out to it (from the settings): it comes over, stopping a little short
+        // (the last bit is yours), and doesn't run off meanwhile.
+        const d = Math.hypot(c.x - F.pos.x, c.y - F.pos.y);
+        target = d > 80 ? { x: c.x + ((F.pos.x - c.x) / d) * 80, y: c.y + ((F.pos.y - c.y) / d) * 80 } : F.pos;
+        pull = 4;
+        if (this.offered === 'food') mouthOpen(this.el, Math.max(0, Math.min(1, 1 - (Math.hypot(c.x - F.pos.x, c.y - F.pos.y - 10) - 25) / 110)));
       } else {
         const asleep = F.move?.kind === 'doze';
         // A cursor rushing onto it scares it off; one coming slowly can catch it.
@@ -838,9 +845,12 @@
         return this.aim(F.dart.x, F.dart.y);
       }
       if (this.elsewhere || this.busy) return;
-      const spot = F.held || F.homing ? home : F.move?.look?.(now) ?? c;
+      const spot = F.held || F.homing ? home : this.offered ? c : F.move?.look?.(now) ?? c;
       if (spot) this.aim(spot.x, spot.y);
     }
+
+    /** Where its mouth is, running free. */
+    mouthAt() { return this.free && { x: this.free.pos.x, y: this.free.pos.y + 10 }; }
 
     /** Back in the island: the same eyes, at its middle; the page puts the island back (onHome). */
     freeDone() {
@@ -1139,6 +1149,10 @@
       // Option "kys-grab": the hidden island's eyes can be pulled out (see kysGrab), and caught back.
       notch.addEventListener('pointerdown', (e) => kysGrab(m, e));
       S.eyes.flyer.addEventListener('pointerdown', (e) => { if (S.kysFree) S.eyes.grab(e); });
+      S.eyes.flyer.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        if (S.kysFree) api.action('menu'); // the island's menu: settings, Kys's page...
+      });
       S.eyes.onHome = (F) => kysHome(m, F);
       api.kys.free(false); // a page loaded again while Kys was out: the window back to its strip
       notch.addEventListener('click', (e) => {
@@ -1274,9 +1288,14 @@
       else kysFeel(m, mood);
     },
 
+    onKysOffer(m, p) {
+      if (m.island) kysOffer(m, p);
+    },
+
     onGaze(m, x, y) {
       const S = m.island;
       if (!S) return;
+      if (S.offerGhost && S.offer?.outside) moveGhost(S.offerGhost, x, y);
       if (S.peeking) watchPeek(m, x, y);
       S.eyes.look(x, y);
     },
@@ -1569,6 +1588,10 @@
     if (S.expanded && S.page === 'kys') return faceEat(m, item); // on its page, open
     const eat = () => {
       const c = S.eyes.center();
+      if (performance.now() - (S.handFedAt || 0) < 1500) { // given by hand: already in its mouth
+        S.eyes.munch();
+        return floatAt({ x: c.x + 32, y: c.y }, '❤', 'heart');
+      }
       mouthOpen(S.eyes.el, 1);
       const food = document.createElement('div');
       food.className = 'kys-food';
@@ -1582,6 +1605,7 @@
         floatAt(c, '❤', 'heart');
       }, 480);
     };
+    if (S.kysFree) return eat(); // running free on the screen
     if (S.peeking) {
       clearTimeout(S.peekEndT);
       S.peekEndT = setTimeout(() => endPeek(m), 3500);
@@ -1654,9 +1678,65 @@
     notch.addEventListener('pointercancel', up);
   }
 
+  /**
+   * Something from the inventory dragged in the settings window for Kys running free: past the
+   * settings, the island shows it under the cursor; Kys comes over (its mouth opening for food),
+   * and let go on it, it's eaten, played with or worn.
+   */
+  function kysOffer(m, { item, outside, drop }) {
+    const S = m.island;
+    const kind = item && S.kys?.items.find((i) => i.id === item)?.kind;
+    if (!S.kysFree || !kind) return endOffer(S);
+    if (!S.offer) S.eyes.setMood(kind === 'food' ? 'surprised' : 'curious', 1500);
+    S.offer = { item, kind, outside };
+    S.eyes.offered = kind;
+    if (outside && !S.offerGhost) {
+      S.offerGhost = document.createElement('div');
+      S.offerGhost.className = 'kys-drag';
+      S.offerGhost.textContent = KYS_ICON[item];
+      document.body.appendChild(S.offerGhost);
+      if (S.eyes.cursor) moveGhost(S.offerGhost, S.eyes.cursor.x, S.eyes.cursor.y);
+    }
+    if (!outside && S.offerGhost) { S.offerGhost.remove(); S.offerGhost = null; }
+    if (!drop) return;
+    // Let go: on its mouth, it's for it.
+    const c = S.eyes.cursor, mouth = S.eyes.mouthAt();
+    const ghost = S.offerGhost;
+    S.offerGhost = null;
+    if (c && mouth && Math.hypot(c.x - mouth.x, c.y - mouth.y) < 60) {
+      if (ghost) {
+        ghost.classList.add('given');
+        moveGhost(ghost, mouth.x, mouth.y);
+        setTimeout(() => ghost.remove(), 180);
+      }
+      S.handFedAt = performance.now();
+      const call = kind === 'food' ? api.kys.feed(item) : kind === 'toy' ? api.kys.play() : api.kys.wear(item);
+      if (kind !== 'food') S.eyes.setMood('happy', 1800);
+      call.catch(() => S.eyes.setMood('sad', 1500));
+    } else {
+      ghost?.classList.add('back');
+      setTimeout(() => ghost?.remove(), 260);
+    }
+    endOffer(S, true);
+  }
+
+  function endOffer(S, keepGhost = false) {
+    if (S.offerGhost && !keepGhost) S.offerGhost.remove();
+    if (!keepGhost) S.offerGhost = null;
+    if (S.offer && S.eyes.offered === 'food' && performance.now() - (S.handFedAt || 0) > 500) mouthOpen(S.eyes.el, 0);
+    S.offer = null;
+    S.eyes.offered = null;
+  }
+
+  function moveGhost(ghost, x, y) {
+    ghost.style.left = `${x}px`;
+    ghost.style.top = `${y}px`;
+  }
+
   /** Kys back in its spot: the island forms again (a few credits if it was caught). */
   function kysHome(m, F) {
     const S = m.island;
+    endOffer(S);
     S.kysFree = false;
     S.notch.el.classList.remove('kys-away', 'pulling');
     S.eyes.stop();
@@ -1723,9 +1803,11 @@
           S.eyes.setMood('happy', 1500);
           return;
         }
+        // Under the island, or around Kys running free.
+        const at = S.eyes.mouthAt();
         const r = S.notch.el.getBoundingClientRect();
-        const x = r.left + r.width / 2 + Math.sin(u * Math.PI * 4) * (r.width / 2 + 30);
-        const y = r.bottom + 14 - Math.abs(Math.sin(u * Math.PI * 9)) * 12;
+        const x = at ? at.x + Math.sin(u * Math.PI * 4) * 110 : r.left + r.width / 2 + Math.sin(u * Math.PI * 4) * (r.width / 2 + 30);
+        const y = at ? at.y + 36 - Math.abs(Math.sin(u * Math.PI * 9)) * 26 : r.bottom + 14 - Math.abs(Math.sin(u * Math.PI * 9)) * 12;
         ball.style.left = `${x}px`;
         ball.style.top = `${y}px`;
         ball.style.rotate = `${Math.round(u * 1080)}deg`;
@@ -1734,6 +1816,7 @@
       };
       requestAnimationFrame(step);
     };
+    if (S.kysFree) return play(); // running free on the screen
     if (S.peeking) {
       clearTimeout(S.peekEndT);
       S.peekEndT = setTimeout(() => endPeek(m), 4200);

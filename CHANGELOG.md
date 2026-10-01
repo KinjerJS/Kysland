@@ -2,6 +2,10 @@
 
 What changed in each version. The section of a version is also the text of its GitHub release.
 
+## 0.7.0 — 2026-10-01
+
+- **Kys running free** (option "Grab Kys"): right-click it for the island's menu (settings, Kys's page...). And give it things from the settings: drag a cookie, the ball or a hat out of the settings window onto it; it comes to meet you, opens its mouth for food, and eats it, plays or puts it on.
+
 ## 0.6.0 — 2026-10-01
 
 - **Grab Kys** (an option, off by default, in the settings under "Hiding from the cursor"): come slowly so the island hides, grab Kys's eyes and pull. Kys pops out in a drop of island and runs off across your screen, taking the island with it: it wanders, comes to see your cursor, dozes off, gets dizzy, does the 6 7... Rush at it and it flees; come slowly and you can catch it, and it panics. Bring it back to its spot and the island forms again around it (and it earns you credits). Left alone long enough, it goes home by itself.

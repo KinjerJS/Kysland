@@ -364,8 +364,10 @@
   // --- Giving Kys something: an item of the inventory dragged onto the buddy -------------------------
   // The item follows the pointer; the buddy comes over (stopping a little short), watches it, and
   // for food opens its mouth wider as it comes near. Dropped on it, it's eaten, played with or worn;
-  // dropped elsewhere, it goes back. A click on what it wears takes it off.
+  // dropped elsewhere, it goes back. A click on what it wears takes it off. Out of the window, it's
+  // for Kys running free on the screen (option "kys-grab"): the island takes over (kys_offer).
   let dragging = false, redraw = false;
+  const offer = (item, outside = false, drop = false) => invoke('kys_offer', { item, outside, drop }).catch(() => {});
 
   function startDrag(e) {
     const tile = e.target.closest('[data-kys-item]');
@@ -375,7 +377,8 @@
     tile.setPointerCapture(e.pointerId);
     const from = { x: e.clientX, y: e.clientY };
     const reach = (x, y) => { const c = buddy.mouthAt(); return Math.hypot(x - c.x, y - c.y); };
-    let ghost = null;
+    let ghost = null, outside = false;
+    const out = (ev) => ev.clientX < 0 || ev.clientY < 0 || ev.clientX >= innerWidth || ev.clientY >= innerHeight;
     const move = (ev) => {
       if (!ghost) {
         if (Math.hypot(ev.clientX - from.x, ev.clientY - from.y) < 5) return; // a click, so far
@@ -386,6 +389,12 @@
         tile.classList.add('dragging');
         dragging = true;
         buddy.setMood(item.kind === 'food' ? 'surprised' : 'curious');
+        offer(item.id);
+      }
+      if (out(ev) !== outside) {
+        outside = !outside;
+        ghost.hidden = outside; // past the window, the island shows it
+        offer(item.id, outside);
       }
       ghost.style.left = `${ev.clientX}px`;
       ghost.style.top = `${ev.clientY}px`;
@@ -403,6 +412,12 @@
       buddy.want(null);
       if (!ghost) {
         if (tile.classList.contains('worn')) invoke('kys_wear', { item: null }).catch(kysError);
+      } else if (outside && ev.type !== 'pointercancel') {
+        // Let go out of the window: Kys running free takes it if it's on its mouth.
+        ghost.remove();
+        buddy.mouth(0);
+        buddy.setMood('neutral');
+        offer(item.id, true, true);
       } else if (ev.type === 'pointercancel' || reach(ev.clientX, ev.clientY) > 55) {
         // Not for it: back where it was.
         const r = tile.getBoundingClientRect();
@@ -412,6 +427,7 @@
         setTimeout(() => ghost.remove(), 260);
         buddy.mouth(0);
         buddy.setMood('neutral');
+        offer(null);
       } else {
         const c = buddy.mouthAt();
         ghost.classList.add('given');
@@ -419,6 +435,7 @@
         ghost.style.top = `${c.y}px`;
         setTimeout(() => ghost.remove(), 180);
         buddy.handFedAt = performance.now();
+        offer(null);
         if (item.kind !== 'food') buddy.setMood('happy', 1800);
         const call = item.kind === 'food' ? ['kys_feed', { item: item.id }] : item.kind === 'toy' ? ['kys_play', {}] : ['kys_wear', { item: item.id }];
         invoke(...call).catch((err) => {

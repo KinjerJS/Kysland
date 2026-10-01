@@ -767,6 +767,14 @@ fn kys_free(window: WebviewWindow, on: bool) {
     });
 }
 
+/// Something from Kys's inventory dragged in the settings window, for Kys running free on the
+/// screen (the island window shows it past the settings and decides when it's let go): the item
+/// (none: the drag is over), whether the pointer is out of the settings window, let go.
+#[tauri::command]
+fn kys_offer(item: Option<String>, outside: bool, drop: bool) {
+    hub::emit("kys-offer", json!({ "item": item, "outside": outside, "drop": drop }));
+}
+
 /// Talking to Kys: its answer, once it acted on it (see brain.rs). The smart brain takes a few
 /// seconds of CPU, off the command threads.
 #[tauri::command]
@@ -1080,7 +1088,7 @@ pub fn run() {
         )
         .invoke_handler({
             let commands: Box<dyn Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync> = Box::new(tauri::generate_handler![init, run_command, notifications, set_hit_rects, action, settings_state, set_setting, settings_action,
-                kys_state, kys_earn, kys_buy, kys_feed, kys_wear, kys_play, kys_talk, kys_brain, kys_brain_model, kys_typing, kys_warm, kys_free]);
+                kys_state, kys_earn, kys_buy, kys_feed, kys_wear, kys_play, kys_talk, kys_brain, kys_brain_model, kys_typing, kys_warm, kys_free, kys_offer]);
             // Which command runs (sync ones run on the main thread), for the watchdog's log.
             move |invoke: tauri::ipc::Invoke<tauri::Wry>| {
                 *RUNNING.lock().unwrap() = Some((invoke.message.command().to_owned(), Instant::now()));
