@@ -15,7 +15,7 @@
   const ISLAND = {
     'expand-on-hover': true, 'side-shape': 'bubble', size: 100, width: null, outline: 'auto', theme: 'classic', glass: 'frosted', dodge: true, 'dodge-speed': 450, 'dodge-eyes': true,
     'dodge-roam': true, 'dodge-roam-delay': 20, 'auto-hide': false, 'auto-hide-distance': 300, peek: true,
-    'close-bounce': true, 'visible-in-captures': false, 'glass-light': true, notifications: true, 'hide-windows-osd': true, claude: false, 'kys-brain': 'simple', 'kys-grab': false,
+    'close-bounce': true, 'visible-in-captures': false, 'glass-light': true, notifications: true, 'hide-windows-osd': true, claude: false, 'kys-brain': 'simple', 'kys-grab': false, 'kys-skin': 'auto',
   };
   // Top-level options, as named in the state sent by the engine.
   const TOP = { language: 'language', monitors: 'monitors', 'hide-on-fullscreen': 'hideOnFullscreen', autostart: 'autostart' };
@@ -101,6 +101,8 @@
   // --- Page ----------------------------------------------------------------------------------------
   function render() {
     const I = S.island;
+    // Kys's skin (option "kys-skin"): the buddy's body too (settings.css).
+    document.body.classList.toggle('kys-skin-glass', I['kys-skin'] === 'glass' || (I['kys-skin'] !== 'classic' && I.theme === 'glass'));
     const dodgeOff = !I.dodge;
     const eyesOff = dodgeOff || !I['dodge-eyes'];
     const roamOff = eyesOff || !I['dodge-roam'];
@@ -224,7 +226,8 @@
       earnRow(t('kys.source.daily'), '+10', ''),
     ];
     return [
-      section('Kys', [`<div class="kys-card">${top}</div>`]),
+      section('Kys', [`<div class="kys-card">${top}</div>`,
+        row(t('kys.skin'), t('kys.skin_desc'), seg('kys-skin', [['auto', t('kys.skin_auto')], ['classic', t('kys.skin_classic')], ['glass', 'Liquid Glass']]))]),
       section(t('kys.talk'), [chatBox(), ...brainRows()]),
       section(t('kys.inventory'), inventory),
       section(t('kys.shop'), [`<div class="shop">${shop}</div>`]),

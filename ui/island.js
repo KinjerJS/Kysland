@@ -1629,6 +1629,7 @@
       glass: 'frosted',              // with the glass theme: 'frosted' | 'balanced' | 'crystal' (GLASS_LEVELS)
       'visible-in-captures': false,  // with the glass theme: in screenshots and recordings (its glass then sees nothing behind it)
       'glass-light': true,           // with the glass theme: a light follows the cursor over the island
+      'kys-skin': 'auto',            // Kys's body: 'auto' (like the island's theme) | 'classic' (black) | 'glass'
       dodge: true,                   // hides when the cursor approaches slowly (read by the engine)
       'dodge-eyes': true,            // two little eyes watch the cursor while it's hidden
       'dodge-roam': true,            // ...and roam around a grown island if the cursor stays close
@@ -1730,6 +1731,9 @@
       // that follows the cursor over it.
       const glass = m.conf.theme === 'glass';
       document.body.classList.toggle('theme-glass', glass);
+      // Kys's skin (option "kys-skin"): its body black, or of glass; "auto": like the island (notch.css).
+      const skin = m.conf['kys-skin'];
+      document.body.classList.toggle('kys-skin-glass', skin === 'glass' || (skin !== 'classic' && glass));
       if (glass) {
         S.glass = new Glass(S.notch, m.conf.glass);
         document.body.dataset.glass = m.conf.glass || 'frosted';

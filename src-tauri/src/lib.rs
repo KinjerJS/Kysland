@@ -894,7 +894,7 @@ fn set_setting(app: AppHandle, key: String, value: Value) -> Result<(), String> 
     match key.as_str() {
         "language" | "monitors" | "hide-on-fullscreen" => config::set_value(&[&key], value),
         "dodge" | "dodge-eyes" | "dodge-roam" | "dodge-roam-delay" | "dodge-speed" | "auto-hide" | "auto-hide-distance" | "peek" | "outline"
-        | "close-bounce" | "side-shape" | "theme" | "glass" | "visible-in-captures" | "glass-light" | "claude" | "notifications" | "kys-brain" | "kys-grab"
+        | "close-bounce" | "side-shape" | "theme" | "glass" | "visible-in-captures" | "glass-light" | "claude" | "notifications" | "kys-brain" | "kys-grab" | "kys-skin"
         | "hide-windows-osd" | "expand-on-hover" => {
             config::set_value(&[&island, &key], value)
         }

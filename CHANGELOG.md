@@ -2,6 +2,10 @@
 
 What changed in each version. The section of a version is also the text of its GitHub release.
 
+## 0.6.12 — 2026-11-06
+
+- **Skins for Kys**: settings → Kys → Look (or `"kys-skin"`). Kys's body, wherever it shows (its button and its page in the island, running free on the screen, the settings' buddy), is black (**Classic**) or a capsule of smoked glass lit along its top (**Liquid Glass**). By default it's **Like the island**: of glass with the Liquid Glass theme, black otherwise.
+
 ## 0.6.11 — 2026-11-06
 
 - **Liquid Glass: the light following the mouse can be turned off**: settings → Island → Light following the mouse (or the menu's Theme entry, or `"glass-light": false`). On by default, as before.
