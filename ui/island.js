@@ -1735,6 +1735,7 @@
     const input = el.querySelector('.n-vol input');
     if (!audio || !input) return;
     input.value = audio.volume;
+    input.style.setProperty('--v', `${audio.volume}%`); // its fill, drawn by CSS (theme glass)
     el.querySelector('.n-vol b').textContent = audio.volume;
   }
 
@@ -3038,6 +3039,7 @@
         for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) range.addEventListener(type, release);
         range.addEventListener('input', () => {
           el.querySelector('.n-vol b').textContent = range.value;
+          range.style.setProperty('--v', `${range.value}%`);
           api.action('audio', Number(range.value));
         });
         el.querySelector('[data-mute]').onclick = () => api.action('audio', 'mute');

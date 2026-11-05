@@ -1181,10 +1181,11 @@ body.theme-glass .notch[data-size=expanded] { border-radius: 34px; box-shadow: 0
 body.theme-glass .notch::before, body.theme-glass .notch::after { display: none; } /* no ears: it floats */
 body.theme-glass .notch, body.theme-glass .notch-fly { text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45); }
 /* Floating and rounded all round (the classic island is flush with the screen edge): more room
-   above and below what it shows, out of its curved rim. Kys's page scrolls over as much less, so
-   the tallest view still fits in its window ("popup-space"). */
+   above and below what it shows, out of its curved rim. Kys's page scrolls over as much less (and
+   as its bubbles, below, take more room), so the tallest view still fits in its window
+   ("popup-space"). */
 body.theme-glass .n-expanded { padding-top: 18px; padding-bottom: 24px; }
-body.theme-glass .n-kys-body { max-height: 246px; }
+body.theme-glass .n-kys-body { max-height: 234px; }
 body.theme-glass .n-notif { padding-top: 15px; padding-bottom: 17px; }
 body.theme-glass .n-close { top: 12px; right: 14px; }
 
@@ -1251,3 +1252,86 @@ body.theme-glass.pos-left .notch.dodged.eyes { border-radius: 0 6px 6px 0; }
 body.theme-glass.pos-right .notch.dodged.eyes { border-radius: 6px 0 0 6px; }
 body.theme-glass.pos-left .notch.dodged.eyes.roaming { border-radius: 0 46px 46px 0; }
 body.theme-glass.pos-right .notch.dodged.eyes.roaming { border-radius: 46px 0 0 46px; }
+
+/* Controls as bubbles: each button its own drop of glass (lit along its top, darker below, a
+   shadow under it) that swells under the cursor and gets squashed when pressed; play, tinted with
+   the album art's color. Chips and tiles are raised plates of glass, gauges grooves in it, and the
+   volume's handle a lozenge of glass that swells like a lens while held (its fill: --v, island.js). */
+body.theme-glass {
+  --bubble: linear-gradient(180deg, rgba(255, 255, 255, .22), rgba(255, 255, 255, .06) 55%, rgba(255, 255, 255, .12));
+  --bubble-hi: linear-gradient(180deg, rgba(255, 255, 255, .34), rgba(255, 255, 255, .12) 55%, rgba(255, 255, 255, .18));
+  --bubble-rim: inset 0 1px 0 rgba(255, 255, 255, .5), inset 0 -1px 1px rgba(0, 0, 0, .2), inset 0 0 0 .5px rgba(255, 255, 255, .22);
+  --bubble-drop: 0 6px 16px rgba(0, 0, 0, .28);
+  --plate: linear-gradient(180deg, rgba(255, 255, 255, .13), rgba(255, 255, 255, .04));
+  --plate-rim: inset 0 1px 0 rgba(255, 255, 255, .24), inset 0 0 0 .5px rgba(255, 255, 255, .12);
+  --groove: rgba(0, 0, 0, .28);
+  --groove-in: inset 0 1px 2px rgba(0, 0, 0, .4);
+}
+body.theme-glass :is(.n-head-right > button, .n-hist-head > button, .n-controls button, .n-close, .k-talk button, .n-claude-refresh) {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--bubble) !important;
+  box-shadow: var(--bubble-rim), var(--bubble-drop);
+  color: var(--notch-fg);
+  transition: scale .4s var(--spring), opacity .15s ease, color .15s ease;
+}
+body.theme-glass :is(.n-head-right > button, .n-hist-head > button, .n-controls button, .n-close, .k-talk button, .n-claude-refresh):hover {
+  scale: 1.1;
+  background: var(--bubble-hi) !important;
+}
+body.theme-glass :is(.n-head-right > button, .n-hist-head > button, .n-controls button, .n-close, .k-talk button, .n-claude-refresh):active { scale: .9; }
+body.theme-glass .n-head { align-items: center; }
+body.theme-glass .n-head-right { gap: 8px; }
+body.theme-glass .n-head-right > button { width: 34px; height: 34px; }
+body.theme-glass .n-head-right .icon { font-size: 16px; }
+body.theme-glass .n-head-right .mini-kys { width: 20px; height: 12px; }
+body.theme-glass .n-time-big { margin-left: 6px; }
+body.theme-glass .n-hist-head > button { width: 30px; height: 30px; }
+body.theme-glass .n-hist-head .icon { font-size: 15px; }
+body.theme-glass .n-clear:hover { color: #ff6961; }
+body.theme-glass .n-controls { gap: 20px; margin-top: 0; }
+body.theme-glass .n-controls button { width: 46px; height: 46px; }
+body.theme-glass .n-controls .n-play {
+  width: 62px;
+  height: 62px;
+  background: radial-gradient(circle at 50% 28%, color-mix(in srgb, var(--tint) 70%, white 30%), color-mix(in srgb, var(--tint) 55%, transparent) 75%) !important;
+  box-shadow: var(--bubble-rim), 0 8px 24px color-mix(in srgb, var(--tint) 50%, transparent);
+}
+body.theme-glass .n-controls .n-play:hover {
+  background: radial-gradient(circle at 50% 28%, color-mix(in srgb, var(--tint) 60%, white 40%), color-mix(in srgb, var(--tint) 65%, transparent) 75%) !important;
+}
+body.theme-glass .n-close { width: 26px; height: 26px; }
+body.theme-glass .n-claude-refresh { width: 22px; height: 22px; }
+body.theme-glass .notch .k-talk button { width: 36px; height: 36px; color: var(--tint); }
+body.theme-glass .k-talk input { border-radius: 18px; padding-inline: 14px; }
+/* Plates. */
+body.theme-glass :is(.n-chip, .n-claude, .k-inv) { background: var(--plate); box-shadow: var(--plate-rim); }
+body.theme-glass :is(.n-chip, .n-claude) { border-radius: 16px; }
+body.theme-glass .k-inv { border-radius: 12px; }
+body.theme-glass .n-stats .n-toggle:hover, body.theme-glass .k-inv:hover { background: var(--bubble-hi); }
+body.theme-glass .k-inv.worn { box-shadow: var(--plate-rim), inset 0 0 0 1.5px var(--tint); }
+/* Grooves. */
+body.theme-glass :is(.n-track, .k-bar .track, .n-claude-track) { background: var(--groove); box-shadow: var(--groove-in); }
+body.theme-glass .n-track { height: 6px; }
+body.theme-glass .n-track:hover { height: 8px; }
+/* The volume: a groove filled up to its value, and its lozenge. */
+body.theme-glass .n-vol { border-radius: 999px; padding: 9px 16px; }
+body.theme-glass .n-vol input {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(to right, var(--tint) var(--v, 50%), var(--groove) var(--v, 50%));
+  box-shadow: var(--groove-in);
+}
+body.theme-glass .n-vol input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 30px;
+  height: 20px;
+  border-radius: 10px;
+  background: var(--bubble-hi);
+  box-shadow: var(--bubble-rim), 0 3px 8px rgba(0, 0, 0, .35);
+  transition: scale .3s var(--spring);
+}
+body.theme-glass .n-vol input:active::-webkit-slider-thumb { scale: 1.35; }

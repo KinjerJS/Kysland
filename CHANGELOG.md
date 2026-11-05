@@ -2,6 +2,10 @@
 
 What changed in each version. The section of a version is also the text of its GitHub release.
 
+## 0.6.6 — 2026-11-05
+
+- **Liquid Glass: controls as bubbles of glass.** Each button is its own drop of glass, lit along its top with a shadow under it. It swells under the cursor and squashes when you click it. This covers Kys, the settings and the bell, previous / next, the headers of the notifications, the calendar and Kys's page, a notification's ✕, refreshing the Claude usage and talking to Kys. Play is a big bubble tinted with the album art's color. The chips, the Claude usage and Kys's tiles are raised plates of glass, and the gauges are grooves in it. The volume fills its groove, and its handle is a lozenge of glass that swells like a lens while you hold it. The classic theme doesn't change.
+
 ## 0.6.5 — 2026-11-05
 
 - **Swipe a notification away**: drag it toward the screen edge (up, at the top; down at the bottom; sideways on a side) and it closes, like its ✕. It follows the cursor that way; let go before it went far enough and it springs back (a quick flick is enough). A notification dragged any other way is no longer taken for a click: it doesn't open its app.
