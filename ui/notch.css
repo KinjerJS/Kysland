@@ -147,6 +147,12 @@ body.pos-bottom .notch-view { top: auto; bottom: 0; transform-origin: bottom cen
 .eq i:nth-child(3) { animation-duration: .7s; animation-delay: -.45s; }
 .eq i:nth-child(4) { animation-duration: .6s; animation-delay: -.1s; }
 .eq.paused i { animation: none; height: 22%; opacity: .6; }
+.eq i { transition: opacity .3s ease; }
+/* Playing again (island.js, setEq): the bars rise one after the other from where they rested. */
+.eq.resumed i { animation-delay: 0s; animation-fill-mode: backwards; }
+.eq.resumed i:nth-child(2) { animation-delay: .08s; }
+.eq.resumed i:nth-child(3) { animation-delay: .16s; }
+.eq.resumed i:nth-child(4) { animation-delay: .24s; }
 @keyframes eq-bounce { from { height: 18%; } to { height: 100%; } }
 
 /* Compact: time + date */
@@ -244,6 +250,8 @@ body.pos-bottom .notch[data-size=card] { border-radius: 24px 24px 0 0; }
   place-items: center;
 }
 .n-badge[hidden] { display: none; }
+.n-badge { animation: pop-in .45s var(--spring); }
+@keyframes pop-in { from { scale: 0; opacity: 0; } }
 
 /* Notification history */
 .n-history-view { gap: 10px; }
@@ -406,8 +414,12 @@ body.pos-bottom .notch[data-size=card] { border-radius: 24px 24px 0 0; }
 
 /* Equal-width chips: their values change without shifting the layout. */
 .n-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: -6px; }
-.n-stats .n-chip { justify-content: center; min-width: 0; overflow: hidden; }
-.n-stats .n-toggle { cursor: pointer; transition: background .15s ease; }
+/* Positioned and clipped: a value switching to the other kind rolls within it (island.js, rollText). */
+.n-stats .n-chip { justify-content: center; min-width: 0; overflow: hidden; position: relative; }
+.n-stats .n-toggle { cursor: pointer; transition: background .15s ease, scale .4s var(--spring); }
+.n-stats .n-toggle:active { scale: .94; }
+.n-chip[data-stat=network] .icon { transition: rotate .55s var(--spring); }
+.n-chip[data-stat=network].up .icon { rotate: 180deg; }
 .n-stats .n-toggle:hover { background: rgba(255, 255, 255, 0.13); }
 .n-chip {
   display: flex; align-items: center; gap: 6px;
@@ -785,13 +797,13 @@ body.pos-bottom .notch.splash { transform-origin: 50% 100%; }
 }
 .mini-kys i { width: 3.5px; height: 4.5px; border-radius: 1.5px; background: var(--notch-fg); animation: kys-blink 4s infinite; }
 .n-kysbtn:hover .mini-kys { box-shadow: 0 0 0 1px var(--tint); }
-.n-kysbtn.hungry::after { content: ''; position: absolute; top: -3px; right: -4px; width: 6px; height: 6px; border-radius: 50%; background: #ffb86b; }
+.n-kysbtn.hungry::after { content: ''; position: absolute; top: -3px; right: -4px; width: 6px; height: 6px; border-radius: 50%; background: #ffb86b; animation: pop-in .45s var(--spring); }
 @keyframes kys-blink { 0%, 94%, 100% { scale: 1 1; } 97% { scale: 1 .1; } }
 
 .n-kys-view { gap: 10px; }
 .n-kys-credits { color: #ffd66b; font-weight: 650; font-variant-numeric: tabular-nums; }
 .k-msg { display: none; color: #ffb86b; font-size: 12px; }
-.k-msg.show { display: block; }
+.k-msg.show { display: block; animation: k-say-in .25s var(--spring); }
 .n-kys-top { display: flex; align-items: center; gap: 16px; padding-top: 6px; }
 .n-kys-face {
   position: relative;
@@ -828,7 +840,7 @@ body.pos-bottom .notch.splash { transform-origin: 50% 100%; }
 .k-bar span { color: var(--notch-dim); }
 .k-bar b { text-align: right; font-variant-numeric: tabular-nums; }
 .k-bar .track { height: 6px; border-radius: 3px; background: var(--notch-soft); overflow: hidden; }
-.k-bar .fill { height: 100%; border-radius: 3px; }
+.k-bar .fill { height: 100%; border-radius: 3px; transition: width .7s cubic-bezier(.22, 1, .36, 1); }
 .k-bar .fill.food { background: linear-gradient(90deg, #f5a65b, #ffd66b); }
 .k-bar .fill.joy { background: linear-gradient(90deg, #ff6b8a, #cba6f7); }
 .k-status { color: var(--notch-dim); font-size: 12px; }

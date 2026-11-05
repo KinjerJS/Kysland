@@ -7,6 +7,68 @@
   const eq = (playing, morph = true) => `<span class="eq${playing ? '' : ' paused'}"${morph ? ' data-morph="eq"' : ''}><i></i><i></i><i></i><i></i></span>`;
   const appName = (app = '') => app.split('!').pop().replace(/\.exe$/i, '');
 
+  // --- Changes that move rather than jump ------------------------------------------------------
+  const SPRING_IN = 'cubic-bezier(.3, 1.35, .5, 1)';
+  const stillMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const shown = (el) => el.isConnected && el.getClientRects().length > 0 && !document.hidden;
+
+  /** An icon that changes (play ↔ pause, muted, the volume's level): the old one shrinks away,
+   *  blurring, and the new one springs in. Asked again meanwhile, it lands on the latest. */
+  function setIcon(el, name) {
+    if (!el) return;
+    const cls = `icon icon-${name}`;
+    if (el.dataset.icon) { el.dataset.icon = cls; return; } // on its way out
+    if (el.className === cls) return;
+    if (!/\bicon-/.test(el.className) || !shown(el) || stillMotion()) { el.className = cls; return; } // first one, or not seen
+    if (getComputedStyle(el).display === 'inline') el.style.display = 'inline-block'; // or it can't be scaled
+    el.dataset.icon = cls;
+    const out = el.animate([{ transform: 'none', opacity: 1, filter: 'none' }, { transform: 'scale(.45)', opacity: 0, filter: 'blur(2px)' }],
+      { duration: 110, easing: 'cubic-bezier(.4, 0, 1, 1)', fill: 'forwards' });
+    out.finished.then(() => {
+      el.className = el.dataset.icon;
+      delete el.dataset.icon;
+      out.cancel();
+      el.animate([{ transform: 'scale(.45)', opacity: 0, filter: 'blur(2px)' }, { transform: 'none', opacity: 1, filter: 'none' }],
+        { duration: 340, easing: SPRING_IN });
+    }, () => { el.className = el.dataset.icon || cls; delete el.dataset.icon; });
+  }
+
+  /** A value that switches to another kind (the RAM in % or GB, the network's download or
+   *  upload): `before` rolls up and away while the new one (already in `el`) rolls up from below. */
+  function rollText(el, before) {
+    if (!el || before === el.textContent || !shown(el) || stillMotion()) return;
+    const box = el.parentElement, b = box.getBoundingClientRect();
+    const ghost = el.cloneNode(false);
+    ghost.textContent = before;
+    Object.assign(ghost.style, { position: 'absolute', left: `${el.dataset.rollX}px`, top: `${el.dataset.rollY}px`, margin: '0', pointerEvents: 'none' });
+    box.appendChild(ghost);
+    const d = b.height * 0.55;
+    ghost.animate([{ transform: 'none', opacity: 1 }, { transform: `translateY(${-d}px)`, opacity: 0 }], { duration: 240, easing: 'cubic-bezier(.4, 0, .2, 1)', fill: 'forwards' })
+      .finished.then(() => ghost.remove(), () => ghost.remove());
+    el.animate([{ transform: `translateY(${d}px)`, opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 460, easing: SPRING_IN });
+  }
+  /** Where `el` is in its (positioned) box, for rollText's copy of what it showed. */
+  function rollFrom(el) {
+    el.dataset.rollX = el.offsetLeft;
+    el.dataset.rollY = el.offsetTop;
+    return el.textContent;
+  }
+
+  /** The equalizer paused: its bars settle down from wherever they were (an animation can't be
+   *  transitioned out of); playing again: they rise one after the other (notch.css, .resumed). */
+  function setEq(eqEl, playing) {
+    if (!eqEl || eqEl.classList.contains('paused') === !playing) return;
+    if (playing || !shown(eqEl) || stillMotion()) {
+      eqEl.classList.toggle('paused', !playing);
+      eqEl.classList.toggle('resumed', playing);
+      return;
+    }
+    const bars = [...eqEl.children], from = bars.map((i) => getComputedStyle(i).height);
+    eqEl.classList.add('paused');
+    eqEl.classList.remove('resumed');
+    bars.forEach((i, n) => i.animate([{ height: from[n], opacity: 1 }, { height: '22%', opacity: 0.6 }], { duration: 420, easing: SPRING_IN }));
+  }
+
   function fmtDuration(sec) {
     const s = Math.max(0, Math.floor(sec || 0));
     const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = String(s % 60).padStart(2, '0');
@@ -2517,10 +2579,20 @@
         face.classList.toggle('sad', sad);
         if (!face.moodT) faceMood(face, 'neutral');
         const status = sad ? 'kys.status_sad' : hungry ? 'kys.status_hungry' : k.food > 60 && k.joy > 70 ? 'kys.status_great' : 'kys.status_ok';
-        const bar = (label, value, cls) => `<div class="k-bar"><span>${esc(label)}</span>`
-          + `<div class="track"><div class="fill ${cls}" style="width:${value}%"></div></div><b>${value}</b></div>`;
-        el.querySelector('.n-kys-gauges').innerHTML = bar(t('kys.food'), k.food, 'food') + bar(t('kys.joy'), k.joy, 'joy')
-          + `<div class="k-status${sad || hungry ? ' warn' : ''}">${esc(t(status))}</div>`;
+        // Made once, then their fills slide to the new values (notch.css) instead of being redrawn.
+        const gauges = el.querySelector('.n-kys-gauges');
+        if (!gauges.firstChild) {
+          const bar = (label, cls) => `<div class="k-bar"><span>${esc(label)}</span><div class="track"><div class="fill ${cls}"></div></div><b></b></div>`;
+          gauges.innerHTML = bar(t('kys.food'), 'food') + bar(t('kys.joy'), 'joy') + '<div class="k-status"></div>';
+        }
+        for (const [cls, value] of [['food', k.food], ['joy', k.joy]]) {
+          const fill = gauges.querySelector(`.fill.${cls}`);
+          fill.style.width = `${value}%`;
+          fill.closest('.k-bar').querySelector('b').textContent = value;
+        }
+        const line = gauges.querySelector('.k-status');
+        line.className = `k-status${sad || hungry ? ' warn' : ''}`;
+        line.textContent = t(status);
         const body = el.querySelector('.n-kys-body');
         const scroll = body.scrollTop;
         body.innerHTML = kysPageBody(k);
@@ -2899,7 +2971,7 @@
         html: `<div class="n-compact n-bubble"><span class="n-time" data-morph="time"></span>${md ? eq(md.playing) : ''}${dot}</div>`,
         update(el) {
           el.querySelector('.n-time').textContent = now.format(m.conf['time-format']);
-          el.querySelector('.eq')?.classList.toggle('paused', !md?.playing);
+          setEq(el.querySelector('.eq'), !!md?.playing);
         },
       };
     }
@@ -2915,7 +2987,7 @@
       update(el) {
         el.querySelector('.n-time').textContent = now.format(m.conf['time-format']);
         el.querySelector('.n-date').textContent = now.format(m.conf['date-format']);
-        el.querySelector('.eq')?.classList.toggle('paused', !md?.playing);
+        setEq(el.querySelector('.eq'), !!md?.playing);
         if (md) updateTrack(el, md, 'sm', false);
         fitCompact(el);
       },
@@ -2982,22 +3054,25 @@
         <div class="n-stats">
           <span class="n-chip" data-stat="cpu">${icon('cpu')}<b></b></span>
           <span class="n-chip n-toggle" data-stat="memory" title="${esc(t('island.stat_toggle'))}">${icon('memory-stick')}<b></b></span>
-          <span class="n-chip n-toggle" data-stat="network" title="${esc(t('island.stat_toggle'))}">${icon('arrow-down')}<b></b></span>
+          <span class="n-chip n-toggle${(S.statAlt || statAlt()).network ? ' up' : ''}" data-stat="network" title="${esc(t('island.stat_toggle'))}">${icon('arrow-down')}<b></b></span>
         </div>
         ${claudeRow(S)}
         <div class="n-chip n-vol"><i class="icon" data-mute></i><input type="range" min="0" max="100"><b></b></div>
       </div>`,
       mount(el) {
         el.querySelector('.n-bell').onclick = () => openHistory(m);
-        // A click on the RAM switches between % and GB, on the network between download and upload.
+        // A click on the RAM switches between % and GB, on the network between download and upload:
+        // the value rolls over to the other one (and the network's arrow turns round, notch.css).
         el.querySelector('.n-stats').onclick = (e) => {
-          const name = e.target.closest('.n-toggle')?.dataset.stat;
+          const chip = e.target.closest('.n-toggle'), name = chip?.dataset.stat;
           if (!name) return;
           const alt = statAlt();
           alt[name] = !alt[name];
           try { localStorage.setItem('stats', JSON.stringify(alt)); } catch { /* no storage: not remembered */ }
           S.statAlt = alt;
+          const value = chip.querySelector('b'), before = rollFrom(value);
           render(m);
+          rollText(value, before);
         };
         el.querySelector('.n-kysbtn').onclick = () => { S.page = 'kys'; render(m); };
         el.querySelector('.n-gear').onclick = () => { setExpanded(m, false); api.action('settings'); };
@@ -3061,8 +3136,8 @@
           el.querySelector('.n-fill').style.width = `${cur.duration ? (pos / cur.duration) * 100 : 0}%`;
           // Live / stream without a duration: no progress bar.
           el.querySelector('.n-progress').hidden = !(cur.duration >= 1);
-          el.querySelector('.n-play .icon').className = `icon icon-${cur.playing ? 'pause' : 'play'}`;
-          el.querySelector('.eq')?.classList.toggle('paused', !cur.playing);
+          setIcon(el.querySelector('.n-play .icon'), cur.playing ? 'pause' : 'play');
+          setEq(el.querySelector('.eq'), cur.playing);
         }
         const chip = (name, text) => { el.querySelector(`[data-stat="${name}"] b`).textContent = text; };
         chip('cpu', d.cpu ? `${d.cpu.usage}%` : '–');
@@ -3070,10 +3145,10 @@
         const gb = (v) => Number(v).toLocaleString(window.i18n.lang, { maximumFractionDigits: 1 });
         chip('memory', !d.memory ? '–' : alt.memory ? t('island.memory_gb', { used: gb(d.memory.used), total: gb(d.memory.total) }) : `${d.memory.percentage}%`);
         chip('network', !d.network?.connected ? t('island.offline') : alt.network ? d.network.up : d.network.down);
-        el.querySelector('[data-stat="network"] .icon').className = `icon icon-${alt.network ? 'arrow-up' : 'arrow-down'}`;
+        el.querySelector('[data-stat="network"]').classList.toggle('up', !!alt.network); // its arrow turns round
         updateClaude(el, d.claude);
         if (d.audio) {
-          el.querySelector('[data-mute]').className = `icon icon-${d.audio.muted ? 'volume-x' : 'volume-2'}`;
+          setIcon(el.querySelector('[data-mute]'), d.audio.muted ? 'volume-x' : 'volume-2');
           if (!S.dragging) syncVolume(el, d.audio);
         }
       },
@@ -3092,7 +3167,7 @@
       html: `<div class="n-wide"><i class="icon"></i><div class="n-bar"><div class="n-bar-fill"></div></div><span class="n-num"></span></div>`,
       update(el) {
         const v = a.muted ? 0 : a.volume;
-        el.querySelector('.icon').className = `icon icon-${a.muted ? 'volume-x' : v < 34 ? 'volume' : v < 67 ? 'volume-1' : 'volume-2'}`;
+        setIcon(el.querySelector('.icon'), a.muted ? 'volume-x' : v < 34 ? 'volume' : v < 67 ? 'volume-1' : 'volume-2');
         el.querySelector('.n-bar-fill').style.width = `${v}%`;
         el.querySelector('.n-num').textContent = a.muted ? t('island.muted') : v;
       },
@@ -3205,7 +3280,12 @@
     const wait = Math.max(0, 600 - (Date.now() - (S.claudeSpinAt || 0)));
     clearTimeout(S.claudeSpinTimer);
     S.claudeSpinTimer = setTimeout(() => {
-      S.notch.current?.querySelectorAll('.n-claude-refresh.spinning').forEach((b) => b.classList.remove('spinning'));
+      // It finishes its turn rather than snapping back upright.
+      S.notch.current?.querySelectorAll('.n-claude-refresh.spinning').forEach((b) => {
+        const stop = () => b.classList.remove('spinning');
+        b.querySelector('.icon')?.addEventListener('animationiteration', stop, { once: true });
+        setTimeout(stop, 900); // a turn takes .8 s (notch.css)
+      });
     }, wait);
   }
 

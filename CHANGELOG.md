@@ -2,6 +2,16 @@
 
 What changed in each version. The section of a version is also the text of its GitHub release.
 
+## 0.6.7 — 2026-11-05
+
+- **Things that change now move instead of jumping**:
+  - Click the RAM or the network in the open island: the chip gives under the click, and the value rolls over to the other one (the old one up and away, the new one up from below). The network's arrow turns round between download and upload.
+  - Play ↔ pause, muting and the volume's level: the old icon shrinks away and the new one springs in.
+  - Paused, the equalizer's bars settle down from wherever they were; playing again, they rise one after the other.
+  - Refreshing the Claude usage: the arrows finish their turn instead of snapping back upright.
+  - On Kys's page, the belly and joy gauges slide to their new level.
+  - The unread badge on the bell, Kys's hungry dot and the "not enough credits" message pop in.
+
 ## 0.6.6 — 2026-11-05
 
 - **Liquid Glass: controls as bubbles of glass.** Each button is its own drop of glass, lit along its top with a shadow under it. It swells under the cursor and squashes when you click it. This covers Kys, the settings and the bell, previous / next, the headers of the notifications, the calendar and Kys's page, a notification's ✕, refreshing the Claude usage and talking to Kys. Play is a big bubble tinted with the album art's color. The chips, the Claude usage and Kys's tiles are raised plates of glass, and the gauges are grooves in it. The volume fills its groove, and its handle is a lozenge of glass that swells like a lens while you hold it. The classic theme doesn't change.
