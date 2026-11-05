@@ -36,7 +36,7 @@ It also stretches for a moment on its own: a volume change, a new track, the cha
 
 <img src="docs/images/notification.png" width="520" alt="A Discord notification shown in the island">
 
-Windows notifications drop into the island as they arrive. Click one to open its app, hover it to keep it on screen. The bell of the expanded island keeps the last 30, and deleting them there also clears them from the Windows notification center.
+Windows notifications drop into the island as they arrive. Click one to open its app, hover it to keep it on screen, swipe it toward the screen edge (up, at the top) to dismiss it. The bell of the expanded island keeps the last 30, and deleting them there also clears them from the Windows notification center.
 
 ## Meet Kys
 

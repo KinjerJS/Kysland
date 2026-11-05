@@ -1453,6 +1453,60 @@
       });
       notch.addEventListener('pointerup', unpress);
       notch.addEventListener('pointercancel', unpress);
+      // A notification swiped toward the screen edge it hangs from (up, at the top) closes, like its
+      // ✕. It follows the cursor that way; the other way it barely gives. Let go before it went far
+      // enough (or flicked), it springs back. Dragged (any way), letting go isn't a click: it doesn't
+      // open the app (S.dragged, until the next press).
+      let swipe = null;
+      notch.addEventListener('pointerdown', (e) => {
+        swipe = null;
+        S.dragged = false;
+        if (e.button !== 0 || !S.notif || S.moving || !String(S.notch.key).startsWith('notif|') || e.target.closest('button')) return;
+        const [ix, iy] = inward();
+        // How far the cursor can go before the screen edge stops it.
+        const room = ix > 0 ? e.clientX : ix < 0 ? innerWidth - e.clientX : iy > 0 ? e.clientY : innerHeight - e.clientY;
+        swipe = { id: e.pointerId, x: e.clientX, y: e.clientY, ix, iy, room, on: false, out: 0, v: 0, t: e.timeStamp };
+      });
+      notch.addEventListener('pointermove', (e) => {
+        const s = swipe;
+        if (!s || e.pointerId !== s.id) return;
+        const dx = e.clientX - s.x, dy = e.clientY - s.y;
+        const out = -(dx * s.ix + dy * s.iy); // px toward the edge
+        if (!s.on) {
+          if (out <= 6) {
+            if (Math.hypot(dx, dy) > 10) {
+              swipe = null; // dragged another way: not a swipe
+              S.dragged = true;
+            }
+            return;
+          }
+          s.on = true;
+          S.dragged = true;
+          unpress();
+          clearTimeout(S.notifTimer); // held: it stays
+          notch.setPointerCapture(e.pointerId);
+        }
+        const dt = e.timeStamp - s.t;
+        if (dt > 0) s.v = s.v * 0.4 + ((out - s.out) / dt) * 0.6; // px/ms toward the edge
+        s.out = out;
+        s.t = e.timeStamp;
+        const shift = out >= 0 ? out : -10 * (1 - Math.exp(out / 40));
+        notch.style.transform = `translate(${(-s.ix * shift).toFixed(1)}px, ${(-s.iy * shift).toFixed(1)}px)`;
+      });
+      const swipeEnd = (e) => {
+        const s = swipe;
+        if (!s || e.pointerId !== s.id) return;
+        swipe = null;
+        if (!s.on) return;
+        const from = notch.style.transform;
+        notch.style.transform = '';
+        notch.animate([{ transform: from }, { transform: 'none' }], { duration: 420, easing: 'cubic-bezier(.3, 1.25, .5, 1)' });
+        const flick = s.v > 0.35 && e.timeStamp - s.t < 120 && s.out > 8;
+        if (e.type === 'pointerup' && S.notif && (s.out >= Math.min(30, s.room * 0.5) || flick)) return showNextNotif(m); // like its ✕
+        if (S.notif && !(S.hover && m.conf['expand-on-hover'])) startNotifTimer(m, 2500);
+      };
+      notch.addEventListener('pointerup', swipeEnd);
+      notch.addEventListener('pointercancel', swipeEnd);
       api.on('island-adjust', () => startEdit(m)); // the menu, the settings: waits to be grabbed, moved or resized
       // Theme "glass" (notch.css, Glass): what's under the island seen through it, and a light
       // that follows the cursor over it.
@@ -1505,7 +1559,7 @@
       S.eyes.onHome = (F) => kysHome(m, F);
       api.kys.free(false); // a page loaded again while Kys was out: the window back to its strip
       notch.addEventListener('click', (e) => {
-        if (S.kysFree) return;
+        if (S.kysFree || S.dragged) return; // a notification swiped or dragged: not a click
         if (S.dodged) return S.eyes.poke();
         if (S.peeking && nearEyes(S, e)) return catchKys(m);
         if (S.notif) {
@@ -2042,14 +2096,18 @@
     }
   }
 
-  /** Middle of the gap between the time and the date, from the island's center (measured before
-   *  they get knocked). */
+  /** Middle of the gap between the time and what follows it, from the island's center (measured
+   *  before they get knocked). That's the date, unless the island is too short for it ("width"):
+   *  then it's hidden and has no place, so the next thing shown (the equalizer...), or nothing, as
+   *  if something followed at the usual gap. */
   function peekSpot(S) {
-    const view = S.notch.current;
-    const time = view?.querySelector('.n-time'), date = view?.querySelector('.n-date');
-    if (!time || !date) return 0;
-    const n = S.notch.el.getBoundingClientRect();
-    return (time.getBoundingClientRect().right + date.getBoundingClientRect().left) / 2 - (n.left + n.width / 2);
+    const time = S.notch.current?.querySelector('.n-compact > .n-time');
+    if (!time) return 0;
+    let next = time.nextElementSibling;
+    while (next && !next.getClientRects().length) next = next.nextElementSibling; // hidden (display: none)
+    const t = time.getBoundingClientRect(), n = S.notch.el.getBoundingClientRect();
+    const end = next ? next.getBoundingClientRect().left : t.right + (parseFloat(getComputedStyle(time.parentElement).columnGap) || 8);
+    return (t.right + end) / 2 - (n.left + n.width / 2);
   }
 
   function placePeekEyes(S) {

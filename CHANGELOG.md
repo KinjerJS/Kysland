@@ -2,6 +2,12 @@
 
 What changed in each version. The section of a version is also the text of its GitHub release.
 
+## 0.6.5 — 2026-11-05
+
+- **Swipe a notification away**: drag it toward the screen edge (up, at the top; down at the bottom; sideways on a side) and it closes, like its ✕. It follows the cursor that way; let go before it went far enough and it springs back (a quick flick is enough). A notification dragged any other way is no longer taken for a click: it doesn't open its app.
+- **Liquid Glass**: more room above and below what the island shows (open, Kys's page, the calendar, a notification), out of its curved rim; a notification's ✕ no longer sits in its rounded corner.
+- Fixed: on an island set shorter than its time and date ("width"), Kys dropping in to show how it feels (or peeking, eating, playing) landed far off to the side of the island instead of next to its time.
+
 ## 0.6.4 — 2026-11-05
 
 - **On a side of the screen**, the resting island no longer sticks out sideways: it's a **bubble**, a round ball floating just off the edge with the time in it (and the equalizer while something plays), or, if you prefer, it stands up **vertical**, its time and date turned with it (settings → Island → On a side, or `"side-shape"`). Hover it and it opens into the usual island; events and notifications show as before.

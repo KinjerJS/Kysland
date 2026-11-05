@@ -194,6 +194,7 @@ body.pos-bottom .notch[data-size=card] { border-radius: 24px 24px 0 0; }
   gap: 12px;
   align-items: flex-start;
   cursor: pointer;
+  touch-action: none; /* swiped toward the screen edge, it closes (island.js): no scrolling instead */
 }
 .n-notif-icon {
   flex: none;
@@ -1179,6 +1180,13 @@ body.theme-glass .notch[data-size=card] { border-radius: 28px; box-shadow: 0 0 0
 body.theme-glass .notch[data-size=expanded] { border-radius: 34px; box-shadow: 0 0 0 .5px rgba(255, 255, 255, 0.12), 0 20px 54px rgba(0, 0, 0, 0.42); }
 body.theme-glass .notch::before, body.theme-glass .notch::after { display: none; } /* no ears: it floats */
 body.theme-glass .notch, body.theme-glass .notch-fly { text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45); }
+/* Floating and rounded all round (the classic island is flush with the screen edge): more room
+   above and below what it shows, out of its curved rim. Kys's page scrolls over as much less, so
+   the tallest view still fits in its window ("popup-space"). */
+body.theme-glass .n-expanded { padding-top: 18px; padding-bottom: 24px; }
+body.theme-glass .n-kys-body { max-height: 246px; }
+body.theme-glass .n-notif { padding-top: 15px; padding-bottom: 17px; }
+body.theme-glass .n-close { top: 12px; right: 14px; }
 
 /* Hiding from a slow cursor: back against the edge, a drop of glass (its views fade, the glass stays). */
 body.theme-glass .notch.dodged {
