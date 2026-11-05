@@ -13,7 +13,7 @@
 
   // Island options and their defaults (same as island.js / the engine).
   const ISLAND = {
-    'expand-on-hover': true, outline: 'auto', theme: 'classic', glass: 'frosted', dodge: true, 'dodge-speed': 450, 'dodge-eyes': true,
+    'expand-on-hover': true, 'side-shape': 'bubble', size: 100, width: null, outline: 'auto', theme: 'classic', glass: 'frosted', dodge: true, 'dodge-speed': 450, 'dodge-eyes': true,
     'dodge-roam': true, 'dodge-roam-delay': 20, 'auto-hide': false, 'auto-hide-distance': 300, peek: true,
     'close-bounce': true, notifications: true, 'hide-windows-osd': true, claude: false, 'kys-brain': 'simple', 'kys-grab': false,
   };
@@ -116,8 +116,10 @@
         row(t('set.screens'), t('set.screens_desc'), screens(), { block: true }),
       ]),
       section(t('set.island'), [
-        row(t('set.position'), t('set.position_desc'),
-          `<div class="actions">${action('move-island', 'move', t('set.move'))}${action('center-island', 'align-center-horizontal', t('set.center'))}</div>`, { block: true }),
+        row(t('set.position'), t('set.position_desc', { size: I.size }),
+          `<div class="actions">${action('adjust-island', 'move', t('set.adjust'))}${action('center-island', 'align-center-horizontal', t('set.center'))}`
+          + `${I.size !== 100 || I.width != null ? action('reset-size', 'rotate-ccw', t('set.size_reset')) : ''}</div>`, { block: true }),
+        row(t('set.side_shape'), t('set.side_shape_desc'), seg('side-shape', [['bubble', t('set.side_bubble')], ['vertical', t('set.side_vertical')]]), { sub: true }),
         row(t('set.expand'), t('set.expand_desc'), toggle('expand-on-hover')),
         row(t('set.close_bounce'), t('set.close_bounce_desc'), toggle('close-bounce')),
         row(t('set.autohide'), t('set.autohide_desc'), toggle('auto-hide')),

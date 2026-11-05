@@ -58,7 +58,7 @@
       config: {
         position: params.get('position') || 'top', height: 32, 'popup-space': 420, monitors: 'primary', // ?position=left&along=0.3: elsewhere
         'modules-left': [], 'modules-center': ['island'], 'modules-right': [],
-        island: { claude: true, theme, glass, along: +(params.get('along') ?? 0.5), 'dodge-roam-delay': scene === 'roaming' ? 0.3 : 20 }, // grows at once for that scene
+        island: { claude: true, theme, glass, along: +(params.get('along') ?? 0.5), 'side-shape': params.get('shape') || 'bubble', 'dodge-roam-delay': scene === 'roaming' ? 0.3 : 20 }, // grows at once for that scene
       },
       lang: 'en',
       styles: { style: '../../defaults/style.css', v: 0 },

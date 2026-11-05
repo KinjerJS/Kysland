@@ -131,7 +131,10 @@ Island options (in the `"island"` section):
 | Option | Default | Description |
 |---|---|---|
 | `time-format` / `date-format` / `date-long-format` | `HH:mm` / `ddd D MMM` / `dddd D MMMM` | Any [dayjs format](https://day.js.org/docs/en/display/format) |
-| `along` | `0.5` | Where along its edge: `0` one end, `0.5` the middle, `1` the other. Easier: press and hold the island and drag it to any edge (or menu → Dynamic Island → Move the island…). On a side, it doesn't hide from the cursor |
+| `along` | `0.5` | Where along its edge: `0` one end, `0.5` the middle, `1` the other. Easier: press and hold the island and drag it to any edge (or settings → Island → Position and size → Adjust, or menu → Dynamic Island → Move or resize the island…) |
+| `side-shape` | `"bubble"` | At rest on a side of the screen: `"bubble"`, a round ball with the time (and the equalizer while something plays), or `"vertical"`, the island standing up with its text vertical. Opened, it's the usual island |
+| `size` | `100` | Size of the island and everything in it (Kys too), in %: `50` (half) to `200` (twice as big). Easier: with the mouse (settings → Island → Position and size → Adjust, or menu → Dynamic Island → Move or resize the island…, then pull a corner) |
+| `width` | `null` | Its length at rest along its edge, in px (standing up on a side: its height; a bubble stays round); `null`: as long as what it shows. Too short for everything, the date goes first, then the album art and the equalizer: the time always stays. Easier: Adjust, then pull one of its ends |
 | `expand-on-hover` | `true` | Expand when hovered |
 | `hover-delay` / `collapse-delay` | `120` / `350` | Milliseconds before expanding / collapsing |
 | `close-bounce` | `true` | The island springs back a little as it closes; `false`: it closes smoothly |

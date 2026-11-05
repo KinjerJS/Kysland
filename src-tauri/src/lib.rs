@@ -35,6 +35,9 @@ struct Bar {
     index: usize,
     primary: bool,
     monitor: (i32, i32, i32, i32), // x, y, width, height (physical pixels)
+    /// The screen's scale (DPI).
+    dpi: f64,
+    /// Physical pixels per CSS pixel of its page: the screen's scale times the island's zoom.
     scale: f64,
     appbar: Option<win32::AppBar>,
     rects: Vec<Rect>,
@@ -72,6 +75,8 @@ struct Shared {
     cfg: Value,
     bars: Vec<Bar>,
     layout: String,
+    /// The island's zoom its windows have (island_zoom).
+    zoom: f64,
     hide_osd: bool,
     /// Approaches slower than this (CSS px/s) hide the island; `None`: option turned off.
     dodge_speed: Option<f64>,
@@ -88,8 +93,26 @@ static BAR_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 fn with<R>(f: impl FnOnce(&mut Shared) -> R) -> R { f(SHARED.lock().unwrap().get_or_insert_with(Shared::default)) }
 
-/// Config keys whose change requires recreating the windows.
+/// Config keys whose change requires recreating the windows (the island's "size" zooms them in
+/// place: zoom_bars).
 const LAYOUT_KEYS: [&str; 5] = ["position", "height", "monitors", "popup-space", "reserve"];
+
+/// The island's "size" (%, 100: as designed) as a zoom of its windows: everything in them is that
+/// much bigger or smaller, the room they take on the screen too (their CSS pixels are worth that
+/// much more: `Bar::scale`).
+fn island_zoom(cfg: &Value) -> f64 {
+    (config::island_conf(cfg)["size"].as_f64().unwrap_or(100.0) / 100.0).clamp(0.5, 2.0)
+}
+
+/// The island's "width" (its length at rest along its edge, CSS px) as written in the config:
+/// 0 (or null) for as long as what it shows.
+fn island_width(width: f64) -> Result<Value, String> {
+    match width {
+        w if w == 0.0 => Ok(Value::Null),
+        w if (40.0..=4000.0).contains(&w) => Ok(json!(w.round() as i64)),
+        w => Err(format!("width out of range (40 to 4000 px, or 0): {w}")),
+    }
+}
 
 fn resources(app: &AppHandle) -> PathBuf { app.path().resource_dir().unwrap_or_default() }
 
@@ -134,6 +157,7 @@ fn create_bars(app: &AppHandle, cfg: &Value) {
         Value::String(s) if s == "all" => monitors.iter().enumerate().collect(),
         _ => monitors.iter().enumerate().filter(|(_, m)| Some((m.position().x, m.position().y)) == primary).collect(),
     };
+    let zoom = island_zoom(cfg);
     for (index, m) in chosen {
         let label = format!("bar-{}", BAR_COUNTER.fetch_add(1, Ordering::SeqCst));
         let built = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
@@ -151,10 +175,11 @@ fn create_bars(app: &AppHandle, cfg: &Value) {
         let Ok(h) = win.hwnd() else { continue };
         let hwnd = h.0 as isize;
         win32::make_tool_window(hwnd);
+        if zoom != 1.0 { let _ = win.set_zoom(zoom); }
         let (p, s) = (m.position(), m.size());
         let mut bar = Bar {
             label, hwnd, index, primary: Some((p.x, p.y)) == primary,
-            monitor: (p.x, p.y, s.width as i32, s.height as i32), scale: m.scale_factor(),
+            monitor: (p.x, p.y, s.width as i32, s.height as i32), dpi: m.scale_factor(), scale: m.scale_factor() * zoom,
             appbar: (cfg["reserve"] == true && matches!(edge_of(cfg), "top" | "bottom")).then(|| win32::AppBar::register(hwnd)),
             rects: vec![], notch: None, interactive: false, fullscreen: false, dark: false,
             dodgeable: false, dodge: None, dodge_armed: false, grab: false, press_inside: false, watch: false, watch_seen: false, near: true, far_since: None, free: false, moving: false,
@@ -206,6 +231,19 @@ fn bar_rect(bar: &mut Bar, cfg: &Value) -> (i32, i32, i32, i32) {
     (x, top, w, total)
 }
 
+/// The island's size changed (and nothing else of the layout): its windows zoomed and resized in
+/// place, without making them again (they'd blink while it's being resized with the mouse).
+fn zoom_bars(app: &AppHandle, cfg: &Value, zoom: f64) {
+    let placed: Vec<_> = with(|s| s.bars.iter_mut().map(|bar| {
+        bar.scale = bar.dpi * zoom;
+        (bar.label.clone(), bar.hwnd, bar_rect(bar, cfg), !bar.fullscreen)
+    }).collect());
+    for (label, hwnd, rc, topmost) in placed {
+        if let Some(w) = app.get_webview_window(&label) { let _ = w.set_zoom(zoom); }
+        win32::place_window(hwnd, rc, topmost);
+    }
+}
+
 fn destroy_bars(app: &AppHandle) {
     let bars = with(|s| std::mem::take(&mut s.bars));
     for bar in bars {
@@ -225,12 +263,14 @@ fn reload(app: &AppHandle, force_layout: bool) {
     };
     i18n::set(i18n::resolve(cfg["language"].as_str()));
     let layout = LAYOUT_KEYS.iter().map(|k| cfg[*k].to_string()).collect::<Vec<_>>().join("|");
-    let relayout = force_layout || with(|s| s.bars.is_empty() || s.layout != layout);
-    with(|s| { s.cfg = cfg.clone(); s.layout = layout; });
+    let zoom = island_zoom(&cfg);
+    let (relayout, rezoom) = with(|s| (force_layout || s.bars.is_empty() || s.layout != layout, s.zoom != zoom));
+    with(|s| { s.cfg = cfg.clone(); s.layout = layout; s.zoom = zoom; });
     if relayout {
         destroy_bars(app);
         create_bars(app, &cfg);
     } else {
+        if rezoom { zoom_bars(app, &cfg, zoom); }
         hub::emit("reload", Value::Null);
     }
     start_pollers(&cfg);
@@ -839,10 +879,15 @@ fn set_setting(app: AppHandle, key: String, value: Value) -> Result<(), String> 
     match key.as_str() {
         "language" | "monitors" | "hide-on-fullscreen" => config::set_value(&[&key], value),
         "dodge" | "dodge-eyes" | "dodge-roam" | "dodge-roam-delay" | "dodge-speed" | "auto-hide" | "auto-hide-distance" | "peek" | "outline"
-        | "close-bounce" | "theme" | "glass" | "claude" | "notifications" | "kys-brain" | "kys-grab"
+        | "close-bounce" | "side-shape" | "theme" | "glass" | "claude" | "notifications" | "kys-brain" | "kys-grab"
         | "hide-windows-osd" | "expand-on-hover" => {
             config::set_value(&[&island, &key], value)
         }
+        "size" => match value.as_f64() {
+            Some(v) if (50.0..=200.0).contains(&v) => config::set_value(&[&island, "size"], json!(v.round() as i64)),
+            _ => Err(format!("size out of range (50 to 200 %): {value}")),
+        },
+        "width" => config::set_value(&[&island, "width"], island_width(value.as_f64().unwrap_or(0.0))?),
         "autostart" => { set_autostart(&app, value == true); Ok(()) }
         _ => Err(format!("unknown setting: {key}")),
     }
@@ -851,7 +896,7 @@ fn set_setting(app: AppHandle, key: String, value: Value) -> Result<(), String> 
 /// Buttons of the settings window, same as the menu entries.
 #[tauri::command]
 fn settings_action(app: AppHandle, name: String) {
-    if !matches!(name.as_str(), "reload" | "open-config" | "edit-config" | "edit-style" | "devtools" | "move-island" | "center-island") { return; }
+    if !matches!(name.as_str(), "reload" | "open-config" | "edit-config" | "edit-style" | "devtools" | "adjust-island" | "center-island" | "reset-size") { return; }
     let a = app.clone();
     later(&app, move || on_menu(&a, &name));
 }
@@ -915,11 +960,21 @@ fn island_move(window: WebviewWindow, on: bool) {
     });
 }
 
-/// The island dropped on `edge`, at `along` of it: written in the config (a new edge lays the
-/// windows out again; meanwhile the window stays over the whole screen so the island stays seen).
+/// The island left on `edge`, at `along` of it, and at `size` (%) and `width` (px, its length at
+/// rest; 0: as long as what it shows) when they changed too: written in the config, all at once
+/// (one reload; a new edge lays the windows out again, a new size zooms them; meanwhile the window
+/// stays over the whole screen so the island stays seen).
 #[tauri::command]
-fn island_place(window: WebviewWindow, edge: String, along: f64) -> Result<(), String> {
+fn island_place(window: WebviewWindow, edge: String, along: f64, size: Option<f64>, width: Option<f64>) -> Result<(), String> {
     if !matches!(edge.as_str(), "top" | "bottom" | "left" | "right") { return Err(format!("unknown edge: {edge}")); }
+    let island_key = with(|s| config::island_name(&s.cfg)).unwrap_or_else(|| "island".into());
+    if let Some(size) = size {
+        if !(50.0..=200.0).contains(&size) { return Err(format!("size out of range (50 to 200 %): {size}")); }
+        config::set_value(&[&island_key, "size"], json!(size.round() as i64))?;
+    }
+    if let Some(width) = width {
+        config::set_value(&[&island_key, "width"], island_width(width)?)?;
+    }
     let along = (along.clamp(0.0, 1.0) * 1000.0).round() / 1000.0;
     let label = window.label().to_owned();
     let (cfg, island) = with(|s| (s.cfg.clone(), config::island_name(&s.cfg).unwrap_or_else(|| "island".into())));
@@ -1107,7 +1162,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         &PredefinedMenuItem::separator(app)?,
         &CheckMenuItem::with_id(app, "peek", t("menu.peek"), true, island["peek"] != false, None::<&str>)?,
         &CheckMenuItem::with_id(app, "close-bounce", t("menu.close_bounce"), true, island["close-bounce"] != false, None::<&str>)?,
-        &MenuItem::with_id(app, "move-island", t("menu.move_island"), true, None::<&str>)?,
+        &MenuItem::with_id(app, "adjust-island", t("menu.adjust_island"), true, None::<&str>)?,
         &CheckMenuItem::with_id(app, "auto-hide", t("menu.auto_hide"), true, island["auto-hide"] == true, None::<&str>)?,
         &CheckMenuItem::with_id(app, "fullscreen", t("menu.fullscreen"), true, cfg["hide-on-fullscreen"] != false, None::<&str>)?,
         &theme_menu,
@@ -1153,15 +1208,16 @@ fn on_menu(app: &AppHandle, id: &str) {
         "claude" => config::set_value(&[&island, "claude"], json!(config::island_conf(&cfg)["claude"] != true)),
         "dodge" | "dodge-eyes" | "dodge-roam" | "peek" | "close-bounce" => config::set_value(&[&island, id], json!(config::island_conf(&cfg)[id] == false)),
         "auto-hide" => config::set_value(&[&island, id], json!(config::island_conf(&cfg)[id] != true)),
-        "move-island" => {
-            // On the screen the cursor is on (or the first one).
+        "adjust-island" => {
+            // On the screen the cursor is on (or the first one); the island waits there to be moved or resized.
             let (cx, cy) = win32::cursor_pos();
             let label = with(|s| s.bars.iter().find(|b| { let (x, y, w, h) = b.monitor; cx >= x && cx < x + w && cy >= y && cy < y + h })
                 .or(s.bars.first()).map(|b| b.label.clone()));
-            if let Some(label) = label { let _ = app.emit_to(label.as_str(), "island-move", json!({ "label": label })); }
+            if let Some(label) = label { let _ = app.emit_to(label.as_str(), "island-adjust", json!({ "label": label })); }
             Ok(())
         }
         "center-island" => config::set_value(&["position"], json!("top")).and_then(|_| config::set_value(&[&island, "along"], json!(0.5))),
+        "reset-size" => config::set_value(&[&island, "size"], json!(100)).and_then(|_| config::set_value(&[&island, "width"], Value::Null)),
         "theme:classic" | "theme:glass" => config::set_value(&[&island, "theme"], json!(&id[6..])),
         "glass:frosted" | "glass:balanced" | "glass:crystal" => config::set_value(&[&island, "glass"], json!(&id[6..])),
         "outline:auto" => config::set_value(&[&island, "outline"], json!("auto")),

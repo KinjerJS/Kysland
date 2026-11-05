@@ -12,9 +12,10 @@
     run: (cmd) => invoke('run_command', { cmd }),
     notifications: () => invoke('notifications'),
     action: (name, arg, extra) => invoke('action', { name, arg: arg ?? null, extra: extra ?? null }),
-    // Moving the island: the window covers the screen meanwhile; then where it was dropped.
+    // Moving or resizing the island: the window covers the screen meanwhile; then where it was left,
+    // and, when they changed, its size (%) and its length at rest (px, 0: as long as what it shows).
     moveIsland: (on) => invoke('island_move', { on }),
-    placeIsland: (edge, along) => invoke('island_place', { edge, along }),
+    placeIsland: (edge, along, size, width) => invoke('island_place', { edge, along, size: size ?? null, width: width ?? null }),
     // Kys, the eyes as a pet (kys.rs).
     kys: {
       state: () => invoke('kys_state'),

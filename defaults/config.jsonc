@@ -27,6 +27,9 @@
     "date-format": "ddd D MMM",
     "date-long-format": "dddd D MMMM",
     "along": 0.5,                       // where along its edge: 0 one end, 0.5 the middle, 1 the other. Or press and hold the island, then drag it
+    "side-shape": "bubble",             // at rest on a side ("position": "left" / "right"): "bubble" (round, the time) | "vertical" (standing up, its text vertical)
+    "size": 100,                        // % : the island and everything in it (Kys too), from 50 (half) to 200 (twice as big). Or menu → Dynamic Island → Move or resize the island…
+    "width": null,                      // its length at rest along its edge, px (standing up on a side: its height); null: as long as what it shows. Too short, the date goes, then the album art: the time stays
     "expand-on-hover": true,
     "hover-delay": 120,                  // ms before expanding
     "collapse-delay": 350,               // ms before collapsing

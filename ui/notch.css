@@ -93,6 +93,10 @@ body.pos-bottom .notch-view { top: auto; bottom: 0; transform-origin: bottom cen
 
 /* Shared-element transitions: views don't zoom, elements travel. */
 .notch-view.morphing { scale: 1; }
+/* The island as it will be once a transition ends, invisible, only there to measure where its
+   elements will land (island.js, Notch.landing). */
+.notch.ghost { visibility: hidden; opacity: 0; pointer-events: none; }
+.notch.ghost, .notch.ghost * { transition: none !important; animation: none !important; }
 .notch-fly {
   position: fixed;
   inset: 0;
@@ -945,8 +949,9 @@ body.pos-bottom .notch.splash { transform-origin: 50% 100%; }
 
 /* --- On a side of the screen ("position": "left" / "right") ----------------------------------------
    The same island against a side edge, at "along" of its height, growing into the screen. Its ears
-   go above and below it. It doesn't hide from the cursor there (no eyes, no peeking, no Kys to grab:
-   they live in the top and bottom edges), nor the bar's modules (island.js, base.css). */
+   go above and below it. At rest it's a bubble or stands up ("side-shape", below); it hides from
+   a slow cursor as anywhere else (below too). No peeking eyes there (they drop in from the top or
+   bottom edge), nor the bar's modules (island.js, base.css). */
 body.pos-left .notch, body.pos-right .notch {
   top: calc(var(--along, .5) * 100%);
   translate: var(--notch-x, 0px) calc(var(--along, .5) * -100%);
@@ -971,9 +976,98 @@ body.pos-left .notch-view, body.pos-right .notch-view { top: 50%; translate: 0 -
 body.pos-left .notch-view { left: 0; transform-origin: left center; }
 body.pos-right .notch-view { left: auto; right: 0; transform-origin: right center; }
 
-/* --- Moving the island (island.js): it follows the cursor along the nearest edge ------------------
+/* At rest on a side, "side-shape" (island.js, compactView puts data-shape on the island).
+   "bubble": a ball floating just off the edge, no ears, the time in it (and the equalizer while
+   something plays). Opening it, it grows back into the usual island against the edge. */
+body.pos-left .notch[data-shape=bubble], body.pos-right .notch[data-shape=bubble] { --notch-ear: 0px; border-radius: 50%; }
+body.pos-left .notch[data-shape=bubble] { --notch-x: 8px; }
+body.pos-right .notch[data-shape=bubble] { --notch-x: -8px; }
+.n-compact.n-bubble {
+  position: relative;
+  width: calc(var(--notch-h) + 22px);
+  height: calc(var(--notch-h) + 22px);
+  min-width: 0;
+  padding: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+.n-bubble .n-time { font-size: 12.5px; }
+.n-bubble .eq { height: 9px; gap: 1.5px; }
+.n-bubble .eq i { width: 2.5px; }
+.n-bubble .n-dot { position: absolute; top: 8px; right: 8px; }
+/* "vertical": the island standing up, its text turned as if the top island had been turned onto
+   that side (the tops of the letters toward the screen edge): reading downward on the right,
+   upward on the left. The album art and the equalizer stay upright. */
+.n-compact.n-vertical {
+  writing-mode: vertical-rl;
+  width: var(--notch-h);
+  height: max-content;
+  min-width: 0;
+  min-height: 132px;
+  padding: 18px 0;
+}
+.n-compact.n-vertical.with-media { padding: 8px 0 12px; }
+body.pos-left .n-compact.n-vertical { rotate: 180deg; }
+.n-vertical .n-slot { margin: -10px -6px; padding: 10px 6px; }
+.n-vertical .n-cover { writing-mode: horizontal-tb; }
+body.pos-left .n-vertical .n-cover { rotate: 180deg; }
+.n-vertical .eq { writing-mode: horizontal-tb; rotate: 90deg; }
+/* Both kept centered while the closing spring makes the island thinner than them for a moment,
+   instead of cut down their middle (against the edge the rest of the time). */
+body.pos-left .notch-view:has(> .n-vertical) { left: min(0px, (100% - var(--notch-h)) / 2); }
+body.pos-right .notch-view:has(> .n-vertical) { right: min(0px, (100% - var(--notch-h)) / 2); }
+body.pos-left .notch-view:has(> .n-bubble) { left: min(0px, (100% - var(--notch-h) - 22px) / 2); }
+body.pos-right .notch-view:has(> .n-bubble) { right: min(0px, (100% - var(--notch-h) - 22px) / 2); }
+
+/* A set length at rest ("width", island.js applyWidth), along its edge (standing up: its height; a
+   bubble stays round). What doesn't fit goes: the date, then the album art and the equalizer; the
+   time always stays. */
+.notch.fixed-w .n-compact:not(.n-bubble):not(.n-vertical) { width: var(--compact-w); min-width: 0; }
+.notch.fixed-w .n-compact { white-space: nowrap; } /* rather than wrapping, too long: it goes */
+.notch.fixed-w .n-compact > * { flex-shrink: 0; }
+.notch.fixed-w .n-compact.n-vertical { height: var(--compact-w); min-height: 0; }
+.n-compact.no-date > .n-date, .n-compact.no-media > .n-slot, .n-compact.no-media > .eq { display: none; }
+.n-compact.with-media.no-media { padding: 0 12px; }
+.n-compact.n-vertical.with-media.no-media { padding: 12px 0; }
+
+/* Hiding from a slow cursor on a side (whatever its shape at rest): the same thin strip, standing
+   up against that edge, its two eyes one above the other (they stay upright and follow the cursor);
+   grown, it pushes out of the side and the eyes roam side by side as usual. */
+body.pos-left .notch.dodged, body.pos-right .notch.dodged {
+  width: 5px !important;
+  height: 56px !important;
+  --notch-x: 0px; /* a bubble comes back against the edge */
+  --notch-ear: 4px;
+  transition: width .35s cubic-bezier(.4, 0, .2, 1), height .35s cubic-bezier(.4, 0, .2, 1), border-radius .35s ease,
+    box-shadow .3s ease, --notch-outline .4s ease, --notch-ear .35s ease, translate .35s cubic-bezier(.4, 0, .2, 1);
+}
+body.pos-left .notch.dodged { border-radius: 0 5px 5px 0; }
+body.pos-right .notch.dodged { border-radius: 5px 0 0 5px; }
+body.pos-left .notch.dodged.eyes, body.pos-right .notch.dodged.eyes { width: 13px !important; height: 54px !important; --notch-ear: 5px; }
+body.pos-left .notch.dodged.eyes { border-radius: 0 6px 6px 0; }
+body.pos-right .notch.dodged.eyes { border-radius: 6px 0 0 6px; }
+body.pos-left .notch.dodged:not(.roaming) .notch-eyes, body.pos-right .notch.dodged:not(.roaming) .notch-eyes { flex-direction: column; }
+body.pos-left .notch.dodged.eyes.roaming, body.pos-right .notch.dodged.eyes.roaming { width: 130px !important; height: 220px !important; --notch-ear: 12px; }
+body.pos-left .notch.dodged.eyes.roaming { border-radius: 0 46px 46px 0; }
+body.pos-right .notch.dodged.eyes.roaming { border-radius: 46px 0 0 46px; }
+/* Its drop leaving or coming back: the copy of the island and the ripple, anchored at that edge. */
+body.pos-bottom .goo-island { transform-origin: 50% 100%; }
+body.pos-left .goo-island { border-radius: 0 46px 46px 0; transform-origin: 0 50%; }
+body.pos-right .goo-island { border-radius: 46px 0 0 46px; transform-origin: 100% 50%; }
+body.pos-left .notch.splash, body.pos-right .notch.splash { animation-name: notch-splash-side; }
+body.pos-left .notch.splash { transform-origin: 0 50%; }
+body.pos-right .notch.splash { transform-origin: 100% 50%; }
+@keyframes notch-splash-side {
+  0%, 100% { scale: 1; }
+  25% { scale: .95 1.035; }
+  50% { scale: 1.03 .985; }
+  75% { scale: .99 1.01; }
+}
+
+/* --- Moving and resizing the island (island.js, startEdit) ------------------------------------------
    The window covers the whole screen meanwhile; the veil takes the mouse, lights the edge the
-   island will land on, and says what to do. */
+   island is on, and says what to do (with Done / Cancel, unless it was picked up by a long press).
+   The island is outlined; its handles (.edit-grips) sit at its corners away from its edge. */
 .move-veil { position: fixed; inset: 0; z-index: 9; cursor: grabbing; background: rgba(0, 0, 0, 0.12); }
 .move-veil::before { content: ''; position: absolute; background: var(--accent); opacity: .8; box-shadow: 0 0 18px var(--accent); transition: all .25s ease; }
 .move-veil[data-edge=top]::before { left: 0; right: 0; top: 0; height: 3px; }
@@ -985,8 +1079,12 @@ body.pos-right .notch-view { left: auto; right: 0; transform-origin: right cente
   left: 50%;
   top: 50%;
   translate: -50% -50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
   padding: 10px 18px;
-  border-radius: 999px;
+  border-radius: 22px;
   background: rgba(0, 0, 0, 0.72);
   color: #f5f5f7;
   font: 500 13px var(--notch-font);
@@ -994,8 +1092,62 @@ body.pos-right .notch-view { left: auto; right: 0; transform-origin: right cente
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
   pointer-events: none;
 }
-body.moving .notch { pointer-events: none; }
-body.moving .notch:not(.away) { scale: 1.04; filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.45)); }
+.edit-text { font-variant-numeric: tabular-nums; }
+.edit-keys { color: rgba(245, 245, 247, 0.55); font-size: 11.5px; }
+.edit-actions { display: flex; gap: 8px; margin-top: 2px; }
+.edit-actions button {
+  pointer-events: auto;
+  padding: 5px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.edit-actions button:hover { background: rgba(255, 255, 255, 0.2); }
+.edit-actions button[data-edit=done] { background: var(--accent); color: #1a1426; font-weight: 600; }
+/* Carried by the cursor: its place isn't animated (it would lag behind, and going from one edge to
+   another, slide in from where it was on the old one); its size and shape still are. It grows or
+   shrinks (--resize-k) around the point of its edge that stays put (at "along" of it), as its
+   window's zoom will do; held, it's lifted a little. */
+body.editing .notch {
+  pointer-events: none;
+  scale: calc(var(--resize-k, 1) * var(--lift, 1));
+  transform-origin: calc(var(--along, .5) * 100%) 0;
+  outline: 1.5px dashed color-mix(in srgb, var(--accent) 85%, transparent);
+  outline-offset: 5px;
+  transition: width .5s var(--spring), height .5s var(--spring), border-radius .5s var(--spring), box-shadow .4s ease, --notch-outline .4s ease,
+    --notch-ear .5s var(--spring), opacity .3s ease;
+}
+body.editing.pos-bottom .notch { transform-origin: calc(var(--along, .5) * 100%) 100%; }
+body.editing.pos-left .notch { transform-origin: 0 calc(var(--along, .5) * 100%); }
+body.editing.pos-right .notch { transform-origin: 100% calc(var(--along, .5) * 100%); }
+body.edit-move .notch:not(.away) { --lift: 1.04; filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.45)); }
+/* Its length followed as it's pulled, without its spring (it would lag behind the handle). */
+body.editing.edit-length .notch { transition: none; }
+/* From the menu or the settings, it waits where it is to be grabbed: it beckons, from its edge. */
+body.edit-wait .move-veil { cursor: default; }
+body.edit-wait .notch:not(.away) { animation: edit-beckon 1.2s ease-in-out infinite; }
+@keyframes edit-beckon { 0%, 100% { scale: 1; } 50% { scale: 1.07; } }
+.edit-grips i {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 12;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+/* Its length: a bar at each end (standing up: lying across). */
+.edit-grips i.end { width: 8px; height: 20px; margin: -10px 0 0 -4px; border-radius: 4px; }
+.edit-grips i.end.across { width: 20px; height: 8px; margin: -4px 0 0 -10px; }
+.edit-grips i[hidden] { display: none; }
 
 /* --- Liquid Glass theme ("theme": "glass": island.js puts body.theme-glass) ------------------------
    The island floats off the screen edge, a capsule of glass as on iOS. The engine copies what's under
@@ -1058,7 +1210,7 @@ body.theme-glass .notch-glass {
   transition: --glass-dim .8s ease;
 }
 body.theme-glass .notch-glass canvas { position: absolute; }
-body.theme-glass.moving .notch-glass canvas { visibility: hidden; } /* the copy only follows once it's dropped */
+body.theme-glass.editing .notch-glass canvas { visibility: hidden; } /* the copy only follows once it's left there */
 body.theme-glass .notch-glass::after { content: ''; position: absolute; inset: 0; background: rgb(12 12 18 / var(--glass-dim)); }
 /* The light under the cursor (--glass-x / --glass-y, island.js), above the glass, below the views. */
 body.theme-glass .notch-light {
@@ -1082,3 +1234,12 @@ body.theme-glass .notch-inner::after {
 }
 /* Kys's flight: the gooey filter makes the drop opaque; faded back to the glass's darkness. */
 body.theme-glass .eye-goo { opacity: .6; }
+/* Hiding on a side of the screen: the drop of glass stands up against that edge (see the classic
+   rules, "Hiding from a slow cursor on a side"). */
+body.theme-glass.pos-left .notch.dodged, body.theme-glass.pos-right .notch.dodged { --notch-x: 0px; }
+body.theme-glass.pos-left .notch.dodged { border-radius: 0 5px 5px 0; }
+body.theme-glass.pos-right .notch.dodged { border-radius: 5px 0 0 5px; }
+body.theme-glass.pos-left .notch.dodged.eyes { border-radius: 0 6px 6px 0; }
+body.theme-glass.pos-right .notch.dodged.eyes { border-radius: 6px 0 0 6px; }
+body.theme-glass.pos-left .notch.dodged.eyes.roaming { border-radius: 0 46px 46px 0; }
+body.theme-glass.pos-right .notch.dodged.eyes.roaming { border-radius: 46px 0 0 46px; }

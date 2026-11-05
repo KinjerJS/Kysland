@@ -2,6 +2,14 @@
 
 What changed in each version. The section of a version is also the text of its GitHub release.
 
+## 0.6.4 — 2026-11-05
+
+- **On a side of the screen**, the resting island no longer sticks out sideways: it's a **bubble**, a round ball floating just off the edge with the time in it (and the equalizer while something plays), or, if you prefer, it stands up **vertical**, its time and date turned with it (settings → Island → On a side, or `"side-shape"`). Hover it and it opens into the usual island; events and notifications show as before.
+- **Move and resize the island, with one button**: settings → Island → Position and size → Adjust (or the menu's Dynamic Island → Move or resize the island…). It waits where it is, outlined, with a handle at its free corners. Drag it to any edge: let go, it stays right there against it. Pull one of its ends to make it longer or shorter (its other end stays put): too short for everything, the date goes first, then the album art and the equalizer, and only the time is left. Pull a corner to make it bigger or smaller, from half its size to twice as big (drawn to its normal size as you pass it): everything in it follows, text, album art, Kys and its eyes, and the room it takes on the screen too. Do both as many times as you like, then click beside it (or Enter, or Done) to keep it all; right click, Escape or Cancel puts it back as it was. A long press on the island still picks it up at once (let go: it's kept). "Normal size" (there, or in the settings) puts its size and length back; in the config, `"size"` (in %) and `"width"` (in px).
+- **Hiding from the cursor on a side too**: come slowly and the island tucks itself into the side edge, a thin strip standing up with its two eyes, one above the other, watching the cursor. Stay close and it grows out of the side and the eyes roam, get dizzy, get thrown out and come back, and can be grabbed (option "Grab Kys"), as at the top.
+- Fixed: opening or closing the island, what travels from one view to the other (the time, the album art...) could land beside its spot and jump into it at the end: on a side, or anywhere but in the middle of an edge. With Liquid Glass, closing no longer draws a ring of glass in the middle of the island. Standing up on a side, the closing bounce no longer cuts its text down the middle.
+- Fixed: moving the island from a top or bottom edge to a side (or back), it went round to get there and its time could stay behind, out of it. It now changes shape right against the new edge, with what it shows inside it, and follows the cursor without lagging behind. Kys no longer drops in while it's being moved, nor once it's on a side.
+
 ## 0.6.3 — 2026-11-03
 
 - **Claude usage on plans without the 5 h session** (like Ultra): only the week's gauge is shown, across the whole width, instead of an empty or 0 % session. The 80 % and limit-reached alerts then follow the week.

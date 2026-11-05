@@ -4,7 +4,7 @@
 (() => {
   const { t } = window.i18n;
   const icon = (n) => `<i class="icon icon-${n}"></i>`;
-  const eq = (playing) => `<span class="eq${playing ? '' : ' paused'}" data-morph="eq"><i></i><i></i><i></i><i></i></span>`;
+  const eq = (playing, morph = true) => `<span class="eq${playing ? '' : ' paused'}"${morph ? ' data-morph="eq"' : ''}><i></i><i></i><i></i><i></i></span>`;
   const appName = (app = '') => app.split('!').pop().replace(/\.exe$/i, '');
 
   function fmtDuration(sec) {
@@ -79,6 +79,7 @@
       this.key = null;
       this.closeBounce = true; // option "close-bounce"
       this.closingT = 0;
+      this.carried = false; // being moved: no shared elements in flight (they'd stay behind, it goes on moving)
     }
 
     // view: { key, size, html, mount(el), update(el) }
@@ -107,7 +108,7 @@
         next.className = 'notch-view';
         next.innerHTML = view.html;
         const pairs = [...next.querySelectorAll('[data-morph]')]
-          .filter((el) => from.has(el.dataset.morph))
+          .filter((el) => !this.carried && from.has(el.dataset.morph))
           .map((el) => [from.get(el.dataset.morph), el]);
         // With shared elements, no zoom effect on the views: exact positions.
         if (pairs.length) { next.classList.add('morphing'); old.classList.add('morphing'); }
@@ -121,25 +122,49 @@
         }
         this.current = next;
         this.key = view.key;
-        for (const [a, b] of pairs) this.fly(a, fromRects.get(a.dataset.morph), b, smooth);
+        const to = pairs.length ? this.landing(next, view) : null;
+        for (const [a, b] of pairs) this.fly(a, fromRects.get(a.dataset.morph), b, smooth, to.get(b.dataset.morph));
         requestAnimationFrame(() => next.classList.add('shown'));
       }
       this.el.dataset.size = view.size;
+      this.el.dataset.shape = view.shape || ''; // at rest on a side: 'bubble' / 'vertical' (compactView)
       this.resize();
+    }
+
+    /** Where the shared elements of a new view will be once the island has reached its new size
+     *  and shape: it's only starting to grow or shrink to it, and where its content sits depends on
+     *  that (centered on its middle, which moves unless the island is halfway along its edge; a
+     *  bubble floats off the edge...). Measured on an invisible copy of the island in that state. */
+    landing(next, view) {
+      const ghost = this.el.cloneNode(false);
+      ghost.classList.add('ghost');
+      ghost.dataset.size = view.size;
+      ghost.dataset.shape = view.shape || '';
+      ghost.style.width = `${next.offsetWidth + (this.extra || 0)}px`;
+      ghost.style.height = `${next.offsetHeight}px`;
+      const inner = this.inner.cloneNode(false), copy = next.cloneNode(true);
+      copy.classList.add('shown');
+      inner.appendChild(copy);
+      ghost.appendChild(inner);
+      document.body.appendChild(ghost);
+      const rects = new Map([...copy.querySelectorAll('[data-morph]')].map((el) => [el.dataset.morph, el.getBoundingClientRect()]));
+      ghost.remove();
+      return rects;
     }
 
     // Shared-element transition: a copy of the old element and one of the new one travel
     // together while cross-fading; the originals stay hidden during the flight.
-    fly(oldEl, from, newEl, smooth = false) {
-      const to = newEl.getBoundingClientRect();
+    fly(oldEl, from, newEl, smooth = false, to = newEl.getBoundingClientRect()) {
       if (!from.width || !to.width) return;
       this.flyLayer.style.setProperty('--tint', getComputedStyle(this.el).getPropertyValue('--tint'));
       const clone = (el, r) => {
-        const c = el.cloneNode(true);
+        const c = el.cloneNode(true), cs = getComputedStyle(el);
         c.removeAttribute('data-morph');
         Object.assign(c.style, {
           position: 'fixed', left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px`,
           margin: '0', transformOrigin: '0 0', boxSizing: 'border-box', visibility: 'visible',
+          // Out of its view, it would lose what depends on it (the bubble's smaller time...).
+          fontSize: cs.fontSize, fontWeight: cs.fontWeight, lineHeight: cs.lineHeight, letterSpacing: cs.letterSpacing, color: cs.color,
         });
         this.flyLayer.appendChild(c);
         return c;
@@ -193,6 +218,8 @@
   const islandEdge = () => ['bottom', 'left', 'right'].find((e) => document.body.classList.contains(`pos-${e}`)) || 'top';
   const islandAlong = () => place.along;
   const isSide = () => ['left', 'right'].includes(islandEdge());
+  /** Unit vector from the island's screen edge into the screen. */
+  const inward = () => ({ top: [0, 1], bottom: [0, -1], left: [1, 0], right: [-1, 0] })[islandEdge()];
   const clamp01 = (v) => (Number.isFinite(+v) ? Math.min(1, Math.max(0, +v)) : 0.5);
   function setPlace(edge, along) {
     for (const e of ['top', 'bottom', 'left', 'right']) document.body.classList.toggle(`pos-${e}`, e === edge);
@@ -229,7 +256,7 @@
 
   /** Displacement map (R, G: x, y shift around 128, half resolution) and lights (rim, reflection,
    *  sheen) for an island of w×h with corner radii [tl, tr, br, bl], both covering the glass layer
-   *  (GLASS_PAD around it). `attached`: 'top' / 'bottom' when that side is the screen edge (no
+   *  (GLASS_PAD around it). `attached`: 'top' / 'bottom' / 'left' / 'right' when that side is the screen edge (no
    *  bezel there). `L`: the level (GLASS_LEVELS). */
   function glassMaps(w, h, radii, attached, L) {
     const P = GLASS_PAD, W = w + 2 * P, H = h + 2 * P;
@@ -237,7 +264,8 @@
     const shifts = bezelShift(B, L.thick);
     const max = Math.max(...shifts);
     const top = attached === 'top' ? -1e4 : 0, bottom = attached === 'bottom' ? h + 1e4 : h;
-    const cx = w / 2, cy = (top + bottom) / 2, hw = w / 2, hh = (bottom - top) / 2;
+    const left = attached === 'left' ? -1e4 : 0, right = attached === 'right' ? w + 1e4 : w;
+    const cx = (left + right) / 2, cy = (top + bottom) / 2, hw = (right - left) / 2, hh = (bottom - top) / 2;
     // Signed distance to the edge (< 0 inside) and the outward normal.
     const g = { d: 0, nx: 0, ny: 0 };
     const at = (x, y) => {
@@ -329,13 +357,20 @@
       this.bends = ['r', 'g', 'b'].map((c) => document.getElementById(`kys-glass-${c}`)).filter(Boolean);
       this.cache = new Map(); // maps by shape (the island keeps going back to the same few)
       this.key = '';
+      this.radii = [0, 0, 0, 0];
       this.settleT = 0;
       new ResizeObserver(() => this.follow()).observe(this.layer);
     }
 
-    /** The island is going to w×h (Notch.resize): its maps right away, stretched along meanwhile. */
+    /** The island is going to w×h (Notch.resize): its maps right away, stretched along meanwhile.
+     *  Getting smaller (closing), the target's maps stretched over the island would draw its rim
+     *  inside it (a ring in the middle); maps for the box it's leaving keep their rim at its edge,
+     *  then past it, out of sight, until it settles in its new shape (follow). */
     target(w, h, size) {
-      const r = glassRadius(size, h);
+      const el = this.notch.el, now = el.getBoundingClientRect(); // still where it was: its transition only starts
+      if (now.width > w + 1 || now.height > h + 1) return this.use(Math.max(now.width, w), Math.max(now.height, h), this.radii, null);
+      // A bubble is round; otherwise the radii of notch.css, half the thinner side at most (standing up).
+      const r = el.dataset.shape === 'bubble' ? Math.min(w, h) / 2 : glassRadius(size, Math.min(w, h));
       this.use(w, h, [r, r, r, r], null);
     }
 
@@ -353,12 +388,13 @@
       if (!el.offsetWidth || !el.offsetHeight) return;
       const cs = getComputedStyle(el);
       const radii = [cs.borderTopLeftRadius, cs.borderTopRightRadius, cs.borderBottomRightRadius, cs.borderBottomLeftRadius].map((r) => parseFloat(r) || 0);
-      this.use(el.offsetWidth, el.offsetHeight, radii, el.classList.contains('dodged') ? (islandEdge() === 'bottom' ? 'bottom' : 'top') : null);
+      this.use(el.offsetWidth, el.offsetHeight, radii, el.classList.contains('dodged') ? islandEdge() : null);
     }
 
     use(w, h, radii, attached) {
       w = Math.round(w); h = Math.round(h);
       if (w < 2 || h < 2) return;
+      this.radii = radii; // the shape it has now (target: closing)
       radii = radii.map((r) => Math.min(r, w / 2, h / 2));
       const key = `${w}x${h}:${radii.map(Math.round)}:${attached}`;
       if (key === this.key) return;
@@ -617,18 +653,21 @@
     /** Rolling eyes, turning the way the cursor went round. */
     roll(t) {
       const big = this.roaming || this.free; // the big eyes
-      const [gx, gy] = big ? [5, 4] : [3, 1.5];
+      const standing = !big && isSide(); // the thin strip stands up on a side of the screen
+      const [gx, gy] = big ? [5, 4] : standing ? [1.5, 3] : [3, 1.5];
       const a = (t / 90) * this.spinDir;
       this.el.style.setProperty('--gx', `${(Math.cos(a) * gx).toFixed(2)}px`);
       this.el.style.setProperty('--gy', `${(Math.sin(a) * gy).toFixed(2)}px`);
-      // Stars circling: below the thin strip (above it is the screen edge), above the eyes on the
-      // grown island, or below them when they're up against the edge.
-      const [rx, ry] = big ? [30, 7] : [34, 5];
-      const cy = this.free ? -26 : !this.roaming ? 13 : this.pos.y < -20 ? 26 : -26;
+      // Stars circling: off the thin strip on the screen's side (past it is the screen edge), above
+      // the eyes on the grown island, or below them when they're up against its top.
+      const [rx, ry] = big ? [30, 7] : standing ? [5, 34] : [34, 5];
+      const [ix, iy] = inward();
+      const cx = big ? 0 : ix * 13;
+      const cy = this.free ? -26 : !this.roaming ? iy * 13 : this.pos.y < -20 ? 26 : -26;
       [...this.stars.children].forEach((star, i) => {
         const b = (t / 240) * this.spinDir + (i * 2 * Math.PI) / 3;
         const depth = (Math.sin(b) + 1) / 2; // 1: in front, 0: behind
-        star.style.setProperty('--sx', `${(Math.cos(b) * rx).toFixed(1)}px`);
+        star.style.setProperty('--sx', `${(cx + Math.cos(b) * rx).toFixed(1)}px`);
         star.style.setProperty('--sy', `${(cy + Math.sin(b) * ry).toFixed(1)}px`);
         star.style.setProperty('--ss', (0.6 + depth * 0.5).toFixed(2));
         star.style.setProperty('--so', (0.45 + depth * 0.55).toFixed(2));
@@ -661,13 +700,17 @@
       const len = Math.hypot(dx, dy) || 1;
       const k = Math.min(1, len / 40); // a close cursor doesn't pull the eyes all the way
       const gx = (dx / len) * k, gy = (dy / len) * k;
-      const [rx, ry] = this.roaming || this.free ? [6, 5] : [4, 2]; // bigger eyes, more room
+      const big = this.roaming || this.free;
+      // Bigger eyes, more room; on a side, the thin strip stands up (its eyes one above the other).
+      const standing = !big && isSide();
+      const [rx, ry] = big ? [6, 5] : standing ? [2, 4] : [4, 2];
       const s = this.el.style;
       s.setProperty('--gx', `${(gx * rx).toFixed(2)}px`);
       s.setProperty('--gy', `${(gy * ry).toFixed(2)}px`);
       // The eye on the far side looks a bit smaller, as if the head turned.
-      s.setProperty('--sl', (1 - Math.max(0, gx) * 0.18).toFixed(3));
-      s.setProperty('--sr', (1 + Math.min(0, gx) * 0.18).toFixed(3));
+      const turn = standing ? gy : gx;
+      s.setProperty('--sl', (1 - Math.max(0, turn) * 0.18).toFixed(3));
+      s.setProperty('--sr', (1 + Math.min(0, turn) * 0.18).toFixed(3));
     }
 
     // --- Roaming: positions are offsets from the island's center, in CSS pixels. ---
@@ -704,7 +747,11 @@
           const len = Math.hypot(this.pos.x - c.x, this.pos.y - c.y) || 1;
           const dir = { x: (this.pos.x - c.x) / len, y: (this.pos.y - c.y) / len };
           const reach = { x: this.pos.x + dir.x * box.x, y: this.pos.y + dir.y * box.y };
-          const out = Math.abs(reach.x) > box.x * 1.25 || reach.y > box.y * 1.25; // not upward: that's the screen edge
+          // Out along the edge or into the screen, not toward the screen edge (the island hangs from it).
+          const [ix, iy] = inward();
+          const out = ix
+            ? Math.abs(reach.y) > box.y * 1.25 || reach.x * ix > box.x * 1.25
+            : Math.abs(reach.x) > box.x * 1.25 || reach.y * iy > box.y * 1.25;
           if (out && now - (this.ejectedAt || 0) > 6000) this.eject(now, dir);
           else this.setMove(this.flee(now, c, box));
         }
@@ -782,13 +829,18 @@
     }
 
     // Thrown out of the island: a drop of island flying off, then pulled back like by a gravity well.
-    // It circles around the island through the bottom (the top is the screen edge), a little closer
-    // as it goes, spinning, then gets sucked back in on the other side. Screen positions, CSS px.
+    // It circles around the island on the screen's side (never past the screen edge it hangs from),
+    // a little closer as it goes, spinning, then gets sucked back in on the other side. Screen
+    // positions, CSS px.
     eject(now, dir) {
       const r = this.notch.getBoundingClientRect();
       const mid = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
       const from = this.center();
-      let a0 = Math.atan2(from.y - mid.y + dir.y * 40, from.x - mid.x + dir.x * 40);
+      // Angles worked out as if the island hung from the top (into the screen = down), then turned back.
+      const [ix, iy] = inward();
+      const turn = Math.atan2(iy, ix) - Math.PI / 2;
+      let a0 = Math.atan2(from.y - mid.y + dir.y * 40, from.x - mid.x + dir.x * 40) - turn;
+      a0 = Math.atan2(Math.sin(a0), Math.cos(a0));
       let end;
       if (Math.cos(a0) >= 0) {
         end = Math.PI + rand(0, 0.35); // out on the right: around the bottom to the left
@@ -796,7 +848,7 @@
         if (a0 < 0) a0 += 2 * Math.PI;
         end = -rand(0, 0.35); // out on the left: around the bottom to the right
       }
-      this.flight = { from, p: from, a0, sweep: end - a0, orbit: rand(1.8, 2.4), since: now, spin: 0, spinDir: Math.sign(end - a0) || 1 };
+      this.flight = { from, p: from, a0: a0 + turn, sweep: end - a0, orbit: rand(1.8, 2.4), since: now, spin: 0, spinDir: Math.sign(end - a0) || 1 };
       // Same eyes, same spot: they only change container.
       this.place(from, 0);
       this.shapeIsland(r);
@@ -871,7 +923,12 @@
         f.spin += dt * (900 - Math.min(1, t / (OUT + f.orbit)) * 650) * f.spinDir; // deg/s, slowing down
         spin = f.spin;
       }
-      p.y = Math.max(22, p.y);
+      // Kept off the screen edge the island hangs from.
+      const edge = islandEdge();
+      if (edge === 'top') p.y = Math.max(22, p.y);
+      else if (edge === 'bottom') p.y = Math.min(innerHeight - 22, p.y);
+      else if (edge === 'left') p.x = Math.max(22, p.x);
+      else p.x = Math.min(innerWidth - 22, p.x);
       // Like water: stretched along its motion, jiggling after it tears off and as it merges back.
       const vx = dt ? (p.x - f.p.x) / dt : 0, vy = dt ? (p.y - f.p.y) / dt : 0;
       const stretch = Math.min(0.4, Math.hypot(vx, vy) / 1500);
@@ -1351,6 +1408,7 @@
       'scroll-step': 5,
       outline: 'auto',               // 'auto' (on dark backgrounds) | true | false
       along: 0.5,                    // where along its edge ("position"): 0 one end, 0.5 the middle, 1 the other
+      'side-shape': 'bubble',        // at rest on a side: 'bubble' (round: the time) | 'vertical' (standing up, its text turned)
       theme: 'classic',              // 'classic' (black) | 'glass' (Liquid Glass, see Glass)
       glass: 'frosted',              // with the glass theme: 'frosted' | 'balanced' | 'crystal' (GLASS_LEVELS)
       dodge: true,                   // hides when the cursor approaches slowly (read by the engine)
@@ -1388,14 +1446,14 @@
           || e.target.closest('button, input, a, select, textarea, .n-progress, .n-bar, .k-inv, .k-talk')) return;
         pressAt = [e.clientX, e.clientY];
         clearTimeout(pressT);
-        pressT = setTimeout(() => { pressAt = null; startMove(m); }, 550);
+        pressT = setTimeout(() => { pressAt = null; startEdit(m, true); }, 550); // already held: it follows at once
       });
       notch.addEventListener('pointermove', (e) => {
         if (pressAt && Math.hypot(e.clientX - pressAt[0], e.clientY - pressAt[1]) > 6) unpress();
       });
       notch.addEventListener('pointerup', unpress);
       notch.addEventListener('pointercancel', unpress);
-      api.on('island-move', () => startMove(m)); // the menu, the settings
+      api.on('island-adjust', () => startEdit(m)); // the menu, the settings: waits to be grabbed, moved or resized
       // Theme "glass" (notch.css, Glass): what's under the island seen through it, and a light
       // that follows the cursor over it.
       const glass = m.conf.theme === 'glass';
@@ -1416,6 +1474,7 @@
       notch.addEventListener('mouseleave', () => { S.hover = false; });
       S.eyes = new Eyes(notch);
       notch.classList.toggle('eyes', m.conf['dodge-eyes'] !== false);
+      applyWidth(m, confWidth(m));
       S.near = state.near !== false;
       applyOutline(m, state.backdropDark);
       api.kys.state().then((k) => onKysState(m, k));
@@ -1613,7 +1672,7 @@
   // (a notification, an event such as the volume), or while open or hiding from the cursor.
   function applyAway(m) {
     const S = m.island;
-    const away = m.conf['auto-hide'] === true && !S.near && !S.expanded && !S.notif && !S.transient && !S.dodged;
+    const away = m.conf['auto-hide'] === true && !S.near && !S.expanded && !S.notif && !S.transient && !S.dodged && !S.moving;
     S.notch.el.classList.toggle('away', away);
   }
 
@@ -1636,25 +1695,100 @@
     render(m);
   }
 
-  // --- Moving the island ------------------------------------------------------------------------
-  // A long press on it, the menu's "Move the island" or the settings: the window covers the whole
-  // screen meanwhile (engine), and the island follows the cursor along the nearest edge of the
-  // screen, drawn to the middle as it passes it. A click drops it there ("position" and "along" in
-  // the config: everything is laid out again); a right click (or Escape) puts it back.
-  function startMove(m) {
+  // --- Placing and sizing the island ------------------------------------------------------------
+  // One mode for both: the menu's "Adjust the island" or the settings' "Adjust". The window covers
+  // the whole screen meanwhile (engine) and the island, outlined, waits to be grabbed:
+  // - by itself, it follows the cursor along the nearest edge of the screen (drawn to the middle as
+  //   it passes it) and, let go, stays there against that edge;
+  // - by a handle (its corners away from its edge), it grows or shrinks around the point that stays
+  //   put when its size changes (on its edge, at "along" of it), 50 to 200 %, drawn to its normal
+  //   size as it passes it.
+  // As many times as wanted, then a click beside it (Enter, "Done") keeps it all, written at once
+  // ("position", "along", "size": the engine lays its windows out again or zooms them), and a right
+  // click (Escape, "Cancel") puts it back as it was. A long press on it moves it at once: let go,
+  // it's kept.
+  const SIZE_MIN = 50, SIZE_MAX = 200; // % (the engine's range)
+  function startEdit(m, quick = false) {
     const S = m.island;
     if (!S || S.moving || S.kysFree) return;
     if (S.peeking) endPeek(m);
     setExpanded(m, false);
-    const from = { edge: islandEdge(), along: place.along };
-    S.moving = { to: null };
+    const notch = S.notch.el, body = document.body;
+    const was = { edge: islandEdge(), along: place.along, size: Math.round(Number(m.conf.size) || 100), width: confWidth(m) };
+    // drag: 'move', { at, d0, base } resizing, or { side, fixed, min } changing its length
+    let size = was.size, width = was.width, drag = null, live = true;
+    S.moving = {}; // meanwhile: no hiding, peeking, nor another move
+    applyAway(m);
     const veil = document.createElement('div');
     veil.className = 'move-veil';
-    veil.dataset.edge = from.edge;
-    veil.innerHTML = `<div class="move-hint">${esc(t('island.move_hint'))}</div>`;
-    document.body.append(veil);
-    document.body.classList.add('moving');
+    veil.dataset.edge = was.edge;
+    veil.innerHTML = `<div class="move-hint"><span class="edit-text"></span>${quick ? '' : `<span class="edit-keys">${esc(t('island.edit_keys'))}</span>`
+      + `<span class="edit-actions"><button data-edit="reset">${esc(t('island.edit_reset'))}</button>`
+      + `<button data-edit="done">${esc(t('island.edit_done'))}</button><button data-edit="cancel">${esc(t('island.edit_cancel'))}</button></span>`}</div>`;
+    const grips = document.createElement('div');
+    grips.className = 'edit-grips';
+    grips.innerHTML = quick ? '' : '<i></i><i></i><i class="end"></i><i class="end"></i>';
+    const hint = () => {
+      veil.querySelector('.edit-text').textContent = quick ? t('island.move_hint') : drag?.at ? `${size} %` : drag?.side ? `${width ?? drag.len} px`
+        : t('island.edit_hint', { size });
+      const reset = veil.querySelector('[data-edit=reset]');
+      if (reset) reset.hidden = size === 100 && width == null;
+    };
+    const preview = () => notch.style.setProperty('--resize-k', (size / was.size).toFixed(4)); // notch.css
+    /** The point of the island that stays put as its size changes (its zoom keeps it there too). */
+    const anchor = () => {
+      const r = notch.getBoundingClientRect(), a = place.along;
+      return { top: [r.left + a * r.width, r.top], bottom: [r.left + a * r.width, r.bottom], left: [r.left, r.top + a * r.height],
+        right: [r.right, r.top + a * r.height] }[islandEdge()];
+    };
+    /** Its handles: the corners away from its edge, just outside its outline. */
+    const corners = () => {
+      const r = notch.getBoundingClientRect(), o = 5, [x0, x1, y0, y1] = [r.left - o, r.right + o, r.top - o, r.bottom + o];
+      return { top: [[x0, y1], [x1, y1]], bottom: [[x0, y0], [x1, y0]], left: [[x1, y0], [x1, y1]], right: [[x0, y0], [x0, y1]] }[islandEdge()];
+    };
+    const flat = () => ['top', 'bottom'].includes(islandEdge()); // lying along the top or the bottom: its length runs across
+    /** Its two ends along its edge, where its length is changed (a bubble stays round: none). */
+    const ends = () => {
+      if (notch.dataset.shape === 'bubble') return null;
+      const r = notch.getBoundingClientRect(), o = 5;
+      return flat() ? [[r.left - o, (r.top + r.bottom) / 2], [r.right + o, (r.top + r.bottom) / 2]]
+        : [[(r.left + r.right) / 2, r.top - o], [(r.left + r.right) / 2, r.bottom + o]];
+    };
+    /** The handle under the cursor: 'size' (a corner), 'start' or 'end' (its ends), or null. */
+    const gripAt = (e) => {
+      if (quick) return null;
+      const near = [...corners().map((p) => ['size', p]), ...(ends() || []).map((p, i) => [i ? 'end' : 'start', p])]
+        .map(([kind, [x, y]]) => [kind, Math.hypot(e.clientX - x, e.clientY - y)])
+        .filter(([, d]) => d < 16)
+        .sort((a, b) => a[1] - b[1]);
+      return near[0]?.[0] ?? null;
+    };
+    const onGrip = (e) => gripAt(e) != null;
+    const onIsland = (e) => {
+      const r = notch.getBoundingClientRect(), pad = 8;
+      return e.clientX >= r.left - pad && e.clientX <= r.right + pad && e.clientY >= r.top - pad && e.clientY <= r.bottom + pad;
+    };
+    /** The resize arrows pointing away from where it grows from. */
+    const arrows = (e, [ax, ay]) => {
+      const d = (((Math.atan2(e.clientY - ay, e.clientX - ax) * 180) / Math.PI) % 180 + 180) % 180;
+      return d < 22.5 || d >= 157.5 ? 'ew-resize' : d < 67.5 ? 'nwse-resize' : d < 112.5 ? 'ns-resize' : 'nesw-resize';
+    };
+    // The handles follow it (it springs to new shapes, beckons...).
+    const track = () => {
+      if (!live) return;
+      const [c0, c1, e0, e1] = grips.children, en = ends();
+      [[c0, corners()[0]], [c1, corners()[1]], [e0, en?.[0]], [e1, en?.[1]]].forEach(([el, p]) => {
+        if (!el) return;
+        el.hidden = !p;
+        if (p) el.style.setProperty('translate', `${p[0]}px ${p[1]}px`);
+        el.classList.toggle('across', el.classList.contains('end') && !flat());
+      });
+      requestAnimationFrame(track);
+    };
+    /** The cursor for a handle: resize arrows (for its size, away from where it grows from). */
+    const gripCursor = (e, kind) => (kind === 'size' ? arrows(e, anchor()) : flat() ? 'ew-resize' : 'ns-resize');
     const follow = (e) => {
+      S.notch.finishFlights(); // closing when it was picked up: what's still flying lands at once, in the island
       const W = innerWidth, H = innerHeight, x = e.clientX, y = e.clientY;
       const d = { top: y, bottom: H - y, left: x, right: W - x };
       const edge = Object.keys(d).reduce((a, b) => (d[b] < d[a] ? b : a));
@@ -1662,27 +1796,122 @@
       if (Math.abs(along - 0.5) < 0.025) along = 0.5;
       veil.dataset.edge = edge;
       setPlace(edge, along);
-      S.moving.to = { edge, along };
       render(m);
+    };
+    const grab = (e) => {
+      body.classList.remove('edit-wait'); // no more beckoning: measured as it is
+      const kind = gripAt(e);
+      if (kind === 'size') {
+        const at = anchor();
+        drag = { at, d0: Math.max(24, Math.hypot(e.clientX - at[0], e.clientY - at[1])), base: size };
+        veil.style.cursor = arrows(e, at);
+      } else if (kind) {
+        // Its other end stays put (its "along" follows), as when resizing a window.
+        const r = notch.getBoundingClientRect(), [lo, hi] = flat() ? [r.left, r.right] : [r.top, r.bottom];
+        drag = { side: kind, fixed: kind === 'start' ? hi : lo, min: minWidth(S.notch.current), len: Math.round((hi - lo) / (size / was.size)) };
+        body.classList.add('edit-length');
+        veil.style.cursor = gripCursor(e, kind);
+      } else {
+        drag = 'move';
+        body.classList.add('edit-move');
+        veil.style.cursor = 'grabbing';
+        follow(e);
+      }
+      hint();
     };
     const events = {
-      pointermove: follow,
-      pointerup: (e) => { if (e.button === 0) done(true); },
+      pointerdown: (e) => {
+        if (e.button !== 0 || drag) return;
+        const b = e.target.closest?.('[data-edit]');
+        if (b?.dataset.edit === 'reset') {
+          // Back to its normal size and length (the length: as long as what it shows).
+          size = 100;
+          width = null;
+          applyWidth(m, null);
+          preview();
+          return hint();
+        }
+        if (b) return done(b.dataset.edit === 'done');
+        if (onGrip(e) || onIsland(e)) return grab(e);
+        done(true); // a click beside it: kept
+      },
+      pointermove: (e) => {
+        if (drag === 'move') return follow(e);
+        if (drag?.side) {
+          const k = size / was.size, p = flat() ? e.clientX : e.clientY, V = flat() ? innerWidth : innerHeight;
+          const len = Math.min(V - 1, Math.max(drag.min * k, drag.side === 'end' ? p - drag.fixed : drag.fixed - p));
+          width = Math.round(len / k);
+          applyWidth(m, width);
+          setPlace(islandEdge(), clamp01((drag.side === 'end' ? drag.fixed : drag.fixed - len) / (V - len)));
+          return hint();
+        }
+        if (drag) {
+          const d = Math.hypot(e.clientX - drag.at[0], e.clientY - drag.at[1]);
+          size = Math.round(Math.min(SIZE_MAX, Math.max(SIZE_MIN, (drag.base * d) / drag.d0)));
+          if (Math.abs(size - 100) <= 3) size = 100; // drawn to its normal size as it passes it
+          veil.style.cursor = arrows(e, drag.at);
+          preview();
+          return hint();
+        }
+        if (e.target.closest?.('[data-edit]')) return void (veil.style.cursor = '');
+        const kind = gripAt(e);
+        veil.style.cursor = kind ? gripCursor(e, kind) : onIsland(e) ? 'grab' : 'default';
+      },
+      pointerup: (e) => {
+        if (e.button !== 0 || !drag) return;
+        if (quick) return done(true);
+        drag = null; // stays there, at that size: more to do, or a click beside it
+        body.classList.remove('edit-move', 'edit-length');
+        const kind = gripAt(e);
+        veil.style.cursor = kind ? gripCursor(e, kind) : 'grab';
+        hint();
+      },
       contextmenu: (e) => { e.preventDefault(); done(false); },
-      keydown: (e) => { if (e.key === 'Escape') done(false); },
+      keydown: (e) => { if (e.key === 'Escape') done(false); else if (e.key === 'Enter') done(true); },
     };
-    const done = (drop) => {
+    const clear = () => {
+      body.classList.remove('editing', 'edit-wait', 'edit-move', 'edit-length');
+      notch.style.removeProperty('--resize-k');
+    };
+    const done = (keep) => {
+      live = false;
       for (const [type, fn] of Object.entries(events)) document.removeEventListener(type, fn, true);
       veil.remove();
-      document.body.classList.remove('moving');
-      const to = S.moving.to;
+      grips.remove();
       S.moving = null;
-      if (drop && to) return api.placeIsland(to.edge, to.along); // written in the config: it all reloads
-      setPlace(from.edge, from.along);
-      api.moveIsland(false);
+      applyAway(m);
+      const to = { edge: islandEdge(), along: place.along };
+      const moved = to.edge !== was.edge || to.along !== was.along, resized = size !== was.size, stretched = width !== was.width;
+      if (keep && (moved || resized || stretched)) {
+        S.notch.carried = false;
+        if (!resized) clear();
+        else {
+          // Shown at that size until its window has the new zoom (then the page reloads with it).
+          const zoom = matchMedia(`(resolution: ${devicePixelRatio}dppx)`);
+          const end = () => { clearTimeout(late); zoom.removeEventListener('change', end); clear(); };
+          const late = setTimeout(end, 4000);
+          zoom.addEventListener('change', end);
+        }
+        return api.placeIsland(to.edge, to.along, resized ? size : null, stretched ? width ?? 0 : null).catch(clear);
+      }
+      // Put back at once, still carried (no detour, nothing flying across the screen), then as usual.
+      setPlace(was.edge, was.along);
+      notch.style.removeProperty('--resize-k');
+      applyWidth(m, was.width);
       render(m);
+      getComputedStyle(notch).translate; // its place applied before its springs come back
+      S.notch.carried = false;
+      clear();
+      api.moveIsland(false);
     };
+    S.notch.carried = true; // nothing flying from one view to another meanwhile: it may go on moving
+    hint();
+    body.append(veil, grips);
+    body.classList.add('editing');
+    if (quick) { drag = 'move'; body.classList.add('edit-move'); } // already held: it follows at once
+    else body.classList.add('edit-wait'); // it beckons (notch.css)
     for (const [type, fn] of Object.entries(events)) document.addEventListener(type, fn, true);
+    track();
     api.moveIsland(true);
   }
 
@@ -1760,10 +1989,11 @@
     S.peekT = setTimeout(() => startPeek(m), rand(min, max) * hurry * 1000);
   }
 
-  /** `force`: to eat or play, even with peeking turned off. */
+  /** `force`: to eat or play, even with peeking turned off. Never while it's being moved, nor on a
+   *  side (one planned at the top could come due after it was moved there). */
   function canPeek(m, S, force = false) {
-    return (force || m.conf.peek !== false) && !S.expanded && !S.notif && !S.transient && !S.dodged && !S.kysFree && S.near !== false
-      && !document.hidden && String(S.notch.key).startsWith('compact');
+    return (force || m.conf.peek !== false) && !S.expanded && !S.notif && !S.transient && !S.dodged && !S.kysFree && !S.moving && !isSide()
+      && S.near !== false && !document.hidden && String(S.notch.key).startsWith('compact');
   }
 
   /** `opts`: `duration` (ms), `quiet` (no credit: not on its own), `force` (see canPeek). */
@@ -1872,8 +2102,7 @@
   /** Only a resting island hides from the cursor (not while open, showing a notification, or
    *  with Kys peeking: it can be approached slowly and caught). */
   function updateDodgeable(S) {
-    // Not on a side of the screen: hiding there (eyes, Kys) is made for the top and bottom edges.
-    S.notch.el.dataset.dodgeable = !S.expanded && !S.notif && !S.peeking && !S.kysFree && !S.moving && !isSide() ? '1' : '0';
+    S.notch.el.dataset.dodgeable = !S.expanded && !S.notif && !S.peeking && !S.kysFree && !S.moving ? '1' : '0';
   }
 
   // --- Kys, the eyes as a pet (kys.rs) -------------------------------------------------------------
@@ -2593,22 +2822,76 @@
   }
 
   // --- Views --------------------------------------------------------------------------------
+  // At rest on a side of the screen ("side-shape"): a round bubble (the time, the equalizer while
+  // something plays), or the island standing up, its text turned with it (notch.css). Opening it,
+  // events and notifications stay the same as anywhere else.
+  const sideShape = (m) => (!isSide() ? '' : m.conf['side-shape'] === 'vertical' ? 'vertical' : 'bubble');
+
   function compactView(m) {
     const md = activeMedia(m);
     const now = dayjs();
+    const shape = sideShape(m);
+    const dot = m.island.unread > 0 ? '<span class="n-dot"></span>' : '';
+    if (shape === 'bubble') {
+      return {
+        key: `compact|bubble|${md ? 'media' : 'idle'}|${m.island.unread > 0}`,
+        size: 'compact',
+        shape,
+        html: `<div class="n-compact n-bubble"><span class="n-time" data-morph="time"></span>${md ? eq(md.playing) : ''}${dot}</div>`,
+        update(el) {
+          el.querySelector('.n-time').textContent = now.format(m.conf['time-format']);
+          el.querySelector('.eq')?.classList.toggle('paused', !md?.playing);
+        },
+      };
+    }
+    // Standing up, the text is turned: no shared elements with the open island (they'd fly across sideways).
+    const morph = (name) => (shape ? '' : ` data-morph="${name}"`);
     return {
-      key: `compact|${md ? 'media' : 'idle'}|${m.island.unread > 0}`,
+      key: `compact|${shape}|${md ? 'media' : 'idle'}|${m.island.unread > 0}`,
       size: 'compact',
-      html: `<div class="n-compact${md ? ' with-media' : ''}">${md ? `<span class="n-slot">${trackInfo(md, 'sm', false)}</span>` : ''}`
-        + '<span class="n-time" data-morph="time"></span><span class="n-date" data-morph="date"></span>'
-        + `${md ? eq(md.playing) : ''}${m.island.unread > 0 ? '<span class="n-dot"></span>' : ''}</div>`,
+      shape,
+      html: `<div class="n-compact${shape ? ' n-vertical' : ''}${md ? ' with-media' : ''}">${md ? `<span class="n-slot">${trackInfo(md, 'sm', false)}</span>` : ''}`
+        + `<span class="n-time"${morph('time')}></span><span class="n-date"${morph('date')}></span>`
+        + `${md ? eq(md.playing, !shape) : ''}${dot}</div>`,
       update(el) {
         el.querySelector('.n-time').textContent = now.format(m.conf['time-format']);
         el.querySelector('.n-date').textContent = now.format(m.conf['date-format']);
         el.querySelector('.eq')?.classList.toggle('paused', !md?.playing);
         if (md) updateTrack(el, md, 'sm', false);
+        fitCompact(el);
       },
     };
+  }
+
+  function confWidth(m) { return Number(m.conf.width) > 0 ? Number(m.conf.width) : null; }
+  // The resting island's length along its edge, option "width" (px; null: as long as what it shows;
+  // a bubble stays round). What doesn't fit goes, the date first, then the album art and the
+  // equalizer: the time always stays (notch.css).
+  function applyWidth(m, width) {
+    const S = m.island, n = S.notch.el;
+    n.classList.toggle('fixed-w', width != null);
+    if (width != null) n.style.setProperty('--compact-w', `${Math.round(width)}px`);
+    else n.style.removeProperty('--compact-w');
+    if (S.notch.current) fitCompact(S.notch.current);
+    S.notch.resize();
+  }
+  function fitCompact(view) {
+    const c = view.querySelector(':scope > .n-compact:not(.n-bubble)');
+    if (!c) return;
+    c.classList.remove('no-date', 'no-media');
+    if (!c.closest('.notch.fixed-w')) return;
+    const standing = c.classList.contains('n-vertical');
+    const over = () => (standing ? c.scrollHeight > c.clientHeight + 1 : c.scrollWidth > c.clientWidth + 1);
+    for (const cls of ['no-date', 'no-media']) {
+      if (!over()) return;
+      c.classList.add(cls);
+    }
+  }
+  /** The shortest the resting island can be: its time and a little room around it. */
+  function minWidth(view) {
+    const c = view?.querySelector(':scope > .n-compact:not(.n-bubble)'), time = c?.querySelector('.n-time');
+    if (!time) return 60;
+    return Math.ceil((c.classList.contains('n-vertical') ? time.offsetHeight : time.offsetWidth) + 28);
   }
 
   function expandedView(m) {
