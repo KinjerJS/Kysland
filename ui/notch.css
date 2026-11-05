@@ -1167,8 +1167,9 @@ body.edit-wait .notch:not(.away) { animation: edit-beckon 1.2s ease-in-out infin
    it (its window is left out of screen captures meanwhile) and island.js draws that copy in
    .notch-glass, through the SVG filter #kys-glass: blurred, saturated, and bent at the rim by a
    displacement map computed for the island's shape (a glass bulging at its edges, refracting like
-   real glass). The same shape gives the rim light (--glass-spec), a tint darkens over light
-   backgrounds (--glass-dim) so the white text stays readable, and a light follows the cursor.
+   real glass). Its rim catches the light (drawn here, so it follows the island at any size while
+   it opens or closes), a tint darkens over light backgrounds (--glass-dim) so the white text
+   stays readable, and a light follows the cursor.
    Until the first copy arrives (or if Windows refuses to leave the window out of captures): a
    plain dark tint. Last in this file: these rules win over the classic ones of equal weight.
    Box shadows keep the same layers in every state so they animate between them. */
@@ -1244,15 +1245,39 @@ body.theme-glass .notch-light {
   transition: opacity .35s ease;
 }
 body.theme-glass .notch:hover .notch-light { opacity: 1; }
-/* Rim light, over everything (it only lights the edge). Drawn for the island and its padding. */
+/* The light on the rim, over everything (it only lights the edge), drawn by CSS so it follows the
+   island's shape at every step of its animations. Lit from above and a bit from the left: a thin
+   line along the edge, bright on top, softer on the far side, dim along the sides; a little glow
+   under the top edge; then, the clearer the glass (--glass-fresnel, --glass-sheen, island.js), a
+   band of reflection along the bezel (--glass-band: as wide as it is, island.js) and a sheen on
+   its dome. --glass-rim: how bright, per kind of glass. */
+body.theme-glass .notch-inner::before,
 body.theme-glass .notch-inner::after {
   content: '';
   position: absolute;
   inset: 0;
+  z-index: 1;
   border-radius: inherit;
   pointer-events: none;
-  background: var(--glass-spec, none) -24px -24px / calc(100% + 48px) calc(100% + 48px) no-repeat;
-  opacity: var(--glass-k, 1); /* fades with the bend while no maps fit the island (island.js, Glass) */
+}
+body.theme-glass .notch-inner::before {
+  background: linear-gradient(180deg, rgb(255 255 255 / var(--glass-sheen, 0)) 0%, rgb(255 255 255 / calc(var(--glass-sheen, 0) * .3)) 25%, transparent 55%);
+  box-shadow:
+    inset 0 2px 5px -1px rgb(255 255 255 / calc(.16 * var(--glass-rim, 1))),
+    inset 0 0 calc(var(--glass-band, 12px) * 2.2) rgb(255 255 255 / calc(.4 * var(--glass-fresnel, 0)));
+}
+body.theme-glass .notch-inner::after {
+  z-index: 2;
+  padding: 1.1px;
+  background: linear-gradient(165deg,
+    rgb(255 255 255 / calc(.62 * var(--glass-rim, 1))) 0%,
+    rgb(255 255 255 / calc(.3 * var(--glass-rim, 1))) 22%,
+    rgb(255 255 255 / calc(.13 * var(--glass-rim, 1))) 50%,
+    rgb(255 255 255 / calc(.2 * var(--glass-rim, 1))) 78%,
+    rgb(255 255 255 / calc(.36 * var(--glass-rim, 1))) 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
 }
 /* Kys's flight: the gooey filter makes the drop opaque; faded back to the glass's darkness. */
 body.theme-glass .eye-goo { opacity: .6; }

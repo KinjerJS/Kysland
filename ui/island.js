@@ -319,14 +319,18 @@
     });
   }
 
-  /** Displacement map (R, G: x, y shift around 128, half resolution) and lights (rim, reflection,
-   *  sheen) for an island of w×h with corner radii [tl, tr, br, bl], both covering the glass layer
-   *  (GLASS_PAD around it). `attached`: 'top' / 'bottom' / 'left' / 'right' when that side is the screen edge (no
-   *  bezel there). `L`: the level (GLASS_LEVELS). `make(w, h)`: a canvas that size. Self-contained
-   *  (but for GLASS_PAD and bezelShift): it also runs in a worker (GLASS_WORKER). */
+  /** The bezel's width (px): the rim of glass that bends what's behind it. */
+  const glassBezel = (w, h, L) => Math.max(4, Math.min(L.bezel[1], Math.min(w, h) * L.bezel[0]));
+
+  /** Displacement map (R, G: x, y shift around 128, half resolution) for an island of w×h with
+   *  corner radii [tl, tr, br, bl], covering the glass layer (GLASS_PAD around it). `attached`:
+   *  'top' / 'bottom' / 'left' / 'right' when that side is the screen edge (no bezel there). `L`:
+   *  the level (GLASS_LEVELS). `make(w, h)`: a canvas that size. Self-contained (but for GLASS_PAD,
+   *  bezelShift and glassBezel): it also runs in a worker (GLASS_WORKER). The light on its rim is
+   *  drawn by CSS (notch.css), so it follows the island at any size. */
   function glassMaps(w, h, radii, attached, L, make) {
     const P = GLASS_PAD, W = w + 2 * P, H = h + 2 * P;
-    const B = Math.max(4, Math.min(L.bezel[1], Math.min(w, h) * L.bezel[0])); // bezel width
+    const B = glassBezel(w, h, L);
     const shifts = bezelShift(B, L.thick);
     const max = Math.max(...shifts);
     const top = attached === 'top' ? -1e4 : 0, bottom = attached === 'bottom' ? h + 1e4 : h;
@@ -342,13 +346,8 @@
       else if (qx > qy) { g.d = qx - r; g.nx = sx; g.ny = 0; }
       else { g.d = qy - r; g.nx = 0; g.ny = sy; }
     };
-    const canvas = (cw, ch) => {
-      const c = make(cw, ch);
-      const ctx = c.getContext('2d');
-      return { c, ctx, img: ctx.createImageData(cw, ch) };
-    };
     const dw = Math.ceil(W / 2), dh = Math.ceil(H / 2);
-    const disp = canvas(dw, dh);
+    const c = make(dw, dh), ctx = c.getContext('2d'), img = ctx.createImageData(dw, dh);
     for (let j = 0, k = 0; j < dh; j++) {
       for (let i = 0; i < dw; i++, k += 4) {
         at(i * 2 + 1 - P, j * 2 + 1 - P);
@@ -357,53 +356,49 @@
           const s = shifts[Math.round((-g.d / B) * 127)] / max;
           vx = -g.nx * s; vy = -g.ny * s; // looks further in
         }
-        disp.img.data.set([128 + vx * 127, 128 + vy * 127, 128, 255], k);
+        img.data.set([128 + vx * 127, 128 + vy * 127, 128, 255], k);
       }
     }
-    disp.ctx.putImageData(disp.img, 0, 0);
-    // Lights: a thin rim all around, bright where the edge faces the light (from above, a bit from
-    // the left) and softer on the opposite side, a little glow inside; then, the clearer the glass,
-    // a band of reflection along the bezel (strongest where it's steep) and a sheen on its dome.
-    const sw = Math.ceil(W), sh = Math.ceil(H);
-    const spec = canvas(sw, sh);
-    const lx = -0.45, ly = -0.89;
-    const deep = L.fresnel || L.sheen ? -Infinity : -12; // how far inside it's worth looking
-    for (let j = 0, k = 0; j < sh; j++) {
-      const v = (j + 0.5 - P) / h; // 0 at the top of the island, 1 at its bottom
-      const dome = L.sheen * Math.max(0, 1 - v / 0.55) ** 2;
-      for (let i = 0; i < sw; i++, k += 4) {
-        at(i + 0.5 - P, j + 0.5 - P);
-        if (g.d > 0.7 || g.d < deep) continue;
-        const depth = Math.max(0, -g.d), facing = g.nx * lx + g.ny * ly;
-        const edge = Math.min(1, 0.7 - g.d); // antialiased outer edge
-        const line = Math.exp(-depth / 0.9) * (0.2 + 0.75 * Math.max(0, facing) ** 1.4 + 0.4 * Math.max(0, -facing) ** 2) * L.rim;
-        const glow = Math.exp(-depth / 4.5) * 0.14 * Math.max(0, facing) * L.rim;
-        const band = L.fresnel * Math.exp(-depth / (B * 0.32)) * (0.45 + 0.55 * Math.abs(facing));
-        spec.img.data.set([255, 255, 255, Math.min(255, edge * (line + glow + band + dome) * 255)], k);
-      }
-    }
-    spec.ctx.putImageData(spec.img, 0, 0);
-    return { disp: disp.c, spec: spec.c, scale: 2 * max };
+    ctx.putImageData(img, 0, 0);
+    return { disp: c, scale: 2 * max };
   }
 
-  // The maps are drawn in a worker: a new shape's take tens of ms, which would stall the island's
-  // animation right when it starts opening.
-  const GLASS_WORKER = `'use strict';\nconst GLASS_PAD = ${GLASS_PAD};\n${bezelShift}\n${glassMaps}\n`
+  /** #kys-glass for a level: blur, then the bend (once per color when the glass splits them),
+   *  then saturation. */
+  function glassFilter(L) {
+    const bend = (id, result) => `<feDisplacementMap id="${id}" in="blur" in2="map" scale="0" xChannelSelector="R" yChannelSelector="G" result="${result}"/>`;
+    // Keeps one color channel (and the alpha).
+    const only = (c) => [0, 1, 2, 3].map((row) => [0, 1, 2, 3, 4].map((col) => (row === col && (row === c || row === 3) ? 1 : 0)).join(' ')).join('  ');
+    return '<svg width="0" height="0" style="position:absolute" aria-hidden="true">'
+      + '<filter id="kys-glass" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">'
+      + `<feGaussianBlur in="SourceGraphic" stdDeviation="${L.blur}" result="blur"/>`
+      + '<feImage id="kys-glass-map" x="0" y="0" width="1" height="1" preserveAspectRatio="none" result="map"/>'
+      + (L.dispersion
+        ? bend('kys-glass-r', 'r0') + bend('kys-glass-g', 'g0') + bend('kys-glass-b', 'b0')
+          + `<feColorMatrix in="r0" values="${only(0)}" result="r"/><feColorMatrix in="g0" values="${only(1)}" result="g"/>`
+          + `<feColorMatrix in="b0" values="${only(2)}" result="b"/>`
+          + '<feBlend in="r" in2="g" mode="screen" result="rg"/><feBlend in="rg" in2="b" mode="screen" result="bent"/>'
+        : bend('kys-glass-r', 'bent'))
+      + `<feColorMatrix in="bent" type="saturate" values="${L.saturate}"/></filter></svg>`;
+  }
+
+  // The maps are drawn in a worker: a new shape's take a few ms each, and the island asks for a
+  // dozen of them as it starts opening (glassPath): that would stall its animation.
+  const GLASS_WORKER = `'use strict';\nconst GLASS_PAD = ${GLASS_PAD};\nconst glassBezel = ${glassBezel};\n${bezelShift}\n${glassMaps}\n`
     + `onmessage = async ({ data: s }) => {
       const m = glassMaps(s.w, s.h, s.radii, s.attached, s.L, (w, h) => new OffscreenCanvas(w, h));
-      const [disp, spec] = await Promise.all([m.disp.convertToBlob(), m.spec.convertToBlob()]);
-      postMessage({ key: s.key, disp, spec, scale: m.scale });
+      postMessage({ key: s.key, disp: await m.disp.convertToBlob(), scale: m.scale });
     };`;
 
   /** Glass maps by shape, ready to use: drawn in GLASS_WORKER (or here, later, without a worker)
    *  and decoded before they're handed out. A map that isn't decoded yet makes the filter draw
-   *  nothing: the glass would vanish for a few frames. The last 24 are kept (the island keeps
-   *  going back to the same few shapes), except those in use (`keep`). */
+   *  nothing: the glass would vanish for a few frames. The last 128 are kept (the island keeps
+   *  going the same ways: the same few shapes and those in between), except those in use (`keep`). */
   class GlassMaps {
     constructor(L) {
       this.L = L;
-      this.ready = new Map(); // key → { key, w, h, disp, spec, scale }, least recently used first
-      this.waiting = new Map(); // key → { promise, done }
+      this.ready = new Map(); // key → { key, w, h, disp, scale }, least recently used first
+      this.waiting = new Map(); // key → { promise, done, shape }
       this.keep = new Set();
       try {
         this.worker = new Worker(URL.createObjectURL(new Blob([GLASS_WORKER], { type: 'text/javascript' })));
@@ -427,17 +422,18 @@
       if (this.waiting.has(key)) return this.waiting.get(key).promise;
       let done;
       const promise = new Promise((resolve) => { done = resolve; }).then(async (m) => {
-        const disp = URL.createObjectURL(m.disp), spec = URL.createObjectURL(m.spec);
-        await Promise.all([disp, spec].map((src) => { const img = new Image(); img.src = src; return img.decode().catch(() => {}); }));
-        const e = { key, w: s.w, h: s.h, disp, spec, scale: m.scale };
+        const disp = URL.createObjectURL(m.disp);
+        const img = new Image();
+        img.src = disp;
+        await img.decode().catch(() => {});
+        const e = { key, w: s.w, h: s.h, disp, scale: m.scale };
         this.waiting.delete(key);
         this.ready.set(key, e);
         for (const old of this.ready.values()) {
-          if (this.ready.size <= 24) break;
+          if (this.ready.size <= 128) break;
           if (this.keep.has(old.key)) continue;
           this.ready.delete(old.key);
           URL.revokeObjectURL(old.disp);
-          URL.revokeObjectURL(old.spec);
         }
         return e;
       });
@@ -449,32 +445,34 @@
 
     /** Without a worker: drawn here, on a later turn. */
     draw(key, s) {
-      setTimeout(async () => {
+      setTimeout(() => {
         const m = glassMaps(s.w, s.h, s.radii, s.attached, this.L, (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h }));
-        const blob = (c) => new Promise((resolve) => c.toBlob(resolve));
-        const [disp, spec] = await Promise.all([blob(m.disp), blob(m.spec)]);
-        this.waiting.get(key)?.done({ disp, spec, scale: m.scale });
+        m.disp.toBlob((disp) => this.waiting.get(key)?.done({ disp, scale: m.scale }));
       });
     }
   }
 
-  /** #kys-glass for a level: blur, then the bend (once per color when the glass splits them),
-   *  then saturation. */
-  function glassFilter(L) {
-    const bend = (id, result) => `<feDisplacementMap id="${id}" in="blur" in2="map" scale="0" xChannelSelector="R" yChannelSelector="G" result="${result}"/>`;
-    // Keeps one color channel (and the alpha).
-    const only = (c) => [0, 1, 2, 3].map((row) => [0, 1, 2, 3, 4].map((col) => (row === col && (row === c || row === 3) ? 1 : 0)).join(' ')).join('  ');
-    return '<svg width="0" height="0" style="position:absolute" aria-hidden="true">'
-      + '<filter id="kys-glass" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">'
-      + `<feGaussianBlur in="SourceGraphic" stdDeviation="${L.blur}" result="blur"/>`
-      + '<feImage id="kys-glass-map" x="0" y="0" width="1" height="1" preserveAspectRatio="none" result="map"/>'
-      + (L.dispersion
-        ? bend('kys-glass-r', 'r0') + bend('kys-glass-g', 'g0') + bend('kys-glass-b', 'b0')
-          + `<feColorMatrix in="r0" values="${only(0)}" result="r"/><feColorMatrix in="g0" values="${only(1)}" result="g"/>`
-          + `<feColorMatrix in="b0" values="${only(2)}" result="b"/>`
-          + '<feBlend in="r" in2="g" mode="screen" result="rg"/><feBlend in="rg" in2="b" mode="screen" result="bent"/>'
-        : bend('kys-glass-r', 'bent'))
-      + `<feColorMatrix in="bent" type="saturate" values="${L.saturate}"/></filter></svg>`;
+  const STEP = 1.25; // size ratio between two shapes on the island's way (glassPath)
+
+  /** Shapes on the way from a to b (opening, closing, a notification...): its size and its corners
+   *  move together (the same spring, notch.css), so these are points of a straight line, each
+   *  within STEP of the next. Wherever the island is on its way, one of them nearly fits it: the
+   *  glass bends right at its rim all along, rather than through maps stretched far. Laid out from
+   *  the smaller end whichever way it goes: closing reuses the maps of opening. */
+  function glassPath(a, b) {
+    if (a.w * a.h > b.w * b.h) return glassPath(b, a).reverse();
+    const lerp = (x, y, t) => x + (y - x) * t;
+    const at = (t) => ({ w: Math.round(lerp(a.w, b.w, t)), h: Math.round(lerp(a.h, b.h, t)), radii: a.radii.map((r, i) => lerp(r, b.radii[i], t)), attached: null });
+    const far = (p, q) => Math.max(p.w / q.w, q.w / p.w, p.h / q.h, q.h / p.h) > STEP;
+    const path = [a];
+    let prev = a;
+    for (let i = 1; i <= 200; i++) {
+      const s = at(i / 200);
+      if (far(s, path[path.length - 1]) && prev !== path[path.length - 1]) path.push(prev);
+      prev = s;
+    }
+    path.push(b);
+    return path;
   }
 
   class Glass {
@@ -492,11 +490,16 @@
       document.body.insertAdjacentHTML('beforeend', glassFilter(this.L));
       this.map = document.getElementById('kys-glass-map');
       this.bends = ['r', 'g', 'b'].map((c) => document.getElementById(`kys-glass-${c}`)).filter(Boolean);
+      // The light on its rim, drawn by CSS at any size (notch.css): how bright for this level.
+      const s = notch.el.style;
+      s.setProperty('--glass-rim', this.L.rim);
+      s.setProperty('--glass-fresnel', this.L.fresnel);
+      s.setProperty('--glass-sheen', this.L.sheen);
       this.store = new GlassMaps(this.L);
       this.level = level || 'frosted';
+      this.path = []; // the shapes on the island's way (glassPath), or the one it settled in
       this.shown = null; // the maps in the filter
-      this.goal = null; // { shape, maps } where the island is going, and its maps once ready
-      this.k = 1; // how much the glass bends and its rim shines (0: flat, while no maps fit)
+      this.k = 1; // how much the glass bends (0: flat, while no maps fit)
       this.kTo = 1;
       this.tween = 0;
       this.settleT = 0;
@@ -511,83 +514,89 @@
       return { w, h, radii: radii.map((r) => Math.min(r, w / 2, h / 2)), attached };
     }
 
-    /** The island is going to w×h (Notch.resize). Growing, it takes that shape's maps as soon as
-     *  they're ready, stretched along meanwhile; until then it goes flat once it outgrows the maps
-     *  it has (follow), rather than bending through them (their rim would show inside it).
-     *  Getting smaller, its maps stay: their rim at its edge, then past it, out of sight, until it's
-     *  nearly down to its new size (follow). Maps of a shape in between would have the wrong rim. */
+    /** The island's shape right now (its corners as notch.css has them at this point). */
+    now(attached = null) {
+      const el = this.notch.el, cs = getComputedStyle(el);
+      const radii = [cs.borderTopLeftRadius, cs.borderTopRightRadius, cs.borderBottomRightRadius, cs.borderBottomLeftRadius].map((r) => parseFloat(r) || 0);
+      return this.shape(el.offsetWidth, el.offsetHeight, radii, attached);
+    }
+
+    /** The island is going to w×h (Notch.resize): maps for the shapes on its way, the first ones
+     *  first (the worker takes them in order), each shown as the island gets there (follow). */
     target(w, h, size) {
       const el = this.notch.el;
       // A bubble is round; otherwise the radii of notch.css, half the thinner side at most (standing up).
       const r = el.dataset.shape === 'bubble' ? Math.min(w, h) / 2 : glassRadius(size, Math.min(w, h));
-      const shape = this.shape(w, h, [r, r, r, r], null);
-      if (!shape) return;
-      const goal = this.goal = { shape, maps: this.store.get(shape) || null };
-      this.store.keep = new Set([this.shown?.key, GlassMaps.key(shape)]);
-      const cur = this.shown;
-      const growing = !cur || shape.w > cur.w * FIT || shape.h > cur.h * FIT;
-      if (goal.maps) return growing ? this.show(goal.maps) : this.follow();
-      this.store.request(shape).then((maps) => {
-        if (this.goal !== goal) return;
-        goal.maps = maps;
-        if (growing) this.show(maps); else this.follow();
-      });
+      const to = this.shape(w, h, [r, r, r, r], null);
+      if (!to) return;
+      const from = this.now(); // still where it was: its transition only starts
+      const near = !from || Math.max(from.w / to.w, to.w / from.w, from.h / to.h, to.h / from.h) <= STEP;
+      this.path = near ? [to] : glassPath(from, to);
+      this.keepPath();
+      for (const s of this.path) this.store.request(s).then(() => this.follow());
+      if (!near) this.remember(from, to); // not a nudge (a few px, the end of a bounce): those would push the real ways out
+      this.follow();
     }
 
-    /** Each step of an animation, the maps stretch with the layer (getting smaller: its new ones
-     *  once it's nearly down to their size). Maps of a shape much smaller than the island would draw
-     *  their rim inside it: it goes flat until some fit (growing into a shape whose maps are being
-     *  drawn, or past it). Once the island stops, maps drawn for the shape it ended in (hiding from
-     *  the cursor: against the edge, other corners). */
+    keepPath() { this.store.keep = new Set([...this.path.map(GlassMaps.key), this.shown?.key]); }
+
+    /** Each step of an animation: the maps of the shape on its way nearest to where the island is,
+     *  stretched to it. If none is ready that fits it (a way it never went), the glass goes flat
+     *  for that moment rather than bending through maps stretched far (their rim would show inside
+     *  it); the light on its rim stays (CSS). Once the island stops, maps drawn for the shape it
+     *  ended in (hiding from the cursor: against the edge, other corners). */
     follow() {
+      const el = this.notch.el, w = el.offsetWidth, h = el.offsetHeight;
+      if (!w || !h) return;
       this.map.setAttribute('width', this.layer.offsetWidth);
       this.map.setAttribute('height', this.layer.offsetHeight);
-      const g = this.goal, el = this.notch.el, w = el.offsetWidth, h = el.offsetHeight;
-      const fit = (m) => m && w <= m.w * FIT && h <= m.h * FIT;
-      if (g?.maps && g.maps !== this.shown && fit(g.maps)) this.show(g.maps);
-      this.bendTo(fit(this.shown) ? 1 : 0, 90);
+      el.style.setProperty('--glass-band', `${(glassBezel(w, h, this.L) * 0.32).toFixed(1)}px`); // the reflection along the bezel (notch.css)
+      const off = (m) => Math.max(Math.abs(Math.log(w / m.w)), Math.abs(Math.log(h / m.h)));
+      let best = this.shown && off(this.shown) < 0.02 ? this.shown : null; // still the one: no swap
+      if (!best) {
+        for (const s of this.path) {
+          const m = this.store.ready.get(GlassMaps.key(s));
+          if (m && (!best || off(m) < off(best))) best = m;
+        }
+        if (this.shown && (!best || off(this.shown) < off(best))) best = this.shown;
+      }
+      const fits = best && w <= best.w * FIT && h <= best.h * FIT;
+      if (fits && best !== this.shown) this.show(best);
+      this.bendTo(fits ? 1 : 0, fits ? 180 : 0); // maps that don't fit bend it wrong: flat at once
       clearTimeout(this.settleT);
       this.settleT = setTimeout(() => this.settle(), 160);
     }
 
     settle() {
       const el = this.notch.el;
-      const cs = getComputedStyle(el);
-      const radii = [cs.borderTopLeftRadius, cs.borderTopRightRadius, cs.borderBottomRightRadius, cs.borderBottomLeftRadius].map((r) => parseFloat(r) || 0);
-      const shape = this.shape(el.offsetWidth, el.offsetHeight, radii, el.classList.contains('dodged') ? islandEdge() : null);
+      const shape = this.now(el.classList.contains('dodged') ? islandEdge() : null);
       if (!shape) return;
-      const goal = this.goal = { shape, maps: this.store.get(shape) || null };
-      this.store.keep = new Set([this.shown?.key, GlassMaps.key(shape)]);
-      this.remember(shape);
-      if (goal.maps) return this.show(goal.maps);
-      this.store.request(shape).then((maps) => { if (this.goal === goal) this.show(goal.maps = maps); });
+      this.path = [shape];
+      this.keepPath();
+      this.store.request(shape).then((maps) => { if (this.path[0] === shape) this.show(maps); });
     }
 
-    /** Puts maps in the filter (decoded: no gap) and brings the bend back if it went flat. */
+    /** Puts maps in the filter (decoded: no gap), bent as far as it is now. */
     show(maps) {
-      if (maps !== this.shown) {
-        this.shown = maps;
-        this.store.keep.add(maps.key);
-        this.map.setAttribute('href', maps.disp);
-        this.notch.el.style.setProperty('--glass-spec', `url(${maps.spec})`);
-        this.bend();
-      }
-      this.bendTo(1);
+      if (maps === this.shown) return;
+      this.shown = maps;
+      this.store.keep.add(maps.key);
+      this.map.setAttribute('href', maps.disp);
+      this.bend();
     }
 
     bend() {
       const s = (this.shown?.scale || 0) * this.k;
       this.bends.forEach((b, i) => b.setAttribute('scale', (s * (1 + i * this.L.dispersion)).toFixed(1)));
-      this.notch.el.style.setProperty('--glass-k', this.k.toFixed(3)); // the rim light (notch.css)
     }
 
-    /** Eases the bend (and the rim light) to k: going flat while no maps fit, back once they do. */
+    /** Eases the bend to k: going flat while no maps fit, back once some do. */
     bendTo(k, ms = 180) {
       if (this.kTo === k) return; // on its way already
       this.kTo = k;
       cancelAnimationFrame(this.tween);
+      if (!ms) { this.k = k; return this.bend(); }
       const k0 = this.k, t0 = performance.now();
-      if (k0 === k) return;
       const step = (now) => {
         const u = Math.min(1, (now - t0) / ms);
         this.k = k0 + (k - k0) * (1 - (1 - u) ** 3);
@@ -597,21 +606,24 @@
       this.tween = requestAnimationFrame(step);
     }
 
-    // The shapes it settles in are remembered (per kind of glass), and their maps drawn again a
-    // little after it starts: even the first opening has them ready.
-    remember(s) {
+    // The ways the island goes (from a shape to another) are remembered, per kind of glass, and the
+    // maps for them drawn again a little after it starts: from then on, it bends right all along.
+    remember(a, b) {
+      if (a.w * a.h > b.w * b.h) [a, b] = [b, a]; // either way, the same shapes (glassPath)
       try {
-        const name = `glass-shapes-${this.level}`, key = GlassMaps.key(s);
-        const list = (JSON.parse(localStorage.getItem(name)) || []).filter((x) => GlassMaps.key(x) !== key);
-        list.unshift(s);
-        localStorage.setItem(name, JSON.stringify(list.slice(0, 12)));
+        const name = `glass-ways-${this.level}`, key = `${GlassMaps.key(a)}>${GlassMaps.key(b)}`;
+        const list = (JSON.parse(localStorage.getItem(name)) || []).filter((x) => `${GlassMaps.key(x[0])}>${GlassMaps.key(x[1])}` !== key);
+        list.unshift([a, b]);
+        localStorage.setItem(name, JSON.stringify(list.slice(0, 6)));
       } catch { /* no storage: nothing remembered */ }
     }
 
     async prewarm() {
       let list = [];
-      try { list = JSON.parse(localStorage.getItem(`glass-shapes-${this.level}`)) || []; } catch { /* nothing remembered */ }
-      for (const s of list) await this.store.request(s); // one at a time: what the island asks for meanwhile waits for one at most
+      try { list = JSON.parse(localStorage.getItem(`glass-ways-${this.level}`)) || []; } catch { /* nothing remembered */ }
+      for (const [a, b] of list) {
+        for (const s of glassPath(a, b)) await this.store.request(s); // one at a time: what the island asks for meanwhile waits for one at most
+      }
     }
 
     /** What's under the island (engine): RGBA, pw×ph pixels for x, y, w, h (CSS pixels of the window),

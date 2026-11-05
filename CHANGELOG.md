@@ -2,6 +2,13 @@
 
 What changed in each version. The section of a version is also the text of its GitHub release.
 
+## 0.6.9 — 2026-11-05
+
+- **Liquid Glass: the crystal rim all the way while the island opens and closes.**
+  - The light on its rim (the bright line along the edge, the reflection along the bezel, the sheen on its dome) is now drawn so that it follows the island at every step of its animations, at any size: it no longer fades out while the island changes size. At rest, it looks the same as before.
+  - The bend of the glass at its rim follows too: the island now has its glass ready for the sizes in between, and takes the right one at each moment, opening as well as closing.
+  - The very first time it goes a way (a shape it never took), the glass stays flat for that moment while its bend is worked out, then it's remembered: from then on, and after Kysland restarts, it bends right all along.
+
 ## 0.6.8 — 2026-11-05
 
 - **Liquid Glass, smooth when the island grows or shrinks**: opening it, closing it, a notification coming in.
