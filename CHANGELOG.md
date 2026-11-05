@@ -2,6 +2,15 @@
 
 What changed in each version. The section of a version is also the text of its GitHub release.
 
+## 0.6.8 — 2026-11-05
+
+- **Liquid Glass, smooth when the island grows or shrinks**: opening it, closing it, a notification coming in.
+  - The glass no longer vanishes for a moment at the start of the animation.
+  - A ring of glass of the wrong shape no longer shows inside it halfway.
+  - It no longer stutters while the bend of a new shape is worked out: that's done aside now, and the island waits for it with its glass going flat for an instant, rather than bent the wrong way.
+  - The shapes it takes are remembered, and their glass is ready a moment after Kysland starts: from then on, opening it doesn't even go flat.
+  - What's behind the island is now copied as soon as it starts growing, so its new room is glass right away, a notification's too.
+
 ## 0.6.7 — 2026-11-05
 
 - **Things that change now move instead of jumping**:

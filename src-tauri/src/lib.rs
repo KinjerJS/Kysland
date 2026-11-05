@@ -17,7 +17,7 @@ use i18n::{t, tf};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use tauri::menu::{CheckMenuItem, IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
@@ -557,6 +557,11 @@ fn background_loop(app: AppHandle) {
 /// what's behind them (and screenshots, recordings and screen sharing don't show Kysland). If
 /// Windows refuses, no copies: they would show the island itself. Half resolution (the glass
 /// blurs it anyway), sent only when it changed, checked less often while nothing moves.
+/// Set when an island's box changes (set_hit_rects): the glass loop copies the screen around it
+/// right away, rather than finishing its nap (longer while nothing moves), so the copy is there as
+/// the island grows into its new room.
+static GLASS_WAKE: AtomicBool = AtomicBool::new(false);
+
 fn glass_loop(app: AppHandle) {
     /// Past the island, so the blur and the bend have something to work with (more than GLASS_PAD).
     const MARGIN: f64 = 32.0;
@@ -566,7 +571,13 @@ fn glass_loop(app: AppHandle) {
         let mut excluded: std::collections::HashMap<isize, bool> = std::collections::HashMap::new();
         let mut last: std::collections::HashMap<String, (i32, i32, i32, i32, Vec<u8>)> = std::collections::HashMap::new();
         let mut still = 0u32; // checks in a row without any change
+        let mut nap = Duration::from_millis(80);
         loop {
+            let since = Instant::now();
+            while since.elapsed() < nap {
+                if GLASS_WAKE.swap(false, Ordering::Relaxed) { still = 0; break; }
+                std::thread::sleep(Duration::from_millis(10));
+            }
             let (glass, edge, along, bars) = with(|s| {
                 let glass = config::island_conf(&s.cfg)["theme"] == "glass";
                 let bars: Vec<(String, isize, f64, Option<Rect>, bool, bool)> = s.bars.iter()
@@ -574,7 +585,7 @@ fn glass_loop(app: AppHandle) {
                 (glass, edge_of(&s.cfg).to_owned(), along_of(&s.cfg), bars)
             });
             let hover = bars.iter().any(|b| b.4);
-            std::thread::sleep(Duration::from_millis(if !glass { 500 } else if still > 25 && !hover { 250 } else { 80 }));
+            nap = Duration::from_millis(if !glass { 500 } else if still > 25 && !hover { 250 } else { 80 });
             excluded.retain(|h, _| bars.iter().any(|b| b.1 == *h));
             for b in &bars {
                 if excluded.get(&b.1).copied() == Some(glass) || (!glass && !excluded.contains_key(&b.1)) { continue; }
@@ -782,6 +793,7 @@ async fn notifications() -> Vec<Value> {
 #[tauri::command]
 fn set_hit_rects(window: WebviewWindow, rects: Vec<Rect>, notch: Option<Rect>, dodgeable: bool, grab: bool, watch: bool) {
     with(|s| if let Some(b) = s.bars.iter_mut().find(|b| b.label == window.label()) {
+        if b.notch != notch { GLASS_WAKE.store(true, Ordering::Relaxed); }
         b.rects = rects;
         b.notch = notch;
         b.dodgeable = dodgeable;

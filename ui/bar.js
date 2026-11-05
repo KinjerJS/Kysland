@@ -136,14 +136,28 @@ const HIT_SELECTOR = '.modules-left, .modules-center, .modules-right, #popup.vis
 // The island's own rect also goes along: the engine looks at the screen around it (outline)
 // and at how the cursor approaches it (dodging).
 let lastHitRects = '';
+/** The island's box, with the room it's growing into (opening, a notification...): the engine's
+ *  copy of the screen for the Liquid Glass is there before the island gets there. It grows from
+ *  its fixed point: its screen edge, and the point at "along" of its length (notch.css). */
+function notchRect(el) {
+  const r = el.getBoundingClientRect();
+  const w = parseFloat(el.style.width) || 0, h = parseFloat(el.style.height) || 0; // where its transition goes (Notch.resize)
+  if (document.body.classList.contains('editing') || (w <= r.width + 1 && h <= r.height + 1)) return r;
+  const along = parseFloat(document.documentElement.style.getPropertyValue('--along')) || 0.5;
+  const edge = ['bottom', 'left', 'right'].find((e) => document.body.classList.contains(`pos-${e}`)) || 'top';
+  const tw = Math.max(w, r.width), th = Math.max(h, r.height);
+  const left = edge === 'left' ? r.left : edge === 'right' ? r.right - tw : r.left + along * (r.width - tw);
+  const top = edge === 'top' ? r.top : edge === 'bottom' ? r.bottom - th : r.top + along * (r.height - th);
+  return { left, top, width: tw, height: th };
+}
 function reportHitRects() {
   const box = (r) => ({ x: Math.floor(r.left), y: Math.floor(r.top), w: Math.ceil(r.width), h: Math.ceil(r.height) });
   const rects = [...document.querySelectorAll(HIT_SELECTOR)]
-    .map((el) => el.getBoundingClientRect())
+    .map((el) => (el.classList.contains('notch') ? notchRect(el) : el.getBoundingClientRect()))
     .filter((r) => r.width > 0 && r.height > 0)
     .map(box);
   const notchEl = document.querySelector('.notch');
-  const notch = notchEl ? box(notchEl.getBoundingClientRect()) : null;
+  const notch = notchEl ? box(notchRect(notchEl)) : null;
   const dodgeable = notchEl?.dataset.dodgeable === '1';
   const grab = (notchEl?.classList.contains('roaming') || notchEl?.dataset.grab === '1') ?? false; // eyes that can be clicked, or grabbed
   const watch = notchEl?.classList.contains('peek') ?? false; // peeking eyes want the cursor
@@ -151,6 +165,7 @@ function reportHitRects() {
   if (json !== lastHitRects) { lastHitRects = json; api.setHitRects(rects, notch, dodgeable, grab, watch); }
 }
 setInterval(reportHitRects, 100); // also follows animations (notch expanding, popups)
+window.reportHitRects = reportHitRects; // right away when the island starts changing size (island.js, Notch.resize)
 
 // Cursor exit detected by the engine: fire the "mouseleave" events the page missed.
 api.on('pointer-left', () => {

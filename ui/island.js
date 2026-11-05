@@ -261,9 +261,11 @@
     resize() {
       if (!this.current) return;
       const w = this.current.offsetWidth + (this.extra || 0), h = this.current.offsetHeight; // extra: room for peeking eyes
+      const changed = this.el.style.width !== `${w}px` || this.el.style.height !== `${h}px`;
       this.el.style.width = `${w}px`;
       this.el.style.height = `${h}px`;
       this.onResize?.(w, h, this.el.dataset.size); // theme glass: the maps for that shape
+      if (changed) requestAnimationFrame(() => window.reportHitRects?.()); // the engine copies the screen where it's going (bar.js), told next frame: no extra layout now
     }
   }
 
@@ -290,6 +292,7 @@
   }
 
   const GLASS_PAD = 24; // .notch-glass reaches this far past the island (notch.css)
+  const FIT = 1.15; // how far maps can be stretched over a bigger island before their rim shows inside it
   const glassRadius = (size, h) => (size === 'expanded' ? 34 : size === 'card' ? 28 : Math.min(20, h / 2)); // notch.css
   // Option "glass": how much it looks like a real piece of glass. Frosted: well blurred, a thin
   // bent rim. Crystal: nearly clear, a thick bulging rim (the whole height of the resting capsule)
@@ -319,8 +322,9 @@
   /** Displacement map (R, G: x, y shift around 128, half resolution) and lights (rim, reflection,
    *  sheen) for an island of w×h with corner radii [tl, tr, br, bl], both covering the glass layer
    *  (GLASS_PAD around it). `attached`: 'top' / 'bottom' / 'left' / 'right' when that side is the screen edge (no
-   *  bezel there). `L`: the level (GLASS_LEVELS). */
-  function glassMaps(w, h, radii, attached, L) {
+   *  bezel there). `L`: the level (GLASS_LEVELS). `make(w, h)`: a canvas that size. Self-contained
+   *  (but for GLASS_PAD and bezelShift): it also runs in a worker (GLASS_WORKER). */
+  function glassMaps(w, h, radii, attached, L, make) {
     const P = GLASS_PAD, W = w + 2 * P, H = h + 2 * P;
     const B = Math.max(4, Math.min(L.bezel[1], Math.min(w, h) * L.bezel[0])); // bezel width
     const shifts = bezelShift(B, L.thick);
@@ -339,8 +343,7 @@
       else { g.d = qy - r; g.nx = 0; g.ny = sy; }
     };
     const canvas = (cw, ch) => {
-      const c = document.createElement('canvas');
-      c.width = cw; c.height = ch;
+      const c = make(cw, ch);
       const ctx = c.getContext('2d');
       return { c, ctx, img: ctx.createImageData(cw, ch) };
     };
@@ -380,7 +383,79 @@
       }
     }
     spec.ctx.putImageData(spec.img, 0, 0);
-    return { disp: disp.c.toDataURL(), spec: spec.c.toDataURL(), scale: 2 * max };
+    return { disp: disp.c, spec: spec.c, scale: 2 * max };
+  }
+
+  // The maps are drawn in a worker: a new shape's take tens of ms, which would stall the island's
+  // animation right when it starts opening.
+  const GLASS_WORKER = `'use strict';\nconst GLASS_PAD = ${GLASS_PAD};\n${bezelShift}\n${glassMaps}\n`
+    + `onmessage = async ({ data: s }) => {
+      const m = glassMaps(s.w, s.h, s.radii, s.attached, s.L, (w, h) => new OffscreenCanvas(w, h));
+      const [disp, spec] = await Promise.all([m.disp.convertToBlob(), m.spec.convertToBlob()]);
+      postMessage({ key: s.key, disp, spec, scale: m.scale });
+    };`;
+
+  /** Glass maps by shape, ready to use: drawn in GLASS_WORKER (or here, later, without a worker)
+   *  and decoded before they're handed out. A map that isn't decoded yet makes the filter draw
+   *  nothing: the glass would vanish for a few frames. The last 24 are kept (the island keeps
+   *  going back to the same few shapes), except those in use (`keep`). */
+  class GlassMaps {
+    constructor(L) {
+      this.L = L;
+      this.ready = new Map(); // key → { key, w, h, disp, spec, scale }, least recently used first
+      this.waiting = new Map(); // key → { promise, done }
+      this.keep = new Set();
+      try {
+        this.worker = new Worker(URL.createObjectURL(new Blob([GLASS_WORKER], { type: 'text/javascript' })));
+        this.worker.onmessage = ({ data }) => this.waiting.get(data.key)?.done(data);
+        this.worker.onerror = () => { this.worker = null; this.waiting.forEach((w, key) => this.draw(key, w.shape)); };
+      } catch { this.worker = null; }
+    }
+
+    static key(s) { return `${s.w}x${s.h}:${s.radii.map(Math.round)}:${s.attached}`; }
+
+    get(s) {
+      const e = this.ready.get(GlassMaps.key(s));
+      if (e) { this.ready.delete(e.key); this.ready.set(e.key, e); }
+      return e;
+    }
+
+    request(s) {
+      const key = GlassMaps.key(s);
+      const have = this.get(s);
+      if (have) return Promise.resolve(have);
+      if (this.waiting.has(key)) return this.waiting.get(key).promise;
+      let done;
+      const promise = new Promise((resolve) => { done = resolve; }).then(async (m) => {
+        const disp = URL.createObjectURL(m.disp), spec = URL.createObjectURL(m.spec);
+        await Promise.all([disp, spec].map((src) => { const img = new Image(); img.src = src; return img.decode().catch(() => {}); }));
+        const e = { key, w: s.w, h: s.h, disp, spec, scale: m.scale };
+        this.waiting.delete(key);
+        this.ready.set(key, e);
+        for (const old of this.ready.values()) {
+          if (this.ready.size <= 24) break;
+          if (this.keep.has(old.key)) continue;
+          this.ready.delete(old.key);
+          URL.revokeObjectURL(old.disp);
+          URL.revokeObjectURL(old.spec);
+        }
+        return e;
+      });
+      this.waiting.set(key, { promise, done, shape: s });
+      if (this.worker) this.worker.postMessage({ key, ...s, L: this.L });
+      else this.draw(key, s);
+      return promise;
+    }
+
+    /** Without a worker: drawn here, on a later turn. */
+    draw(key, s) {
+      setTimeout(async () => {
+        const m = glassMaps(s.w, s.h, s.radii, s.attached, this.L, (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h }));
+        const blob = (c) => new Promise((resolve) => c.toBlob(resolve));
+        const [disp, spec] = await Promise.all([blob(m.disp), blob(m.spec)]);
+        this.waiting.get(key)?.done({ disp, spec, scale: m.scale });
+      });
+    }
   }
 
   /** #kys-glass for a level: blur, then the bend (once per color when the glass splits them),
@@ -417,59 +492,126 @@
       document.body.insertAdjacentHTML('beforeend', glassFilter(this.L));
       this.map = document.getElementById('kys-glass-map');
       this.bends = ['r', 'g', 'b'].map((c) => document.getElementById(`kys-glass-${c}`)).filter(Boolean);
-      this.cache = new Map(); // maps by shape (the island keeps going back to the same few)
-      this.key = '';
-      this.radii = [0, 0, 0, 0];
+      this.store = new GlassMaps(this.L);
+      this.level = level || 'frosted';
+      this.shown = null; // the maps in the filter
+      this.goal = null; // { shape, maps } where the island is going, and its maps once ready
+      this.k = 1; // how much the glass bends and its rim shines (0: flat, while no maps fit)
+      this.kTo = 1;
+      this.tween = 0;
       this.settleT = 0;
       new ResizeObserver(() => this.follow()).observe(this.layer);
+      setTimeout(() => this.prewarm(), 1500);
     }
 
-    /** The island is going to w×h (Notch.resize): its maps right away, stretched along meanwhile.
-     *  Getting smaller (closing), the target's maps stretched over the island would draw its rim
-     *  inside it (a ring in the middle); maps for the box it's leaving keep their rim at its edge,
-     *  then past it, out of sight, until it settles in its new shape (follow). */
+    /** A shape the maps can be drawn for (radii no bigger than its sides allow), or null. */
+    shape(w, h, radii, attached) {
+      w = Math.round(w); h = Math.round(h);
+      if (w < 2 || h < 2) return null;
+      return { w, h, radii: radii.map((r) => Math.min(r, w / 2, h / 2)), attached };
+    }
+
+    /** The island is going to w×h (Notch.resize). Growing, it takes that shape's maps as soon as
+     *  they're ready, stretched along meanwhile; until then it goes flat once it outgrows the maps
+     *  it has (follow), rather than bending through them (their rim would show inside it).
+     *  Getting smaller, its maps stay: their rim at its edge, then past it, out of sight, until it's
+     *  nearly down to its new size (follow). Maps of a shape in between would have the wrong rim. */
     target(w, h, size) {
-      const el = this.notch.el, now = el.getBoundingClientRect(); // still where it was: its transition only starts
-      if (now.width > w + 1 || now.height > h + 1) return this.use(Math.max(now.width, w), Math.max(now.height, h), this.radii, null);
+      const el = this.notch.el;
       // A bubble is round; otherwise the radii of notch.css, half the thinner side at most (standing up).
       const r = el.dataset.shape === 'bubble' ? Math.min(w, h) / 2 : glassRadius(size, Math.min(w, h));
-      this.use(w, h, [r, r, r, r], null);
+      const shape = this.shape(w, h, [r, r, r, r], null);
+      if (!shape) return;
+      const goal = this.goal = { shape, maps: this.store.get(shape) || null };
+      this.store.keep = new Set([this.shown?.key, GlassMaps.key(shape)]);
+      const cur = this.shown;
+      const growing = !cur || shape.w > cur.w * FIT || shape.h > cur.h * FIT;
+      if (goal.maps) return growing ? this.show(goal.maps) : this.follow();
+      this.store.request(shape).then((maps) => {
+        if (this.goal !== goal) return;
+        goal.maps = maps;
+        if (growing) this.show(maps); else this.follow();
+      });
     }
 
-    /** Each step of an animation, the map stretches with the layer; once the island stops, maps
-     *  drawn for the shape it ended in (hiding from the cursor: against the edge, other corners). */
+    /** Each step of an animation, the maps stretch with the layer (getting smaller: its new ones
+     *  once it's nearly down to their size). Maps of a shape much smaller than the island would draw
+     *  their rim inside it: it goes flat until some fit (growing into a shape whose maps are being
+     *  drawn, or past it). Once the island stops, maps drawn for the shape it ended in (hiding from
+     *  the cursor: against the edge, other corners). */
     follow() {
       this.map.setAttribute('width', this.layer.offsetWidth);
       this.map.setAttribute('height', this.layer.offsetHeight);
+      const g = this.goal, el = this.notch.el, w = el.offsetWidth, h = el.offsetHeight;
+      const fit = (m) => m && w <= m.w * FIT && h <= m.h * FIT;
+      if (g?.maps && g.maps !== this.shown && fit(g.maps)) this.show(g.maps);
+      this.bendTo(fit(this.shown) ? 1 : 0, 90);
       clearTimeout(this.settleT);
       this.settleT = setTimeout(() => this.settle(), 160);
     }
 
     settle() {
       const el = this.notch.el;
-      if (!el.offsetWidth || !el.offsetHeight) return;
       const cs = getComputedStyle(el);
       const radii = [cs.borderTopLeftRadius, cs.borderTopRightRadius, cs.borderBottomRightRadius, cs.borderBottomLeftRadius].map((r) => parseFloat(r) || 0);
-      this.use(el.offsetWidth, el.offsetHeight, radii, el.classList.contains('dodged') ? islandEdge() : null);
+      const shape = this.shape(el.offsetWidth, el.offsetHeight, radii, el.classList.contains('dodged') ? islandEdge() : null);
+      if (!shape) return;
+      const goal = this.goal = { shape, maps: this.store.get(shape) || null };
+      this.store.keep = new Set([this.shown?.key, GlassMaps.key(shape)]);
+      this.remember(shape);
+      if (goal.maps) return this.show(goal.maps);
+      this.store.request(shape).then((maps) => { if (this.goal === goal) this.show(goal.maps = maps); });
     }
 
-    use(w, h, radii, attached) {
-      w = Math.round(w); h = Math.round(h);
-      if (w < 2 || h < 2) return;
-      this.radii = radii; // the shape it has now (target: closing)
-      radii = radii.map((r) => Math.min(r, w / 2, h / 2));
-      const key = `${w}x${h}:${radii.map(Math.round)}:${attached}`;
-      if (key === this.key) return;
-      this.key = key;
-      let maps = this.cache.get(key);
-      if (!maps) {
-        maps = glassMaps(w, h, radii, attached, this.L);
-        this.cache.set(key, maps);
-        if (this.cache.size > 24) this.cache.delete(this.cache.keys().next().value);
+    /** Puts maps in the filter (decoded: no gap) and brings the bend back if it went flat. */
+    show(maps) {
+      if (maps !== this.shown) {
+        this.shown = maps;
+        this.store.keep.add(maps.key);
+        this.map.setAttribute('href', maps.disp);
+        this.notch.el.style.setProperty('--glass-spec', `url(${maps.spec})`);
+        this.bend();
       }
-      this.map.setAttribute('href', maps.disp);
-      this.bends.forEach((b, i) => b.setAttribute('scale', (maps.scale * (1 + i * this.L.dispersion)).toFixed(1)));
-      this.notch.el.style.setProperty('--glass-spec', `url(${maps.spec})`);
+      this.bendTo(1);
+    }
+
+    bend() {
+      const s = (this.shown?.scale || 0) * this.k;
+      this.bends.forEach((b, i) => b.setAttribute('scale', (s * (1 + i * this.L.dispersion)).toFixed(1)));
+      this.notch.el.style.setProperty('--glass-k', this.k.toFixed(3)); // the rim light (notch.css)
+    }
+
+    /** Eases the bend (and the rim light) to k: going flat while no maps fit, back once they do. */
+    bendTo(k, ms = 180) {
+      if (this.kTo === k) return; // on its way already
+      this.kTo = k;
+      cancelAnimationFrame(this.tween);
+      const k0 = this.k, t0 = performance.now();
+      if (k0 === k) return;
+      const step = (now) => {
+        const u = Math.min(1, (now - t0) / ms);
+        this.k = k0 + (k - k0) * (1 - (1 - u) ** 3);
+        this.bend();
+        if (u < 1) this.tween = requestAnimationFrame(step);
+      };
+      this.tween = requestAnimationFrame(step);
+    }
+
+    // The shapes it settles in are remembered (per kind of glass), and their maps drawn again a
+    // little after it starts: even the first opening has them ready.
+    remember(s) {
+      try {
+        const name = `glass-shapes-${this.level}`, key = GlassMaps.key(s);
+        const list = (JSON.parse(localStorage.getItem(name)) || []).filter((x) => GlassMaps.key(x) !== key);
+        list.unshift(s);
+        localStorage.setItem(name, JSON.stringify(list.slice(0, 12)));
+      } catch { /* no storage: nothing remembered */ }
+    }
+
+    async prewarm() {
+      let list = [];
+      try { list = JSON.parse(localStorage.getItem(`glass-shapes-${this.level}`)) || []; } catch { /* nothing remembered */ }
+      for (const s of list) await this.store.request(s); // one at a time: what the island asks for meanwhile waits for one at most
     }
 
     /** What's under the island (engine): RGBA, pw×ph pixels for x, y, w, h (CSS pixels of the window),

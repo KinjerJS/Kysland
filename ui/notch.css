@@ -1252,6 +1252,7 @@ body.theme-glass .notch-inner::after {
   border-radius: inherit;
   pointer-events: none;
   background: var(--glass-spec, none) -24px -24px / calc(100% + 48px) calc(100% + 48px) no-repeat;
+  opacity: var(--glass-k, 1); /* fades with the bend while no maps fit the island (island.js, Glass) */
 }
 /* Kys's flight: the gooey filter makes the drop opaque; faded back to the glass's darkness. */
 body.theme-glass .eye-goo { opacity: .6; }
