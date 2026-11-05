@@ -38,6 +38,7 @@
     "outline": "auto",                   // thin outline when it's mostly black around the notch; true / false to force it
     "theme": "classic",                  // "classic" (black) | "glass" (Liquid Glass: a floating capsule of glass, like iOS)
     "glass": "frosted",                  // with "glass": "frosted" (blurred) | "balanced" | "crystal" (clear, strong refraction and reflections at the rim)
+    "visible-in-captures": false,        // with "glass": true to show the island in screenshots, recordings and screen sharing (its glass then no longer sees what's behind it)
     "dodge": true,                       // approach slowly and the notch tucks itself away (to reach what's behind); fast = hover as usual
     "dodge-speed": 450,                  // px/s: approaches slower than this count as slow
     "dodge-eyes": true,                  // two little eyes watch the cursor while it's hidden

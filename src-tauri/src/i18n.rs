@@ -61,6 +61,7 @@ const STRINGS: &[(&str, &str, &str)] = &[
     ("menu.peek", "Eyes peek out now and then", "Les yeux jettent un œil de temps en temps"),
     ("menu.adjust_island", "Move or resize the island…", "Déplacer ou redimensionner l'island…"),
     ("menu.close_bounce", "Bounce when closing", "Rebond à la fermeture"),
+    ("menu.in_captures", "Visible in screenshots", "Visible sur les captures d'écran"),
     ("menu.auto_hide", "Hide when the mouse is far away", "Se cacher quand la souris est loin"),
     ("menu.dodge_roam", "Eyes wander if you stay close", "Les yeux se baladent si on reste près"),
     ("menu.dodge_speed", "Hides…", "Se cache…"),

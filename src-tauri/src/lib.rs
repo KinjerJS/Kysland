@@ -578,8 +578,11 @@ fn glass_loop(app: AppHandle) {
                 if GLASS_WAKE.swap(false, Ordering::Relaxed) { still = 0; break; }
                 std::thread::sleep(Duration::from_millis(10));
             }
+            // Option "visible-in-captures": the island stays in screenshots and recordings, so its
+            // copies of the screen would show itself: none then (its glass has nothing behind it).
             let (glass, edge, along, bars) = with(|s| {
-                let glass = config::island_conf(&s.cfg)["theme"] == "glass";
+                let island = config::island_conf(&s.cfg);
+                let glass = island["theme"] == "glass" && island["visible-in-captures"] != true;
                 let bars: Vec<(String, isize, f64, Option<Rect>, bool, bool)> = s.bars.iter()
                     .map(|b| (b.label.clone(), b.hwnd, b.scale, b.notch, b.interactive, b.fullscreen || b.free || b.moving)).collect();
                 (glass, edge_of(&s.cfg).to_owned(), along_of(&s.cfg), bars)
@@ -891,7 +894,7 @@ fn set_setting(app: AppHandle, key: String, value: Value) -> Result<(), String> 
     match key.as_str() {
         "language" | "monitors" | "hide-on-fullscreen" => config::set_value(&[&key], value),
         "dodge" | "dodge-eyes" | "dodge-roam" | "dodge-roam-delay" | "dodge-speed" | "auto-hide" | "auto-hide-distance" | "peek" | "outline"
-        | "close-bounce" | "side-shape" | "theme" | "glass" | "claude" | "notifications" | "kys-brain" | "kys-grab"
+        | "close-bounce" | "side-shape" | "theme" | "glass" | "visible-in-captures" | "claude" | "notifications" | "kys-brain" | "kys-grab"
         | "hide-windows-osd" | "expand-on-hover" => {
             config::set_value(&[&island, &key], value)
         }
@@ -1164,6 +1167,8 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         &CheckMenuItem::with_id(app, "glass:frosted", t("menu.glass_frosted"), glass, level == "frosted", None::<&str>)?,
         &CheckMenuItem::with_id(app, "glass:balanced", t("menu.glass_balanced"), glass, level == "balanced", None::<&str>)?,
         &CheckMenuItem::with_id(app, "glass:crystal", t("menu.glass_crystal"), glass, level == "crystal", None::<&str>)?,
+        &PredefinedMenuItem::separator(app)?,
+        &CheckMenuItem::with_id(app, "visible-in-captures", t("menu.in_captures"), glass, island["visible-in-captures"] == true, None::<&str>)?,
     ])?;
     let island_menu = Submenu::with_items(app, t("menu.island"), true, &[
         &CheckMenuItem::with_id(app, "dodge", t("menu.dodge"), true, dodge, None::<&str>)?,
@@ -1219,7 +1224,7 @@ fn on_menu(app: &AppHandle, id: &str) {
         "fullscreen" => config::set_value(&["hide-on-fullscreen"], json!(cfg["hide-on-fullscreen"] == false)),
         "claude" => config::set_value(&[&island, "claude"], json!(config::island_conf(&cfg)["claude"] != true)),
         "dodge" | "dodge-eyes" | "dodge-roam" | "peek" | "close-bounce" => config::set_value(&[&island, id], json!(config::island_conf(&cfg)[id] == false)),
-        "auto-hide" => config::set_value(&[&island, id], json!(config::island_conf(&cfg)[id] != true)),
+        "auto-hide" | "visible-in-captures" => config::set_value(&[&island, id], json!(config::island_conf(&cfg)[id] != true)),
         "adjust-island" => {
             // On the screen the cursor is on (or the first one); the island waits there to be moved or resized.
             let (cx, cy) = win32::cursor_pos();

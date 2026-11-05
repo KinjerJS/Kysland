@@ -1627,6 +1627,7 @@
       'side-shape': 'bubble',        // at rest on a side: 'bubble' (round: the time) | 'vertical' (standing up, its text turned)
       theme: 'classic',              // 'classic' (black) | 'glass' (Liquid Glass, see Glass)
       glass: 'frosted',              // with the glass theme: 'frosted' | 'balanced' | 'crystal' (GLASS_LEVELS)
+      'visible-in-captures': false,  // with the glass theme: in screenshots and recordings (its glass then sees nothing behind it)
       dodge: true,                   // hides when the cursor approaches slowly (read by the engine)
       'dodge-eyes': true,            // two little eyes watch the cursor while it's hidden
       'dodge-roam': true,            // ...and roam around a grown island if the cursor stays close

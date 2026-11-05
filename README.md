@@ -140,8 +140,9 @@ Island options (in the `"island"` section):
 | `close-bounce` | `true` | The island springs back a little as it closes; `false`: it closes smoothly |
 | `media-linger` | `15` | Seconds a paused track stays displayed |
 | `outline` | `"auto"` | Thin outline when it's mostly black around the island; `true` / `false` to force it (color: `--notch-outline-color`) |
-| `theme` | `"classic"` | `"glass"`: Liquid Glass, inspired by iOS. The island floats off the edge as a capsule of glass: what is behind it is blurred, brightened and bent at its rim like through real glass, with a rim light and a light following the mouse. To see what is behind, Kysland copies that part of the screen (a few ms, only while it changes), so its windows stay out of screenshots, recordings and screen sharing with this theme |
+| `theme` | `"classic"` | `"glass"`: Liquid Glass, inspired by iOS. The island floats off the edge as a capsule of glass: what is behind it is blurred, brightened and bent at its rim like through real glass, with a rim light and a light following the mouse. To see what is behind, Kysland copies that part of the screen (a few ms, only while it changes), so its windows stay out of screenshots, recordings and screen sharing with this theme (see `visible-in-captures`) |
 | `glass` | `"frosted"` | With the glass theme: `"frosted"` (well blurred, easy to read), `"balanced"`, or `"crystal"`: nearly clear glass with a thick bulging rim that bends what's behind it strongly (like a lens) and splits its colors like a prism, a band of reflection along the edge and a sheen on its dome |
+| `visible-in-captures` | `false` | With `"glass"`: `true` keeps the island in screenshots, recordings and screen sharing. Its glass then no longer sees what is behind it (the copy would show the island itself): it stays a capsule of smoked glass, with its rim |
 | `dodge` / `dodge-speed` | `true` / `450` | Hide when the cursor approaches slower than this many px/s |
 | `dodge-eyes` | `true` | Eyes watching the cursor while hidden |
 | `dodge-roam` / `dodge-roam-delay` | `true` / `20` | Cursor still close after this many seconds: the island grows and the eyes roam |
