@@ -224,12 +224,11 @@ pub fn claude(epoch: u64, secs: f64) {
         };
         *CLAUDE_NEXT.lock().unwrap() = Some((now + interval, 0));
         let Ok(u) = res.body_mut().read_json::<Value>() else { return };
-        let window = |w: &Value| if w.is_object() {
-            json!({
-                "percent": w["utilization"].as_f64().unwrap_or(0.0).round() as u32,
-                "resetsAt": w["resets_at"].as_str().and_then(parse_iso_ms),
-            })
-        } else { Value::Null };
+        // Null when the plan doesn't have that window (Ultra: no 5 h session, only the week).
+        let window = |w: &Value| match w["utilization"].as_f64() {
+            Some(p) => json!({ "percent": p.round() as u32, "resetsAt": w["resets_at"].as_str().and_then(parse_iso_ms) }),
+            None => Value::Null,
+        };
         let data = json!({
             "ok": true, "plan": oauth["subscriptionType"], "account": claude_account(), "fetchedAt": util::now_ms(),
             "session": window(&u["five_hour"]), "week": window(&u["seven_day"]),

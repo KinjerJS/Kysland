@@ -5,7 +5,10 @@
 (() => {
   const now = Date.now();
   const handlers = {};
-  const scene = new URLSearchParams(location.search).get('scene') || 'compact';
+  const params = new URLSearchParams(location.search);
+  const scene = params.get('scene') || 'compact';
+  const theme = params.get('theme') || 'classic'; // ?theme=glass: the Liquid Glass island
+  const glass = params.get('glass') || 'frosted'; // its level: ?glass=balanced, crystal
 
   // Album art: a gradient with a record, as an SVG.
   const cover = 'data:image/svg+xml,' + encodeURIComponent(
@@ -53,9 +56,9 @@
   const responses = {
     init: () => ({
       config: {
-        position: 'top', height: 32, 'popup-space': 420, monitors: 'primary',
+        position: params.get('position') || 'top', height: 32, 'popup-space': 420, monitors: 'primary', // ?position=left&along=0.3: elsewhere
         'modules-left': [], 'modules-center': ['island'], 'modules-right': [],
-        island: { claude: true, 'dodge-roam-delay': scene === 'roaming' ? 0.3 : 20 }, // grows at once for that scene
+        island: { claude: true, theme, glass, along: +(params.get('along') ?? 0.5), 'dodge-roam-delay': scene === 'roaming' ? 0.3 : 20 }, // grows at once for that scene
       },
       lang: 'en',
       styles: { style: '../../defaults/style.css', v: 0 },
@@ -91,7 +94,7 @@
     notifications: () => [],
     settings_state: () => ({
       lang: 'en', version: '0.5.0', language: 'auto', monitors: 'primary', hideOnFullscreen: true, autostart: true,
-      claudeInstalled: true, island: { claude: true, 'kys-brain': 'smart' }, brain,
+      claudeInstalled: true, island: { claude: true, theme, glass, 'kys-brain': 'smart' }, brain,
       screens: [
         { index: 0, name: 'DELL U2723QE', width: 3840, height: 2160, primary: true },
         { index: 1, name: 'LG ULTRAGEAR', width: 2560, height: 1440, primary: false },

@@ -57,6 +57,11 @@
   }
 
   // --- Morphing engine ---------------------------------------------------------------
+  // Island sizes, smallest to largest: going to a smaller one is closing.
+  const SIZE_RANK = { compact: 0, wide: 1, card: 2, expanded: 3 };
+  // Same pace as the spring, without going past the target (no boing). Same as .notch.closing.
+  const NO_BOUNCE = 'cubic-bezier(.3, 1, .5, 1)';
+
   class Notch {
     constructor() {
       this.el = document.createElement('div');
@@ -72,10 +77,22 @@
       this.flights = [];
       this.current = null;
       this.key = null;
+      this.closeBounce = true; // option "close-bounce"
+      this.closingT = 0;
     }
 
     // view: { key, size, html, mount(el), update(el) }
     show(view) {
+      // Closing (the island gets smaller) with "close-bounce" off: no overshoot, so no boing.
+      const smooth = !this.closeBounce && (SIZE_RANK[view.size] ?? 0) < (SIZE_RANK[this.el.dataset.size] ?? 0);
+      if (smooth) {
+        this.el.classList.add('closing');
+        clearTimeout(this.closingT);
+        this.closingT = setTimeout(() => this.el.classList.remove('closing'), 700);
+      } else if (view.size !== this.el.dataset.size) {
+        clearTimeout(this.closingT);
+        this.el.classList.remove('closing'); // opening again: the spring is back
+      }
       if (view.key === this.key && this.current) {
         view.update?.(this.current);
       } else {
@@ -104,7 +121,7 @@
         }
         this.current = next;
         this.key = view.key;
-        for (const [a, b] of pairs) this.fly(a, fromRects.get(a.dataset.morph), b);
+        for (const [a, b] of pairs) this.fly(a, fromRects.get(a.dataset.morph), b, smooth);
         requestAnimationFrame(() => next.classList.add('shown'));
       }
       this.el.dataset.size = view.size;
@@ -113,7 +130,7 @@
 
     // Shared-element transition: a copy of the old element and one of the new one travel
     // together while cross-fading; the originals stay hidden during the flight.
-    fly(oldEl, from, newEl) {
+    fly(oldEl, from, newEl, smooth = false) {
       const to = newEl.getBoundingClientRect();
       if (!from.width || !to.width) return;
       this.flyLayer.style.setProperty('--tint', getComputedStyle(this.el).getPropertyValue('--tint'));
@@ -133,7 +150,7 @@
       newEl.style.visibility = 'hidden';
       const dx = from.left - to.left, dy = from.top - to.top;
       const s = from.height / to.height; // uniform scale: text isn't distorted
-      const timing = { duration: 520, easing: 'cubic-bezier(.3, 1.2, .5, 1)', fill: 'both' };
+      const timing = { duration: 520, easing: smooth ? NO_BOUNCE : 'cubic-bezier(.3, 1.2, .5, 1)', fill: 'both' };
       const anims = [
         b.animate([{ transform: `translate(${dx}px, ${dy}px) scale(${s})` }, { transform: 'none' }], timing),
         a.animate([{ transform: 'none' }, { transform: `translate(${-dx}px, ${-dy}px) scale(${1 / s})` }], timing),
@@ -156,8 +173,235 @@
 
     resize() {
       if (!this.current) return;
-      this.el.style.width = `${this.current.offsetWidth + (this.extra || 0)}px`; // extra: room for peeking eyes
-      this.el.style.height = `${this.current.offsetHeight}px`;
+      const w = this.current.offsetWidth + (this.extra || 0), h = this.current.offsetHeight; // extra: room for peeking eyes
+      this.el.style.width = `${w}px`;
+      this.el.style.height = `${h}px`;
+      this.onResize?.(w, h, this.el.dataset.size); // theme glass: the maps for that shape
+    }
+  }
+
+  // --- Liquid Glass (theme "glass") -------------------------------------------------------------
+  // The engine copies what's under the island (its own window left out of screen captures) and
+  // sends it here ("glass"). Drawn in .notch-glass, it goes through #kys-glass: blurred, bent at
+  // the rim, saturated (notch.css). The bend is a displacement map computed for the island's
+  // shape: its rim is a bezel of glass (squircle profile, flat in the middle) and each point shows
+  // what's under it after refraction (Snell's law, index 1.5), so the screen seems to curve
+  // around the edge as through a real piece of glass. The same normals give the rim light.
+  // Where the island sits: its screen edge (body class, from "position" or while it's being moved)
+  // and how far along it, 0 to 1 (--along, notch.css).
+  const place = { along: 0.5 };
+  const islandEdge = () => ['bottom', 'left', 'right'].find((e) => document.body.classList.contains(`pos-${e}`)) || 'top';
+  const islandAlong = () => place.along;
+  const isSide = () => ['left', 'right'].includes(islandEdge());
+  const clamp01 = (v) => (Number.isFinite(+v) ? Math.min(1, Math.max(0, +v)) : 0.5);
+  function setPlace(edge, along) {
+    for (const e of ['top', 'bottom', 'left', 'right']) document.body.classList.toggle(`pos-${e}`, e === edge);
+    place.along = along;
+    document.documentElement.style.setProperty('--along', along.toFixed(4));
+  }
+
+  const GLASS_PAD = 24; // .notch-glass reaches this far past the island (notch.css)
+  const glassRadius = (size, h) => (size === 'expanded' ? 34 : size === 'card' ? 28 : Math.min(20, h / 2)); // notch.css
+  // Option "glass": how much it looks like a real piece of glass. Frosted: well blurred, a thin
+  // bent rim. Crystal: nearly clear, a thick bulging rim (the whole height of the resting capsule)
+  // that bends what's behind it strongly and splits its colors like a prism (blue bends more than
+  // red), a band of reflection along the edge (Fresnel), a sheen on its dome, brighter rims.
+  // blur: px; bezel: share of the smaller side, and its most (px); thick: glass height / bezel;
+  // dispersion: extra bend of green, then blue; dim: tint over dark → light backgrounds.
+  const GLASS_LEVELS = {
+    frosted: { blur: 7, bezel: [0.42, 28], thick: 0.9, dispersion: 0, saturate: 1.6, rim: 1, fresnel: 0, sheen: 0, dim: [0.2, 0.42] },
+    balanced: { blur: 3.5, bezel: [0.46, 36], thick: 1.25, dispersion: 0.035, saturate: 1.7, rim: 1.3, fresnel: 0.1, sheen: 0.035, dim: [0.24, 0.42] },
+    crystal: { blur: 1.2, bezel: [0.5, 46], thick: 1.7, dispersion: 0.07, saturate: 1.8, rim: 1.6, fresnel: 0.2, sheen: 0.07, dim: [0.28, 0.44] },
+  };
+
+  /** Sideways shift of the view through the bezel, from its edge (0) to where the glass is flat (1),
+   *  for a bezel B px wide and a glass `thick` times as high. */
+  function bezelShift(B, thick) {
+    const T = B * thick, base = B * 0.35, n = 1.5;
+    return Float32Array.from({ length: 128 }, (_, i) => {
+      const u = 1 - Math.max(0.015, i / 127);
+      const height = Math.pow(1 - u ** 4, 0.25);
+      const slope = (T / B) * u ** 3 * Math.pow(1 - u ** 4, -0.75);
+      const tilt = Math.atan(slope), refracted = Math.asin(Math.sin(tilt) / n);
+      return (base + T * height) * Math.tan(tilt - refracted);
+    });
+  }
+
+  /** Displacement map (R, G: x, y shift around 128, half resolution) and lights (rim, reflection,
+   *  sheen) for an island of w×h with corner radii [tl, tr, br, bl], both covering the glass layer
+   *  (GLASS_PAD around it). `attached`: 'top' / 'bottom' when that side is the screen edge (no
+   *  bezel there). `L`: the level (GLASS_LEVELS). */
+  function glassMaps(w, h, radii, attached, L) {
+    const P = GLASS_PAD, W = w + 2 * P, H = h + 2 * P;
+    const B = Math.max(4, Math.min(L.bezel[1], Math.min(w, h) * L.bezel[0])); // bezel width
+    const shifts = bezelShift(B, L.thick);
+    const max = Math.max(...shifts);
+    const top = attached === 'top' ? -1e4 : 0, bottom = attached === 'bottom' ? h + 1e4 : h;
+    const cx = w / 2, cy = (top + bottom) / 2, hw = w / 2, hh = (bottom - top) / 2;
+    // Signed distance to the edge (< 0 inside) and the outward normal.
+    const g = { d: 0, nx: 0, ny: 0 };
+    const at = (x, y) => {
+      const px = x - cx, py = y - cy, sx = px < 0 ? -1 : 1, sy = py < 0 ? -1 : 1;
+      const r = px < 0 ? (py < 0 ? radii[0] : radii[3]) : (py < 0 ? radii[1] : radii[2]);
+      const qx = Math.abs(px) - (hw - r), qy = Math.abs(py) - (hh - r);
+      if (qx > 0 && qy > 0) { const l = Math.hypot(qx, qy); g.d = l - r; g.nx = (sx * qx) / l; g.ny = (sy * qy) / l; }
+      else if (qx > qy) { g.d = qx - r; g.nx = sx; g.ny = 0; }
+      else { g.d = qy - r; g.nx = 0; g.ny = sy; }
+    };
+    const canvas = (cw, ch) => {
+      const c = document.createElement('canvas');
+      c.width = cw; c.height = ch;
+      const ctx = c.getContext('2d');
+      return { c, ctx, img: ctx.createImageData(cw, ch) };
+    };
+    const dw = Math.ceil(W / 2), dh = Math.ceil(H / 2);
+    const disp = canvas(dw, dh);
+    for (let j = 0, k = 0; j < dh; j++) {
+      for (let i = 0; i < dw; i++, k += 4) {
+        at(i * 2 + 1 - P, j * 2 + 1 - P);
+        let vx = 0, vy = 0;
+        if (g.d < 0 && -g.d < B) {
+          const s = shifts[Math.round((-g.d / B) * 127)] / max;
+          vx = -g.nx * s; vy = -g.ny * s; // looks further in
+        }
+        disp.img.data.set([128 + vx * 127, 128 + vy * 127, 128, 255], k);
+      }
+    }
+    disp.ctx.putImageData(disp.img, 0, 0);
+    // Lights: a thin rim all around, bright where the edge faces the light (from above, a bit from
+    // the left) and softer on the opposite side, a little glow inside; then, the clearer the glass,
+    // a band of reflection along the bezel (strongest where it's steep) and a sheen on its dome.
+    const sw = Math.ceil(W), sh = Math.ceil(H);
+    const spec = canvas(sw, sh);
+    const lx = -0.45, ly = -0.89;
+    const deep = L.fresnel || L.sheen ? -Infinity : -12; // how far inside it's worth looking
+    for (let j = 0, k = 0; j < sh; j++) {
+      const v = (j + 0.5 - P) / h; // 0 at the top of the island, 1 at its bottom
+      const dome = L.sheen * Math.max(0, 1 - v / 0.55) ** 2;
+      for (let i = 0; i < sw; i++, k += 4) {
+        at(i + 0.5 - P, j + 0.5 - P);
+        if (g.d > 0.7 || g.d < deep) continue;
+        const depth = Math.max(0, -g.d), facing = g.nx * lx + g.ny * ly;
+        const edge = Math.min(1, 0.7 - g.d); // antialiased outer edge
+        const line = Math.exp(-depth / 0.9) * (0.2 + 0.75 * Math.max(0, facing) ** 1.4 + 0.4 * Math.max(0, -facing) ** 2) * L.rim;
+        const glow = Math.exp(-depth / 4.5) * 0.14 * Math.max(0, facing) * L.rim;
+        const band = L.fresnel * Math.exp(-depth / (B * 0.32)) * (0.45 + 0.55 * Math.abs(facing));
+        spec.img.data.set([255, 255, 255, Math.min(255, edge * (line + glow + band + dome) * 255)], k);
+      }
+    }
+    spec.ctx.putImageData(spec.img, 0, 0);
+    return { disp: disp.c.toDataURL(), spec: spec.c.toDataURL(), scale: 2 * max };
+  }
+
+  /** #kys-glass for a level: blur, then the bend (once per color when the glass splits them),
+   *  then saturation. */
+  function glassFilter(L) {
+    const bend = (id, result) => `<feDisplacementMap id="${id}" in="blur" in2="map" scale="0" xChannelSelector="R" yChannelSelector="G" result="${result}"/>`;
+    // Keeps one color channel (and the alpha).
+    const only = (c) => [0, 1, 2, 3].map((row) => [0, 1, 2, 3, 4].map((col) => (row === col && (row === c || row === 3) ? 1 : 0)).join(' ')).join('  ');
+    return '<svg width="0" height="0" style="position:absolute" aria-hidden="true">'
+      + '<filter id="kys-glass" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">'
+      + `<feGaussianBlur in="SourceGraphic" stdDeviation="${L.blur}" result="blur"/>`
+      + '<feImage id="kys-glass-map" x="0" y="0" width="1" height="1" preserveAspectRatio="none" result="map"/>'
+      + (L.dispersion
+        ? bend('kys-glass-r', 'r0') + bend('kys-glass-g', 'g0') + bend('kys-glass-b', 'b0')
+          + `<feColorMatrix in="r0" values="${only(0)}" result="r"/><feColorMatrix in="g0" values="${only(1)}" result="g"/>`
+          + `<feColorMatrix in="b0" values="${only(2)}" result="b"/>`
+          + '<feBlend in="r" in2="g" mode="screen" result="rg"/><feBlend in="rg" in2="b" mode="screen" result="bent"/>'
+        : bend('kys-glass-r', 'bent'))
+      + `<feColorMatrix in="bent" type="saturate" values="${L.saturate}"/></filter></svg>`;
+  }
+
+  class Glass {
+    constructor(notch, level) {
+      this.notch = notch;
+      this.L = GLASS_LEVELS[level] || GLASS_LEVELS.frosted;
+      this.layer = document.createElement('div');
+      this.layer.className = 'notch-glass';
+      this.canvas = document.createElement('canvas');
+      this.ctx = this.canvas.getContext('2d');
+      this.layer.appendChild(this.canvas);
+      this.light = document.createElement('div');
+      this.light.className = 'notch-light';
+      notch.inner.prepend(this.layer, this.light);
+      document.body.insertAdjacentHTML('beforeend', glassFilter(this.L));
+      this.map = document.getElementById('kys-glass-map');
+      this.bends = ['r', 'g', 'b'].map((c) => document.getElementById(`kys-glass-${c}`)).filter(Boolean);
+      this.cache = new Map(); // maps by shape (the island keeps going back to the same few)
+      this.key = '';
+      this.settleT = 0;
+      new ResizeObserver(() => this.follow()).observe(this.layer);
+    }
+
+    /** The island is going to w×h (Notch.resize): its maps right away, stretched along meanwhile. */
+    target(w, h, size) {
+      const r = glassRadius(size, h);
+      this.use(w, h, [r, r, r, r], null);
+    }
+
+    /** Each step of an animation, the map stretches with the layer; once the island stops, maps
+     *  drawn for the shape it ended in (hiding from the cursor: against the edge, other corners). */
+    follow() {
+      this.map.setAttribute('width', this.layer.offsetWidth);
+      this.map.setAttribute('height', this.layer.offsetHeight);
+      clearTimeout(this.settleT);
+      this.settleT = setTimeout(() => this.settle(), 160);
+    }
+
+    settle() {
+      const el = this.notch.el;
+      if (!el.offsetWidth || !el.offsetHeight) return;
+      const cs = getComputedStyle(el);
+      const radii = [cs.borderTopLeftRadius, cs.borderTopRightRadius, cs.borderBottomRightRadius, cs.borderBottomLeftRadius].map((r) => parseFloat(r) || 0);
+      this.use(el.offsetWidth, el.offsetHeight, radii, el.classList.contains('dodged') ? (islandEdge() === 'bottom' ? 'bottom' : 'top') : null);
+    }
+
+    use(w, h, radii, attached) {
+      w = Math.round(w); h = Math.round(h);
+      if (w < 2 || h < 2) return;
+      radii = radii.map((r) => Math.min(r, w / 2, h / 2));
+      const key = `${w}x${h}:${radii.map(Math.round)}:${attached}`;
+      if (key === this.key) return;
+      this.key = key;
+      let maps = this.cache.get(key);
+      if (!maps) {
+        maps = glassMaps(w, h, radii, attached, this.L);
+        this.cache.set(key, maps);
+        if (this.cache.size > 24) this.cache.delete(this.cache.keys().next().value);
+      }
+      this.map.setAttribute('href', maps.disp);
+      this.bends.forEach((b, i) => b.setAttribute('scale', (maps.scale * (1 + i * this.L.dispersion)).toFixed(1)));
+      this.notch.el.style.setProperty('--glass-spec', `url(${maps.spec})`);
+    }
+
+    /** What's under the island (engine): RGBA, pw×ph pixels for x, y, w, h (CSS pixels of the window),
+     *  and its average lightness. */
+    frame(f) {
+      const bin = atob(f.data);
+      if (bin.length !== f.pw * f.ph * 4) return;
+      const px = new Uint8ClampedArray(bin.length);
+      for (let i = 0; i < bin.length; i++) px[i] = bin.charCodeAt(i);
+      const c = this.canvas;
+      if (c.width !== f.pw || c.height !== f.ph) { c.width = f.pw; c.height = f.ph; }
+      this.ctx.putImageData(new ImageData(px, f.pw, f.ph), 0, 0);
+      // Placed from the island's fixed point: its edge on one axis; along the edge, the point at
+      // "along" of its length, which stays put while it changes size (notch.css). So the copy stays
+      // in place between two copies while the island grows or shrinks.
+      const r = this.notch.el.getBoundingClientRect();
+      const edge = islandEdge(), a = islandAlong(), P = GLASS_PAD;
+      const across = (pos, anchor) => `calc(${pos - anchor + P}px + ${a} * (100% - ${2 * P}px))`;
+      const side = edge === 'left' || edge === 'right';
+      Object.assign(c.style, {
+        width: `${f.w}px`,
+        height: `${f.h}px`,
+        left: side ? (edge === 'left' ? `${f.x - (r.left - P)}px` : '') : across(f.x, a * innerWidth),
+        right: edge === 'right' ? `${r.right + P - (f.x + f.w)}px` : '',
+        top: side ? across(f.y, a * innerHeight) : edge === 'top' ? `${f.y - (r.top - P)}px` : '',
+        bottom: edge === 'bottom' ? `${r.bottom + P - (f.y + f.h)}px` : '',
+      });
+      // A darker tint over light backgrounds: the white text stays readable.
+      const t = Math.min(1, Math.max(0, (f.luma - 0.3) / 0.55));
+      this.layer.style.setProperty('--glass-dim', (this.L.dim[0] + this.L.dim[1] * t * t * (3 - 2 * t)).toFixed(3));
     }
   }
 
@@ -1106,12 +1350,16 @@
       'media-linger': 15, // seconds shown after a pause
       'scroll-step': 5,
       outline: 'auto',               // 'auto' (on dark backgrounds) | true | false
+      along: 0.5,                    // where along its edge ("position"): 0 one end, 0.5 the middle, 1 the other
+      theme: 'classic',              // 'classic' (black) | 'glass' (Liquid Glass, see Glass)
+      glass: 'frosted',              // with the glass theme: 'frosted' | 'balanced' | 'crystal' (GLASS_LEVELS)
       dodge: true,                   // hides when the cursor approaches slowly (read by the engine)
       'dodge-eyes': true,            // two little eyes watch the cursor while it's hidden
       'dodge-roam': true,            // ...and roam around a grown island if the cursor stays close
       'dodge-roam-delay': 20,        // seconds
       'auto-hide': false,            // hides while the mouse is far away or on another screen (read by the engine)
       peek: true,                    // now and then, the eyes squeeze into the resting island to check on the cursor
+      'close-bounce': true,          // the island springs back a little as it closes; false: closes smoothly
       'auto-hide-distance': 300,     // px around the island where it comes back
       notifications: true,           // Windows notifications in the island
       claude: false,                 // Claude plan usage (if Claude Code is installed)
@@ -1129,7 +1377,40 @@
         data: { ...state.data }, pausedAt: 0, tint: null, tintKey: null, workspace: null, dragging: false,
         queue: [], notif: null, notifTimer: 0, claudeOn: m.conf.claude === true, unread: 0, page: 'main', history: null,
       });
+      S.notch.closeBounce = m.conf['close-bounce'] !== false;
+      setPlace(islandEdge(), clamp01(m.conf.along));
       const notch = S.notch.el;
+      // A long press on the island (not on a button, a slider or something to drag) moves it.
+      let pressT = 0, pressAt = null;
+      const unpress = () => { clearTimeout(pressT); pressAt = null; };
+      notch.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0 || S.dodged || S.kysFree || S.moving
+          || e.target.closest('button, input, a, select, textarea, .n-progress, .n-bar, .k-inv, .k-talk')) return;
+        pressAt = [e.clientX, e.clientY];
+        clearTimeout(pressT);
+        pressT = setTimeout(() => { pressAt = null; startMove(m); }, 550);
+      });
+      notch.addEventListener('pointermove', (e) => {
+        if (pressAt && Math.hypot(e.clientX - pressAt[0], e.clientY - pressAt[1]) > 6) unpress();
+      });
+      notch.addEventListener('pointerup', unpress);
+      notch.addEventListener('pointercancel', unpress);
+      api.on('island-move', () => startMove(m)); // the menu, the settings
+      // Theme "glass" (notch.css, Glass): what's under the island seen through it, and a light
+      // that follows the cursor over it.
+      const glass = m.conf.theme === 'glass';
+      document.body.classList.toggle('theme-glass', glass);
+      if (glass) {
+        S.glass = new Glass(S.notch, m.conf.glass);
+        document.body.dataset.glass = m.conf.glass || 'frosted';
+        S.notch.onResize = (w, h, size) => S.glass.target(w, h, size);
+        api.on('glass', (f) => S.glass.frame(f));
+        notch.addEventListener('pointermove', (e) => {
+          const r = notch.getBoundingClientRect();
+          notch.style.setProperty('--glass-x', `${Math.round(e.clientX - r.left)}px`);
+          notch.style.setProperty('--glass-y', `${Math.round(e.clientY - r.top)}px`);
+        });
+      }
       // Whether the cursor is over the island (the engine reports the exits the page misses).
       notch.addEventListener('mouseenter', () => { S.hover = true; });
       notch.addEventListener('mouseleave', () => { S.hover = false; });
@@ -1225,10 +1506,14 @@
         if (t.media && data.has && data.playing && prev?.has && prev.key !== data.key) pushTransient(m, trackView(data), 3200);
       } else if (topic === 'battery' && prev && t.battery && data.present && prev.plugged !== data.plugged) {
         pushTransient(m, batteryView(data), 2600);
-      } else if (topic === 'claude' && S.claudeOn && prev?.ok && data.ok && data.session && prev.session) {
-        const was = prev.session.percent, now = data.session.percent;
-        if (was < 100 && now >= 100) pushTransient(m, claudeAlertView(data, true), 5000);
-        else if (was < 80 && now >= 80) pushTransient(m, claudeAlertView(data, false), 4000);
+      } else if (topic === 'claude' && S.claudeOn && prev?.ok && data.ok) {
+        // Alert on the 5 h session, or on the week when the plan has no session (Ultra).
+        const key = data.session ? 'session' : 'week';
+        if (data[key] && prev[key]) {
+          const was = prev[key].percent, now = data[key].percent;
+          if (was < 100 && now >= 100) pushTransient(m, claudeAlertView(data, key, true), 5000);
+          else if (was < 80 && now >= 80) pushTransient(m, claudeAlertView(data, key, false), 4000);
+        }
       } else if (topic === 'network' && prev && t.network && prev.connected !== data.connected) {
         pushTransient(m, networkView(data), 2600);
       }
@@ -1351,6 +1636,56 @@
     render(m);
   }
 
+  // --- Moving the island ------------------------------------------------------------------------
+  // A long press on it, the menu's "Move the island" or the settings: the window covers the whole
+  // screen meanwhile (engine), and the island follows the cursor along the nearest edge of the
+  // screen, drawn to the middle as it passes it. A click drops it there ("position" and "along" in
+  // the config: everything is laid out again); a right click (or Escape) puts it back.
+  function startMove(m) {
+    const S = m.island;
+    if (!S || S.moving || S.kysFree) return;
+    if (S.peeking) endPeek(m);
+    setExpanded(m, false);
+    const from = { edge: islandEdge(), along: place.along };
+    S.moving = { to: null };
+    const veil = document.createElement('div');
+    veil.className = 'move-veil';
+    veil.dataset.edge = from.edge;
+    veil.innerHTML = `<div class="move-hint">${esc(t('island.move_hint'))}</div>`;
+    document.body.append(veil);
+    document.body.classList.add('moving');
+    const follow = (e) => {
+      const W = innerWidth, H = innerHeight, x = e.clientX, y = e.clientY;
+      const d = { top: y, bottom: H - y, left: x, right: W - x };
+      const edge = Object.keys(d).reduce((a, b) => (d[b] < d[a] ? b : a));
+      let along = clamp01(edge === 'top' || edge === 'bottom' ? x / W : y / H);
+      if (Math.abs(along - 0.5) < 0.025) along = 0.5;
+      veil.dataset.edge = edge;
+      setPlace(edge, along);
+      S.moving.to = { edge, along };
+      render(m);
+    };
+    const events = {
+      pointermove: follow,
+      pointerup: (e) => { if (e.button === 0) done(true); },
+      contextmenu: (e) => { e.preventDefault(); done(false); },
+      keydown: (e) => { if (e.key === 'Escape') done(false); },
+    };
+    const done = (drop) => {
+      for (const [type, fn] of Object.entries(events)) document.removeEventListener(type, fn, true);
+      veil.remove();
+      document.body.classList.remove('moving');
+      const to = S.moving.to;
+      S.moving = null;
+      if (drop && to) return api.placeIsland(to.edge, to.along); // written in the config: it all reloads
+      setPlace(from.edge, from.along);
+      api.moveIsland(false);
+      render(m);
+    };
+    for (const [type, fn] of Object.entries(events)) document.addEventListener(type, fn, true);
+    api.moveIsland(true);
+  }
+
   // --- Notification queue: one at a time, takes priority over other events ---
   function showNextNotif(m) {
     const S = m.island;
@@ -1420,7 +1755,7 @@
   function schedulePeek(m, min = 25, max = 70) {
     const S = m.island;
     clearTimeout(S.peekT);
-    if (m.conf.peek === false) return;
+    if (m.conf.peek === false || isSide()) return; // the eyes drop in from the top or bottom edge
     const hurry = S.kys && S.kys.food < 30 ? 0.5 : 1; // hungry: comes asking more often
     S.peekT = setTimeout(() => startPeek(m), rand(min, max) * hurry * 1000);
   }
@@ -1537,7 +1872,8 @@
   /** Only a resting island hides from the cursor (not while open, showing a notification, or
    *  with Kys peeking: it can be approached slowly and caught). */
   function updateDodgeable(S) {
-    S.notch.el.dataset.dodgeable = !S.expanded && !S.notif && !S.peeking && !S.kysFree ? '1' : '0';
+    // Not on a side of the screen: hiding there (eyes, Kys) is made for the top and bottom edges.
+    S.notch.el.dataset.dodgeable = !S.expanded && !S.notif && !S.peeking && !S.kysFree && !S.moving && !isSide() ? '1' : '0';
   }
 
   // --- Kys, the eyes as a pet (kys.rs) -------------------------------------------------------------
@@ -2283,7 +2619,7 @@
     const md = S.data.media?.has ? S.data.media : null;
     const now = dayjs();
     return {
-      key: `expanded|${md ? 'media' : 'none'}|${claudeState(S)}`,
+      key: `expanded|${md ? 'media' : 'none'}|${claudeState(S)}|${claudeWindows(S.data.claude)}`,
       size: 'expanded',
       html: `<div class="n-expanded">
         <div class="n-head"><span class="n-date-long" data-morph="date"></span><div class="n-head-right">
@@ -2489,6 +2825,8 @@
   // 'off': option disabled / no data; 'ok': gauges; otherwise a message (expired token...).
   const claudeState = (S) => (!S.claudeOn || !S.data.claude ? 'off' : S.data.claude.ok ? 'ok' : S.data.claude.reason);
   const claudeLevel = (p) => (p >= 90 ? 'critical' : p >= 75 ? 'warning' : '');
+  // Windows the plan has: some plans (Ultra) no longer have the 5 h session, only the week.
+  const claudeWindows = (c) => ['session', 'week'].filter((k) => c?.[k]);
 
   function claudeReset(ts, short) {
     if (!ts) return '';
@@ -2516,7 +2854,7 @@
     return `<div class="n-claude">
         <div class="n-claude-head"><i class="icon icon-sparkle"></i><span class="n-claude-plan">Claude${esc(plan)}</span>
           <span class="n-claude-account">${esc(c.account || '')}</span><span class="n-claude-age"></span><button class="n-claude-refresh" title="${t('claude.refresh')}"><i class="icon icon-refresh-cw"></i></button></div>
-        <div class="n-claude-gauges">${gauge('session', t('claude.session'))}${gauge('week', t('claude.week'))}</div>
+        <div class="n-claude-gauges">${claudeWindows(c).map((k) => gauge(k, t(`claude.${k}`))).join('')}</div>
       </div>`;
   }
 
@@ -2543,14 +2881,17 @@
     }
   }
 
-  function claudeAlertView(c, reached) {
-    const reset = c.session.resetsAt ? dayjs(c.session.resetsAt).format('HH:mm') : '';
+  // `key`: 'session', or 'week' when the plan has no 5 h session.
+  function claudeAlertView(c, key, reached) {
+    const w = c[key];
+    const reset = w.resetsAt ? dayjs(w.resetsAt).format(key === 'session' ? 'HH:mm' : 'ddd HH:mm') : '';
+    const label = key === 'session' ? (reached ? 'claude.limit_reached' : 'claude.session_80') : (reached ? 'claude.week_limit_reached' : 'claude.week_80');
     return {
-      key: `transient|claude|${reached}`,
+      key: `transient|claude|${key}|${reached}`,
       size: 'wide',
       html: `<div class="n-wide ${reached ? 'n-bad' : 'n-claude-alert'}"><i class="icon icon-sparkle"></i>`
-        + `<span class="n-label">${t(reached ? 'claude.limit_reached' : 'claude.session_80')}</span>`
-        + `<span class="n-num">${reached ? `${reset}` : `${c.session.percent} %`}</span></div>`,
+        + `<span class="n-label">${t(label)}</span>`
+        + `<span class="n-num">${reached ? `${reset}` : `${w.percent} %`}</span></div>`,
     };
   }
 

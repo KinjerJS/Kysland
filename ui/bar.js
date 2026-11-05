@@ -132,7 +132,7 @@ popup.el.addEventListener('mouseleave', () => { popup.hideTimer = setTimeout(() 
 // Clickable areas are sent to the engine, which makes the window clickable above them only:
 // anywhere else, clicks reach the windows below.
 // (the island gone with Kys doesn't count; Kys running free does: it can be caught)
-const HIT_SELECTOR = '.modules-left, .modules-center, .modules-right, #popup.visible, .notch:not(.kys-away), .eye-flyer.free';
+const HIT_SELECTOR = '.modules-left, .modules-center, .modules-right, #popup.visible, .notch:not(.kys-away), .eye-flyer.free, .move-veil';
 // The island's own rect also goes along: the engine looks at the screen around it (outline)
 // and at how the cursor approaches it (dodging).
 let lastHitRects = '';

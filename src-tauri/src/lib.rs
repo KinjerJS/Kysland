@@ -63,6 +63,8 @@ struct Bar {
     /// Kys pulled out of the island and running free (option "kys-grab"): the window covers the
     /// whole screen, the island neither dodges nor auto-hides, and the page follows the cursor.
     free: bool,
+    /// The island being moved (island.js): the window covers the whole screen meanwhile.
+    moving: bool,
 }
 
 #[derive(Default)]
@@ -153,9 +155,9 @@ fn create_bars(app: &AppHandle, cfg: &Value) {
         let mut bar = Bar {
             label, hwnd, index, primary: Some((p.x, p.y)) == primary,
             monitor: (p.x, p.y, s.width as i32, s.height as i32), scale: m.scale_factor(),
-            appbar: (cfg["reserve"] == true).then(|| win32::AppBar::register(hwnd)),
+            appbar: (cfg["reserve"] == true && matches!(edge_of(cfg), "top" | "bottom")).then(|| win32::AppBar::register(hwnd)),
             rects: vec![], notch: None, interactive: false, fullscreen: false, dark: false,
-            dodgeable: false, dodge: None, dodge_armed: false, grab: false, press_inside: false, watch: false, watch_seen: false, near: true, far_since: None, free: false,
+            dodgeable: false, dodge: None, dodge_armed: false, grab: false, press_inside: false, watch: false, watch_seen: false, near: true, far_since: None, free: false, moving: false,
         };
         position_bar(&mut bar, cfg);
         let _ = win.set_ignore_cursor_events(true);
@@ -164,18 +166,36 @@ fn create_bars(app: &AppHandle, cfg: &Value) {
     }
 }
 
+/// The screen edge the island (and the bar) sits on: "top", "bottom", "left" or "right".
+fn edge_of(cfg: &Value) -> &str {
+    match cfg["position"].as_str() { Some(e @ ("bottom" | "left" | "right")) => e, _ => "top" }
+}
+
+/// How far along its edge the island sits, 0 to 1 (0.5: the middle).
+fn along_of(cfg: &Value) -> f64 {
+    config::island_conf(cfg)["along"].as_f64().unwrap_or(0.5).clamp(0.0, 1.0)
+}
+
 fn position_bar(bar: &mut Bar, cfg: &Value) {
     let rc = bar_rect(bar, cfg);
     win32::place_window(bar.hwnd, rc, !bar.fullscreen);
 }
 
-/// Where a bar's window goes: its strip (the bar and the room below it for the island), or the
-/// whole screen while Kys runs free.
+/// Where a bar's window goes: its strip (the bar and the room below it for the island; on a side,
+/// a band wide enough for the expanded island), or the whole screen while Kys runs free or while
+/// the island is being moved.
 fn bar_rect(bar: &mut Bar, cfg: &Value) -> (i32, i32, i32, i32) {
     let (x, y, w, h) = bar.monitor;
-    if bar.free { return (x, y, w, h); }
+    if bar.free || bar.moving { return (x, y, w, h); }
     let height = cfg["height"].as_f64().unwrap_or(32.0);
-    let total = ((height + cfg["popup-space"].as_f64().unwrap_or(420.0)) * bar.scale).round() as i32;
+    let popup = cfg["popup-space"].as_f64().unwrap_or(420.0);
+    let total = ((height + popup) * bar.scale).round() as i32;
+    let side = ((height + popup).max(640.0) * bar.scale).round().min(w as f64) as i32;
+    match edge_of(cfg) {
+        "left" => return (x, y, side, h),
+        "right" => return (x + w - side, y, side, h),
+        _ => {}
+    }
     let bottom = cfg["position"] == "bottom";
     let monitor = windows::Win32::Foundation::RECT { left: x, top: y, right: x + w, bottom: y + h };
     let rc = match bar.appbar.as_mut() {
@@ -394,14 +414,15 @@ fn background_loop(app: AppHandle) {
             let moved = trail.len() < 2 || trail[trail.len() - 2].1 != cx || trail[trail.len() - 2].2 != cy;
             with(|s| {
                 let (dodge_speed, eyes, auto_hide) = (s.dodge_speed, s.dodge_eyes, s.auto_hide);
-                let bottom = s.cfg["position"] == "bottom";
+                let (edge, along) = (edge_of(&s.cfg).to_owned(), along_of(&s.cfg));
                 for bar in &mut s.bars {
                     let Some(rc) = win32::window_rect(bar.hwnd) else { continue };
                     // Cursor in CSS pixels of the window.
                     let (px, py) = ((cx - rc.left) as f64 / bar.scale, (cy - rc.top) as f64 / bar.scale);
                     let free = bar.free; // Kys out of the island: no dodging nor auto-hide meanwhile
-                    if !free && let Some(near) = presence_step(bar, auto_hide, bottom, (cx, cy), rc, (px, py), now) { presences.push((bar.label.clone(), near)); }
-                    let change = if free { None } else { dodge_step(bar, dodge_speed, px, py, speed / bar.scale) };
+                    let busy = free || bar.moving; // ...nor while the island is being moved
+                    if !busy && let Some(near) = presence_step(bar, auto_hide, (&edge, along), (cx, cy), rc, (px, py), now) { presences.push((bar.label.clone(), near)); }
+                    let change = if busy { None } else { dodge_step(bar, dodge_speed, px, py, speed / bar.scale) };
                     if let Some(on) = change { dodges.push((bar.label.clone(), on)); }
                     // The hidden island no longer gets mouse events: its eyes follow the cursor through the engine.
                     // (and to the eyes peeking into the resting island, from the moment they show up)
@@ -491,6 +512,86 @@ fn background_loop(app: AppHandle) {
     });
 }
 
+/// Theme "glass": what's under each island, copied for the page to draw it through its glass
+/// (island.js, Glass). Meanwhile the windows are left out of screen captures, so the copy shows
+/// what's behind them (and screenshots, recordings and screen sharing don't show Kysland). If
+/// Windows refuses, no copies: they would show the island itself. Half resolution (the glass
+/// blurs it anyway), sent only when it changed, checked less often while nothing moves.
+fn glass_loop(app: AppHandle) {
+    /// Past the island, so the blur and the bend have something to work with (more than GLASS_PAD).
+    const MARGIN: f64 = 32.0;
+    /// Room for the expanded island, copied as soon as the cursor is over the island.
+    const OPEN: (f64, f64) = (700.0, 580.0);
+    std::thread::spawn(move || {
+        let mut excluded: std::collections::HashMap<isize, bool> = std::collections::HashMap::new();
+        let mut last: std::collections::HashMap<String, (i32, i32, i32, i32, Vec<u8>)> = std::collections::HashMap::new();
+        let mut still = 0u32; // checks in a row without any change
+        loop {
+            let (glass, edge, along, bars) = with(|s| {
+                let glass = config::island_conf(&s.cfg)["theme"] == "glass";
+                let bars: Vec<(String, isize, f64, Option<Rect>, bool, bool)> = s.bars.iter()
+                    .map(|b| (b.label.clone(), b.hwnd, b.scale, b.notch, b.interactive, b.fullscreen || b.free || b.moving)).collect();
+                (glass, edge_of(&s.cfg).to_owned(), along_of(&s.cfg), bars)
+            });
+            let hover = bars.iter().any(|b| b.4);
+            std::thread::sleep(Duration::from_millis(if !glass { 500 } else if still > 25 && !hover { 250 } else { 80 }));
+            excluded.retain(|h, _| bars.iter().any(|b| b.1 == *h));
+            for b in &bars {
+                if excluded.get(&b.1).copied() == Some(glass) || (!glass && !excluded.contains_key(&b.1)) { continue; }
+                let ok = win32::exclude_from_capture(b.1, glass);
+                if glass && !ok { util::log("glass: Windows won't leave the island out of screen captures, no glass"); }
+                excluded.insert(b.1, glass && ok);
+            }
+            if !glass { last.clear(); continue; }
+            let mut changed = false;
+            for (label, hwnd, scale, notch, interactive, hidden) in bars {
+                let (Some(n), false, Some(true)) = (notch, hidden, excluded.get(&hwnd).copied()) else { continue };
+                let Some(rc) = win32::window_rect(hwnd) else { continue };
+                let (ww, wh) = ((rc.right - rc.left) as f64 / scale, (rc.bottom - rc.top) as f64 / scale);
+                if n.y + n.h <= 0.0 || n.y >= wh || n.x + n.w <= 0.0 || n.x >= ww { continue; } // tucked away past the edge
+                // Around the island, from the screen edge; while it's hovered, the room it opens
+                // into too (it grows around its point at "along" of its length, notch.css).
+                let (mut x0, mut y0, mut x1, mut y1) = (n.x - MARGIN, n.y - MARGIN, n.x + n.w + MARGIN, n.y + n.h + MARGIN);
+                match edge.as_str() { "bottom" => y1 = wh, "left" => x0 = 0.0, "right" => x1 = ww, _ => y0 = 0.0 }
+                if interactive {
+                    if edge == "left" || edge == "right" {
+                        let ay = along * wh;
+                        y0 = y0.min(ay - along * OPEN.0);
+                        y1 = y1.max(ay + (1.0 - along) * OPEN.0);
+                        if edge == "left" { x1 = x1.max(OPEN.1) } else { x0 = x0.min(ww - OPEN.1) }
+                    } else {
+                        let ax = along * ww;
+                        x0 = x0.min(ax - along * OPEN.0);
+                        x1 = x1.max(ax + (1.0 - along) * OPEN.0);
+                        if edge == "bottom" { y0 = y0.min(wh - OPEN.1) } else { y1 = y1.max(OPEN.1) }
+                    }
+                }
+                let (x0, y0, x1, y1) = (x0.max(0.0).floor(), y0.max(0.0).floor(), x1.min(ww).ceil(), y1.min(wh).ceil());
+                let (pw, ph) = (((x1 - x0) / 2.0).ceil() as i32, ((y1 - y0) / 2.0).ceil() as i32);
+                let src = windows::Win32::Foundation::RECT {
+                    left: rc.left + (x0 * scale).round() as i32, top: rc.top + (y0 * scale).round() as i32,
+                    right: rc.left + (x1 * scale).round() as i32, bottom: rc.top + (y1 * scale).round() as i32,
+                };
+                let took = Instant::now();
+                let Some((px, luma)) = win32::capture(src, pw, ph) else { continue };
+                if last.is_empty() {
+                    util::log(&format!("glass: copying {}x{} px of the screen into {pw}x{ph} ({} ms)",
+                        src.right - src.left, src.bottom - src.top, took.elapsed().as_millis()));
+                }
+                let area = (x0 as i32, y0 as i32, x1 as i32, y1 as i32);
+                if last.get(&label).is_some_and(|l| (l.0, l.1, l.2, l.3) == area && l.4 == px) { continue; }
+                changed = true;
+                let data = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &px);
+                last.insert(label.clone(), (area.0, area.1, area.2, area.3, px));
+                let _ = app.emit_to(label.as_str(), "glass", json!({
+                    "label": label, "x": x0, "y": y0, "w": x1 - x0, "h": y1 - y0, "pw": pw, "ph": ph, "luma": luma, "data": data,
+                }));
+            }
+            still = if changed { 0 } else { still.saturating_add(1) };
+        }
+    });
+}
+
 /// Cursor speed over the recent trail, in physical pixels per second.
 fn trail_speed(trail: &std::collections::VecDeque<(Instant, i32, i32)>) -> f64 {
     let (Some(first), Some(last)) = (trail.front(), trail.back()) else { return 0.0 };
@@ -510,7 +611,7 @@ fn distance(px: f64, py: f64, r: Rect) -> f64 {
 /// Auto-hide: the island shows only while the cursor is on its screen and within `reach` CSS px of
 /// where the island sits (top or bottom center, a bit wider for the way back out), or over the island.
 /// It hides a moment after the cursor goes away. Returns the new state when it changes.
-fn presence_step(bar: &mut Bar, reach: Option<f64>, bottom: bool, cursor: (i32, i32), win: windows::Win32::Foundation::RECT,
+fn presence_step(bar: &mut Bar, reach: Option<f64>, (edge, along): (&str, f64), cursor: (i32, i32), win: windows::Win32::Foundation::RECT,
                  (px, py): (f64, f64), now: Instant) -> Option<bool> {
     let near = match reach {
         None => true,
@@ -518,7 +619,11 @@ fn presence_step(bar: &mut Bar, reach: Option<f64>, bottom: bool, cursor: (i32, 
             let (mx, my, mw, mh) = bar.monitor;
             let on_screen = cursor.0 >= mx && cursor.0 < mx + mw && cursor.1 >= my && cursor.1 < my + mh;
             let (w, h) = ((win.right - win.left) as f64 / bar.scale, (win.bottom - win.top) as f64 / bar.scale);
-            let spot = Rect { x: w / 2.0 - 110.0, y: if bottom { h - 40.0 } else { 0.0 }, w: 220.0, h: 40.0 };
+            // Where the resting island shows (it's tucked away meanwhile).
+            let spot = match edge {
+                "left" | "right" => Rect { x: if edge == "left" { 0.0 } else { w - 220.0 }, y: (along * h - 20.0).clamp(0.0, (h - 40.0).max(0.0)), w: 220.0, h: 40.0 },
+                _ => Rect { x: (along * w - 110.0).clamp(0.0, (w - 220.0).max(0.0)), y: if edge == "bottom" { h - 40.0 } else { 0.0 }, w: 220.0, h: 40.0 },
+            };
             let limit = if bar.near { reach + 40.0 } else { reach };
             on_screen && (bar.interactive || distance(px, py, spot) <= limit)
         }
@@ -734,7 +839,7 @@ fn set_setting(app: AppHandle, key: String, value: Value) -> Result<(), String> 
     match key.as_str() {
         "language" | "monitors" | "hide-on-fullscreen" => config::set_value(&[&key], value),
         "dodge" | "dodge-eyes" | "dodge-roam" | "dodge-roam-delay" | "dodge-speed" | "auto-hide" | "auto-hide-distance" | "peek" | "outline"
-        | "claude" | "notifications" | "kys-brain" | "kys-grab"
+        | "close-bounce" | "theme" | "glass" | "claude" | "notifications" | "kys-brain" | "kys-grab"
         | "hide-windows-osd" | "expand-on-hover" => {
             config::set_value(&[&island, &key], value)
         }
@@ -746,7 +851,7 @@ fn set_setting(app: AppHandle, key: String, value: Value) -> Result<(), String> 
 /// Buttons of the settings window, same as the menu entries.
 #[tauri::command]
 fn settings_action(app: AppHandle, name: String) {
-    if !matches!(name.as_str(), "reload" | "open-config" | "edit-config" | "edit-style" | "devtools") { return; }
+    if !matches!(name.as_str(), "reload" | "open-config" | "edit-config" | "edit-style" | "devtools" | "move-island" | "center-island") { return; }
     let a = app.clone();
     later(&app, move || on_menu(&a, &name));
 }
@@ -790,6 +895,48 @@ fn kys_free(window: WebviewWindow, on: bool) {
         if let Some((hwnd, rc, topmost)) = placed { win32::place_window(hwnd, rc, topmost); }
         hub::emit("kys-free", json!({ "on": with(|s| s.bars.iter().any(|b| b.free)) })); // the settings' buddy steps aside
     });
+}
+
+/// The island being moved (island.js) or not anymore: its window covers the whole screen meanwhile,
+/// so it can follow the cursor to any edge.
+#[tauri::command]
+fn island_move(window: WebviewWindow, on: bool) {
+    let label = window.label().to_owned();
+    let app = window.app_handle().clone();
+    later(&app, move || {
+        let cfg = with(|s| s.cfg.clone());
+        let placed = with(|s| s.bars.iter_mut().find(|b| b.label == label).map(|bar| {
+            bar.moving = on;
+            bar.dodge = None;
+            bar.dodge_armed = false;
+            (bar.hwnd, bar_rect(bar, &cfg), !bar.fullscreen)
+        }));
+        if let Some((hwnd, rc, topmost)) = placed { win32::place_window(hwnd, rc, topmost); }
+    });
+}
+
+/// The island dropped on `edge`, at `along` of it: written in the config (a new edge lays the
+/// windows out again; meanwhile the window stays over the whole screen so the island stays seen).
+#[tauri::command]
+fn island_place(window: WebviewWindow, edge: String, along: f64) -> Result<(), String> {
+    if !matches!(edge.as_str(), "top" | "bottom" | "left" | "right") { return Err(format!("unknown edge: {edge}")); }
+    let along = (along.clamp(0.0, 1.0) * 1000.0).round() / 1000.0;
+    let label = window.label().to_owned();
+    let (cfg, island) = with(|s| (s.cfg.clone(), config::island_name(&s.cfg).unwrap_or_else(|| "island".into())));
+    if edge_of(&cfg) == edge {
+        let app = window.app_handle().clone();
+        later(&app, move || {
+            let cfg = with(|s| s.cfg.clone());
+            let placed = with(|s| s.bars.iter_mut().find(|b| b.label == label).map(|bar| {
+                bar.moving = false;
+                (bar.hwnd, bar_rect(bar, &cfg), !bar.fullscreen)
+            }));
+            if let Some((hwnd, rc, topmost)) = placed { win32::place_window(hwnd, rc, topmost); }
+        });
+    } else {
+        config::set_value(&["position"], json!(edge))?;
+    }
+    config::set_value(&[&island, "along"], json!(along))
 }
 
 /// Something from Kys's inventory dragged in the settings window, for Kys running free on the
@@ -936,10 +1083,20 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     }
     let speed_items: Vec<&dyn IsMenuItem<tauri::Wry>> = speeds.iter().map(|i| i as &dyn IsMenuItem<tauri::Wry>).collect();
     let outline = match &island["outline"] { Value::Bool(true) => "on", Value::Bool(false) => "off", _ => "auto" };
-    let outline_menu = Submenu::with_items(app, t("menu.outline"), true, &[
+    let glass = island["theme"] == "glass"; // the glass always has its rim: no outline to choose
+    let outline_menu = Submenu::with_items(app, t("menu.outline"), !glass, &[
         &CheckMenuItem::with_id(app, "outline:auto", t("menu.outline_auto"), true, outline == "auto", None::<&str>)?,
         &CheckMenuItem::with_id(app, "outline:on", t("menu.outline_on"), true, outline == "on", None::<&str>)?,
         &CheckMenuItem::with_id(app, "outline:off", t("menu.outline_off"), true, outline == "off", None::<&str>)?,
+    ])?;
+    let level = island["glass"].as_str().unwrap_or("frosted");
+    let theme_menu = Submenu::with_items(app, t("menu.theme"), true, &[
+        &CheckMenuItem::with_id(app, "theme:classic", t("menu.theme_classic"), true, !glass, None::<&str>)?,
+        &CheckMenuItem::with_id(app, "theme:glass", "Liquid Glass", true, glass, None::<&str>)?,
+        &PredefinedMenuItem::separator(app)?,
+        &CheckMenuItem::with_id(app, "glass:frosted", t("menu.glass_frosted"), glass, level == "frosted", None::<&str>)?,
+        &CheckMenuItem::with_id(app, "glass:balanced", t("menu.glass_balanced"), glass, level == "balanced", None::<&str>)?,
+        &CheckMenuItem::with_id(app, "glass:crystal", t("menu.glass_crystal"), glass, level == "crystal", None::<&str>)?,
     ])?;
     let island_menu = Submenu::with_items(app, t("menu.island"), true, &[
         &CheckMenuItem::with_id(app, "dodge", t("menu.dodge"), true, dodge, None::<&str>)?,
@@ -949,8 +1106,11 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         &Submenu::with_items(app, t("menu.dodge_speed"), dodge, &speed_items)?,
         &PredefinedMenuItem::separator(app)?,
         &CheckMenuItem::with_id(app, "peek", t("menu.peek"), true, island["peek"] != false, None::<&str>)?,
+        &CheckMenuItem::with_id(app, "close-bounce", t("menu.close_bounce"), true, island["close-bounce"] != false, None::<&str>)?,
+        &MenuItem::with_id(app, "move-island", t("menu.move_island"), true, None::<&str>)?,
         &CheckMenuItem::with_id(app, "auto-hide", t("menu.auto_hide"), true, island["auto-hide"] == true, None::<&str>)?,
         &CheckMenuItem::with_id(app, "fullscreen", t("menu.fullscreen"), true, cfg["hide-on-fullscreen"] != false, None::<&str>)?,
+        &theme_menu,
         &outline_menu,
         &CheckMenuItem::with_id(app, "claude", t(if claude { "menu.claude" } else { "menu.claude_missing" }),
             claude, claude && island["claude"] == true, None::<&str>)?,
@@ -991,8 +1151,19 @@ fn on_menu(app: &AppHandle, id: &str) {
         }
         "fullscreen" => config::set_value(&["hide-on-fullscreen"], json!(cfg["hide-on-fullscreen"] == false)),
         "claude" => config::set_value(&[&island, "claude"], json!(config::island_conf(&cfg)["claude"] != true)),
-        "dodge" | "dodge-eyes" | "dodge-roam" | "peek" => config::set_value(&[&island, id], json!(config::island_conf(&cfg)[id] == false)),
+        "dodge" | "dodge-eyes" | "dodge-roam" | "peek" | "close-bounce" => config::set_value(&[&island, id], json!(config::island_conf(&cfg)[id] == false)),
         "auto-hide" => config::set_value(&[&island, id], json!(config::island_conf(&cfg)[id] != true)),
+        "move-island" => {
+            // On the screen the cursor is on (or the first one).
+            let (cx, cy) = win32::cursor_pos();
+            let label = with(|s| s.bars.iter().find(|b| { let (x, y, w, h) = b.monitor; cx >= x && cx < x + w && cy >= y && cy < y + h })
+                .or(s.bars.first()).map(|b| b.label.clone()));
+            if let Some(label) = label { let _ = app.emit_to(label.as_str(), "island-move", json!({ "label": label })); }
+            Ok(())
+        }
+        "center-island" => config::set_value(&["position"], json!("top")).and_then(|_| config::set_value(&[&island, "along"], json!(0.5))),
+        "theme:classic" | "theme:glass" => config::set_value(&[&island, "theme"], json!(&id[6..])),
+        "glass:frosted" | "glass:balanced" | "glass:crystal" => config::set_value(&[&island, "glass"], json!(&id[6..])),
         "outline:auto" => config::set_value(&[&island, "outline"], json!("auto")),
         "outline:on" | "outline:off" => config::set_value(&[&island, "outline"], json!(id == "outline:on")),
         s if s.starts_with("dodge-speed:") => config::set_value(&[&island, "dodge-speed"], json!(s[12..].parse::<u32>().unwrap_or(450))),
@@ -1113,7 +1284,7 @@ pub fn run() {
         )
         .invoke_handler({
             let commands: Box<dyn Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync> = Box::new(tauri::generate_handler![init, run_command, notifications, set_hit_rects, action, settings_state, set_setting, settings_action,
-                kys_state, kys_earn, kys_buy, kys_feed, kys_wear, kys_play, kys_talk, kys_brain, kys_brain_model, kys_typing, kys_warm, kys_free, kys_offer]);
+                kys_state, kys_earn, kys_buy, kys_feed, kys_wear, kys_play, kys_talk, kys_brain, kys_brain_model, kys_typing, kys_warm, kys_free, kys_offer, island_move, island_place]);
             // Which command runs (sync ones run on the main thread), for the watchdog's log.
             move |invoke: tauri::ipc::Invoke<tauri::Wry>| {
                 *RUNNING.lock().unwrap() = Some((invoke.message.command().to_owned(), Instant::now()));
@@ -1141,6 +1312,7 @@ pub fn run() {
             ensure_autostart(&handle);
             create_settings(&handle); // hidden, until it's opened
             background_loop(handle.clone());
+            glass_loop(handle.clone());
             watchdog(handle.clone());
             watch_config(handle);
             Ok(())

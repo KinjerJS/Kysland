@@ -30,8 +30,8 @@
 .notch {
   position: fixed;
   top: 0;
-  left: 50%;
-  translate: -50% 0;
+  left: calc(var(--along, .5) * 100%); /* where along its edge: 0 one end, .5 the middle, 1 the other (island.js) */
+  translate: calc(var(--along, .5) * -100%) var(--notch-y, 0px); /* --notch-y: theme glass, floating off the edge */
   z-index: 10;
   width: 160px;
   height: var(--notch-h);
@@ -44,9 +44,11 @@
   transition: width .5s var(--spring), height .5s var(--spring), border-radius .5s var(--spring), box-shadow .4s ease, --notch-outline .4s ease,
     --notch-ear .5s var(--spring), translate .5s var(--spring), opacity .3s ease;
 }
+/* Closing with "close-bounce": false (island.js): the same springs, without overshoot (no boing). */
+.notch.closing { --spring: cubic-bezier(.3, 1, .5, 1); }
 /* Auto-hide: tucked away past the screen edge while the mouse is far (island.js). */
-.notch.away { translate: -50% calc(-100% - 14px); opacity: 0; }
-body.pos-bottom .notch.away { translate: -50% calc(100% + 14px); }
+.notch.away { translate: calc(var(--along, .5) * -100%) calc(-100% - 14px); opacity: 0; }
+body.pos-bottom .notch.away { translate: calc(var(--along, .5) * -100%) calc(100% + 14px); }
 /* Mostly black around the island (or "outline": true): thin outline so it stays visible. */
 .notch.outlined { --notch-outline: var(--notch-outline-color); }
 .notch[data-size=wide] { border-radius: 0 0 18px 18px; }
@@ -940,3 +942,143 @@ body.pos-bottom .notch.splash { transform-origin: 50% 100%; }
 .k-earn b { color: #ffd66b; font-weight: 600; }
 .k-earn em { color: var(--notch-dim); font-style: normal; text-align: right; font-variant-numeric: tabular-nums; }
 .notch .k-shop:hover:not(:disabled) { scale: 1.05; }
+
+/* --- On a side of the screen ("position": "left" / "right") ----------------------------------------
+   The same island against a side edge, at "along" of its height, growing into the screen. Its ears
+   go above and below it. It doesn't hide from the cursor there (no eyes, no peeking, no Kys to grab:
+   they live in the top and bottom edges), nor the bar's modules (island.js, base.css). */
+body.pos-left .notch, body.pos-right .notch {
+  top: calc(var(--along, .5) * 100%);
+  translate: var(--notch-x, 0px) calc(var(--along, .5) * -100%);
+}
+body.pos-left .notch { left: 0; border-radius: 0 var(--notch-radius) var(--notch-radius) 0; }
+body.pos-right .notch { left: auto; right: 0; border-radius: var(--notch-radius) 0 0 var(--notch-radius); }
+body.pos-left .notch[data-size=wide] { border-radius: 0 18px 18px 0; }
+body.pos-right .notch[data-size=wide] { border-radius: 18px 0 0 18px; }
+body.pos-left .notch[data-size=card] { border-radius: 0 24px 24px 0; }
+body.pos-right .notch[data-size=card] { border-radius: 24px 0 0 24px; }
+body.pos-left .notch[data-size=expanded] { border-radius: 0 var(--notch-radius-lg) var(--notch-radius-lg) 0; }
+body.pos-right .notch[data-size=expanded] { border-radius: var(--notch-radius-lg) 0 0 var(--notch-radius-lg); }
+body.pos-left .notch.away { translate: calc(-100% - 14px) calc(var(--along, .5) * -100%); }
+body.pos-right .notch.away { translate: calc(100% + 14px) calc(var(--along, .5) * -100%); }
+body.pos-left .notch::before, body.pos-right .notch::before { top: auto; bottom: 100%; left: auto; right: auto; }
+body.pos-left .notch::after, body.pos-right .notch::after { top: 100%; left: auto; right: auto; }
+body.pos-left .notch::before { left: 0; background: radial-gradient(circle at 100% 0, transparent calc(var(--notch-ear) - 1.75px), var(--notch-outline) calc(var(--notch-ear) - 1.25px), var(--notch-outline) calc(var(--notch-ear) - 0.5px), var(--notch-bg) var(--notch-ear)); }
+body.pos-left .notch::after { left: 0; background: radial-gradient(circle at 100% 100%, transparent calc(var(--notch-ear) - 1.75px), var(--notch-outline) calc(var(--notch-ear) - 1.25px), var(--notch-outline) calc(var(--notch-ear) - 0.5px), var(--notch-bg) var(--notch-ear)); }
+body.pos-right .notch::before { right: 0; background: radial-gradient(circle at 0 0, transparent calc(var(--notch-ear) - 1.75px), var(--notch-outline) calc(var(--notch-ear) - 1.25px), var(--notch-outline) calc(var(--notch-ear) - 0.5px), var(--notch-bg) var(--notch-ear)); }
+body.pos-right .notch::after { right: 0; background: radial-gradient(circle at 0 100%, transparent calc(var(--notch-ear) - 1.75px), var(--notch-outline) calc(var(--notch-ear) - 1.25px), var(--notch-outline) calc(var(--notch-ear) - 0.5px), var(--notch-bg) var(--notch-ear)); }
+body.pos-left .notch-view, body.pos-right .notch-view { top: 50%; translate: 0 -50%; }
+body.pos-left .notch-view { left: 0; transform-origin: left center; }
+body.pos-right .notch-view { left: auto; right: 0; transform-origin: right center; }
+
+/* --- Moving the island (island.js): it follows the cursor along the nearest edge ------------------
+   The window covers the whole screen meanwhile; the veil takes the mouse, lights the edge the
+   island will land on, and says what to do. */
+.move-veil { position: fixed; inset: 0; z-index: 9; cursor: grabbing; background: rgba(0, 0, 0, 0.12); }
+.move-veil::before { content: ''; position: absolute; background: var(--accent); opacity: .8; box-shadow: 0 0 18px var(--accent); transition: all .25s ease; }
+.move-veil[data-edge=top]::before { left: 0; right: 0; top: 0; height: 3px; }
+.move-veil[data-edge=bottom]::before { left: 0; right: 0; bottom: 0; height: 3px; }
+.move-veil[data-edge=left]::before { top: 0; bottom: 0; left: 0; width: 3px; }
+.move-veil[data-edge=right]::before { top: 0; bottom: 0; right: 0; width: 3px; }
+.move-hint {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #f5f5f7;
+  font: 500 13px var(--notch-font);
+  white-space: nowrap;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+body.moving .notch { pointer-events: none; }
+body.moving .notch:not(.away) { scale: 1.04; filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.45)); }
+
+/* --- Liquid Glass theme ("theme": "glass": island.js puts body.theme-glass) ------------------------
+   The island floats off the screen edge, a capsule of glass as on iOS. The engine copies what's under
+   it (its window is left out of screen captures meanwhile) and island.js draws that copy in
+   .notch-glass, through the SVG filter #kys-glass: blurred, saturated, and bent at the rim by a
+   displacement map computed for the island's shape (a glass bulging at its edges, refracting like
+   real glass). The same shape gives the rim light (--glass-spec), a tint darkens over light
+   backgrounds (--glass-dim) so the white text stays readable, and a light follows the cursor.
+   Until the first copy arrives (or if Windows refuses to leave the window out of captures): a
+   plain dark tint. Last in this file: these rules win over the classic ones of equal weight.
+   Box shadows keep the same layers in every state so they animate between them. */
+@property --glass-dim { syntax: '<number>'; inherits: true; initial-value: 0.32; }
+.notch-glass, .notch-light { display: none; }
+body.theme-glass {
+  --notch-y: 6px;
+  --glass-light: rgba(255, 255, 255, 0.13);
+  --notch-dim: rgba(245, 245, 247, 0.74);
+}
+body.theme-glass.pos-bottom { --notch-y: -6px; }
+body.theme-glass.pos-left { --notch-x: 6px; }
+body.theme-glass.pos-right { --notch-x: -6px; }
+/* Radii: the same values in island.js (glassRadius), which draws the maps for them. */
+body.theme-glass .notch {
+  background: transparent;
+  border-radius: 20px;
+  box-shadow: 0 0 0 .5px rgba(255, 255, 255, 0.12), 0 8px 26px rgba(0, 0, 0, 0.3);
+}
+body.theme-glass .notch[data-size=card] { border-radius: 28px; box-shadow: 0 0 0 .5px rgba(255, 255, 255, 0.12), 0 14px 40px rgba(0, 0, 0, 0.36); }
+body.theme-glass .notch[data-size=expanded] { border-radius: 34px; box-shadow: 0 0 0 .5px rgba(255, 255, 255, 0.12), 0 20px 54px rgba(0, 0, 0, 0.42); }
+body.theme-glass .notch::before, body.theme-glass .notch::after { display: none; } /* no ears: it floats */
+body.theme-glass .notch, body.theme-glass .notch-fly { text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45); }
+
+/* Hiding from a slow cursor: back against the edge, a drop of glass (its views fade, the glass stays). */
+body.theme-glass .notch.dodged {
+  --notch-y: 0px;
+  border-radius: 0 0 5px 5px;
+  box-shadow: 0 0 0 .5px rgba(255, 255, 255, 0.12), 0 2px 8px rgba(0, 0, 0, 0.25);
+  transition: width .35s cubic-bezier(.4, 0, .2, 1), height .35s cubic-bezier(.4, 0, .2, 1), border-radius .35s ease,
+    box-shadow .3s ease, translate .35s cubic-bezier(.4, 0, .2, 1);
+}
+body.theme-glass .notch.dodged.eyes { border-radius: 0 0 6px 6px; }
+body.theme-glass .notch.dodged.eyes.roaming {
+  border-radius: 0 0 46px 46px;
+  transition: width .6s var(--spring), height .6s var(--spring), border-radius .6s var(--spring), box-shadow .3s ease, translate .35s ease;
+}
+body.theme-glass.pos-bottom .notch.dodged { border-radius: 5px 5px 0 0; }
+body.theme-glass.pos-bottom .notch.dodged.eyes { border-radius: 6px 6px 0 0; }
+body.theme-glass.pos-bottom .notch.dodged.eyes.roaming { border-radius: 46px 46px 0 0; }
+body.theme-glass .notch.dodged .notch-inner { opacity: 1; }
+body.theme-glass .notch.dodged .notch-view { opacity: 0; transition: opacity .12s ease; }
+
+/* The copy of the screen: past the island by GLASS_PAD (island.js) so the blur's edges stay hidden. */
+body.theme-glass .notch-glass {
+  display: block;
+  position: absolute;
+  inset: -24px;
+  pointer-events: none;
+  background: rgb(16 16 22 / 0.62);
+  filter: url(#kys-glass);
+  transition: --glass-dim .8s ease;
+}
+body.theme-glass .notch-glass canvas { position: absolute; }
+body.theme-glass.moving .notch-glass canvas { visibility: hidden; } /* the copy only follows once it's dropped */
+body.theme-glass .notch-glass::after { content: ''; position: absolute; inset: 0; background: rgb(12 12 18 / var(--glass-dim)); }
+/* The light under the cursor (--glass-x / --glass-y, island.js), above the glass, below the views. */
+body.theme-glass .notch-light {
+  display: block;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(240px circle at var(--glass-x, 50%) var(--glass-y, 100%), var(--glass-light), transparent 70%);
+  opacity: 0;
+  transition: opacity .35s ease;
+}
+body.theme-glass .notch:hover .notch-light { opacity: 1; }
+/* Rim light, over everything (it only lights the edge). Drawn for the island and its padding. */
+body.theme-glass .notch-inner::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: var(--glass-spec, none) -24px -24px / calc(100% + 48px) calc(100% + 48px) no-repeat;
+}
+/* Kys's flight: the gooey filter makes the drop opaque; faded back to the glass's darkness. */
+body.theme-glass .eye-goo { opacity: .6; }

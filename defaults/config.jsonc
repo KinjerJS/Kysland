@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 {
   "language": "auto",           // "auto" (Windows display language) | "en" | "fr"
-  "position": "top",            // "top" | "bottom"
+  "position": "top",            // "top" | "bottom" | "left" | "right": the screen edge the island sits on (the bar's modules: top or bottom only)
   "height": 32,                 // height reserved at the top of the screen (= notch height)
   "reserve": false,              // true: maximized windows stop below the notch
                                 // false: the notch floats above windows (iPhone style)
@@ -26,11 +26,15 @@
     "time-format": "HH:mm",              // dayjs formats: https://day.js.org/docs/en/display/format
     "date-format": "ddd D MMM",
     "date-long-format": "dddd D MMMM",
+    "along": 0.5,                       // where along its edge: 0 one end, 0.5 the middle, 1 the other. Or press and hold the island, then drag it
     "expand-on-hover": true,
     "hover-delay": 120,                  // ms before expanding
     "collapse-delay": 350,               // ms before collapsing
+    "close-bounce": true,                // the notch springs back a little as it closes; false: closes smoothly
     "media-linger": 15,                  // seconds a paused track stays visible
     "outline": "auto",                   // thin outline when it's mostly black around the notch; true / false to force it
+    "theme": "classic",                  // "classic" (black) | "glass" (Liquid Glass: a floating capsule of glass, like iOS)
+    "glass": "frosted",                  // with "glass": "frosted" (blurred) | "balanced" | "crystal" (clear, strong refraction and reflections at the rim)
     "dodge": true,                       // approach slowly and the notch tucks itself away (to reach what's behind); fast = hover as usual
     "dodge-speed": 450,                  // px/s: approaches slower than this count as slow
     "dodge-eyes": true,                  // two little eyes watch the cursor while it's hidden

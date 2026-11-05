@@ -12,6 +12,9 @@
     run: (cmd) => invoke('run_command', { cmd }),
     notifications: () => invoke('notifications'),
     action: (name, arg, extra) => invoke('action', { name, arg: arg ?? null, extra: extra ?? null }),
+    // Moving the island: the window covers the screen meanwhile; then where it was dropped.
+    moveIsland: (on) => invoke('island_move', { on }),
+    placeIsland: (edge, along) => invoke('island_place', { edge, along }),
     // Kys, the eyes as a pet (kys.rs).
     kys: {
       state: () => invoke('kys_state'),

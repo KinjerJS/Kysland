@@ -7,7 +7,7 @@ use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, POINT, RECT};
 use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED};
 use windows::Win32::Graphics::Gdi::{
     BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetDC, GetDIBits, ReleaseDC, SelectObject,
-    BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HGDIOBJ, SRCCOPY,
+    SetBrushOrgEx, SetStretchBltMode, StretchBlt, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HALFTONE, HGDIOBJ, SRCCOPY,
 };
 use windows::Win32::System::Threading::{OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION};
 use windows::Win32::UI::Input::KeyboardAndMouse::{keybd_event, GetAsyncKeyState, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP, VK_LBUTTON, VK_RBUTTON};
@@ -370,6 +370,47 @@ pub fn dark_ratio(outer: RECT, inner: RECT, max_luma: u32) -> Option<f32> {
         }
     }
     (total > 0).then(|| dark as f32 / total as f32)
+}
+
+/// Leaves the window out of screen captures (it stays on the screen: captures show what's behind
+/// it), or puts it back in. False if Windows refused.
+pub fn exclude_from_capture(h: isize, on: bool) -> bool {
+    unsafe { SetWindowDisplayAffinity(hwnd(h), if on { WDA_EXCLUDEFROMCAPTURE } else { WDA_NONE }).is_ok() }
+}
+
+/// What the screen shows in `src` (physical pixels), scaled down to `w`×`h`: RGBA, opaque, and its
+/// average lightness (0 to 1).
+pub fn capture(src: RECT, w: i32, h: i32) -> Option<(Vec<u8>, f32)> {
+    let (sw, sh) = (src.right - src.left, src.bottom - src.top);
+    if w <= 0 || h <= 0 || sw <= 0 || sh <= 0 { return None; }
+    let mut px = vec![0u8; (w * h * 4) as usize];
+    unsafe {
+        let screen = GetDC(None);
+        let mem = CreateCompatibleDC(Some(screen));
+        let bmp = CreateCompatibleBitmap(screen, w, h);
+        let old = SelectObject(mem, bmp.into());
+        SetStretchBltMode(mem, HALFTONE); // averages the pixels it drops (no shimmering text)
+        let _ = SetBrushOrgEx(mem, 0, 0, None);
+        let copied = StretchBlt(mem, 0, 0, w, h, Some(screen), src.left, src.top, sw, sh, SRCCOPY).as_bool();
+        SelectObject(mem, old); // GetDIBits needs the bitmap out of the DC
+        let mut bmi = BITMAPINFO::default();
+        bmi.bmiHeader = BITMAPINFOHEADER {
+            biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32, biWidth: w, biHeight: -h, biPlanes: 1,
+            biBitCount: 32, biCompression: BI_RGB.0, ..Default::default()
+        };
+        let lines = if copied { GetDIBits(mem, bmp, 0, h as u32, Some(px.as_mut_ptr() as *mut c_void), &mut bmi, DIB_RGB_COLORS) } else { 0 };
+        let _ = DeleteObject(bmp.into());
+        let _ = DeleteDC(mem);
+        ReleaseDC(None, screen);
+        if lines != h { return None; }
+    }
+    let mut luma = 0u64;
+    for p in px.chunks_exact_mut(4) {
+        p.swap(0, 2); // BGRA → RGBA
+        p[3] = 255;
+        luma += (p[0] as u64 * 54 + p[1] as u64 * 183 + p[2] as u64 * 19) >> 8; // Rec. 709
+    }
+    Some((px, luma as f32 / (w * h) as f32 / 255.0))
 }
 
 // --- Keys, misc ------------------------------------------------------------------------------------

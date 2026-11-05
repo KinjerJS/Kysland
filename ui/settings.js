@@ -13,9 +13,9 @@
 
   // Island options and their defaults (same as island.js / the engine).
   const ISLAND = {
-    'expand-on-hover': true, outline: 'auto', dodge: true, 'dodge-speed': 450, 'dodge-eyes': true,
+    'expand-on-hover': true, outline: 'auto', theme: 'classic', glass: 'frosted', dodge: true, 'dodge-speed': 450, 'dodge-eyes': true,
     'dodge-roam': true, 'dodge-roam-delay': 20, 'auto-hide': false, 'auto-hide-distance': 300, peek: true,
-    notifications: true, 'hide-windows-osd': true, claude: false, 'kys-brain': 'simple', 'kys-grab': false,
+    'close-bounce': true, notifications: true, 'hide-windows-osd': true, claude: false, 'kys-brain': 'simple', 'kys-grab': false,
   };
   // Top-level options, as named in the state sent by the engine.
   const TOP = { language: 'language', monitors: 'monitors', 'hide-on-fullscreen': 'hideOnFullscreen', autostart: 'autostart' };
@@ -116,12 +116,19 @@
         row(t('set.screens'), t('set.screens_desc'), screens(), { block: true }),
       ]),
       section(t('set.island'), [
+        row(t('set.position'), t('set.position_desc'),
+          `<div class="actions">${action('move-island', 'move', t('set.move'))}${action('center-island', 'align-center-horizontal', t('set.center'))}</div>`, { block: true }),
         row(t('set.expand'), t('set.expand_desc'), toggle('expand-on-hover')),
+        row(t('set.close_bounce'), t('set.close_bounce_desc'), toggle('close-bounce')),
         row(t('set.autohide'), t('set.autohide_desc'), toggle('auto-hide')),
         row(t('set.autohide_distance'), '', seg('auto-hide-distance', [[200, '200 px'], [300, '300 px'], [500, '500 px']]), { disabled: !I['auto-hide'], sub: true }),
         row(t('set.fullscreen'), t('set.fullscreen_desc'), toggle('hide-on-fullscreen')),
         row(t('set.peek'), t('set.peek_desc'), toggle('peek')),
-        row(t('set.outline'), t('set.outline_desc'), seg('outline', [['auto', t('set.outline_auto')], [true, t('set.outline_on')], [false, t('set.outline_off')]])),
+        row(t('set.theme'), t('set.theme_desc'), seg('theme', [['classic', t('set.theme_classic')], ['glass', 'Liquid Glass']])),
+        row(t('set.glass'), t('set.glass_desc'), seg('glass', [['frosted', t('set.glass_frosted')], ['balanced', t('set.glass_balanced')], ['crystal', t('set.glass_crystal')]]),
+          { disabled: I.theme !== 'glass', sub: true }),
+        // The glass always has its rim: no outline to choose.
+        row(t('set.outline'), t('set.outline_desc'), seg('outline', [['auto', t('set.outline_auto')], [true, t('set.outline_on')], [false, t('set.outline_off')]]), { disabled: I.theme === 'glass' }),
       ]),
       section(t('set.dodge_section'), [
         row(t('set.dodge'), t('set.dodge_desc'), toggle('dodge')),

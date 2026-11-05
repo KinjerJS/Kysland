@@ -31,6 +31,8 @@ html, body {
 
 body { display: flex; flex-direction: column; }
 body.pos-bottom { flex-direction: column-reverse; }
+/* On a side of the screen there is only the island: the bar's modules show at the top or the bottom. */
+body.pos-left #bar, body.pos-right #bar { display: none; }
 
 #bar {
   flex: none;

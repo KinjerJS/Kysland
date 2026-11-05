@@ -131,10 +131,14 @@ Island options (in the `"island"` section):
 | Option | Default | Description |
 |---|---|---|
 | `time-format` / `date-format` / `date-long-format` | `HH:mm` / `ddd D MMM` / `dddd D MMMM` | Any [dayjs format](https://day.js.org/docs/en/display/format) |
+| `along` | `0.5` | Where along its edge: `0` one end, `0.5` the middle, `1` the other. Easier: press and hold the island and drag it to any edge (or menu → Dynamic Island → Move the island…). On a side, it doesn't hide from the cursor |
 | `expand-on-hover` | `true` | Expand when hovered |
 | `hover-delay` / `collapse-delay` | `120` / `350` | Milliseconds before expanding / collapsing |
+| `close-bounce` | `true` | The island springs back a little as it closes; `false`: it closes smoothly |
 | `media-linger` | `15` | Seconds a paused track stays displayed |
 | `outline` | `"auto"` | Thin outline when it's mostly black around the island; `true` / `false` to force it (color: `--notch-outline-color`) |
+| `theme` | `"classic"` | `"glass"`: Liquid Glass, inspired by iOS. The island floats off the edge as a capsule of glass: what is behind it is blurred, brightened and bent at its rim like through real glass, with a rim light and a light following the mouse. To see what is behind, Kysland copies that part of the screen (a few ms, only while it changes), so its windows stay out of screenshots, recordings and screen sharing with this theme |
+| `glass` | `"frosted"` | With the glass theme: `"frosted"` (well blurred, easy to read), `"balanced"`, or `"crystal"`: nearly clear glass with a thick bulging rim that bends what's behind it strongly (like a lens) and splits its colors like a prism, a band of reflection along the edge and a sheen on its dome |
 | `dodge` / `dodge-speed` | `true` / `450` | Hide when the cursor approaches slower than this many px/s |
 | `dodge-eyes` | `true` | Eyes watching the cursor while hidden |
 | `dodge-roam` / `dodge-roam-delay` | `true` / `20` | Cursor still close after this many seconds: the island grows and the eyes roam |
@@ -150,7 +154,7 @@ Island options (in the `"island"` section):
 | `kemhome` | `http://localhost:8080` | KemHome agent URL (album art for Chrome), `false` to disable |
 | `transients` | all `true` | Which events stretch the island: `volume`, `media`, `battery`, `network`, `workspace` |
 
-Top-level options include `language` (`"auto"`, `"en"`, `"fr"`), `monitors` (`"primary"`, `"all"` or screen numbers from left to right starting at 0, e.g. `[0, 2]`), `reserve`, `hide-on-fullscreen` and `wallpaper`. Status bar modules (`workspaces`, `window`, `clock`, `cpu`, `memory`, `disk`, `network`, `audio`, `battery`, `launcher`, `power`, `media`, `custom/<name>`…) are listed in the comments of `config.jsonc`.
+Top-level options include `position` (the screen edge the island sits on: `"top"`, `"bottom"`, `"left"` or `"right"`; the bar's modules only show at the top or the bottom), `language` (`"auto"`, `"en"`, `"fr"`), `monitors` (`"primary"`, `"all"` or screen numbers from left to right starting at 0, e.g. `[0, 2]`), `reserve`, `hide-on-fullscreen` and `wallpaper`. Status bar modules (`workspaces`, `window`, `clock`, `cpu`, `memory`, `disk`, `network`, `audio`, `battery`, `launcher`, `power`, `media`, `custom/<name>`…) are listed in the comments of `config.jsonc`.
 
 ## Privacy
 

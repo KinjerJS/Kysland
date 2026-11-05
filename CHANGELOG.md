@@ -2,6 +2,14 @@
 
 What changed in each version. The section of a version is also the text of its GitHub release.
 
+## 0.6.3 — 2026-11-03
+
+- **Claude usage on plans without the 5 h session** (like Ultra): only the week's gauge is shown, across the whole width, instead of an empty or 0 % session. The 80 % and limit-reached alerts then follow the week.
+- **Liquid Glass theme**, inspired by iOS (settings → Theme, or the menu's Dynamic Island entry): the island floats off the screen edge as a capsule of glass. What's behind it is blurred, brightened and bent at its rim as through real glass (refraction computed for its shape, at every size it takes), with a rim light, a light that follows the mouse, and a tint that darkens over light backgrounds so the text stays readable. Hidden from the cursor, it's a drop of glass against the edge. To see what's behind it, Kysland copies that bit of the screen (only while it changes), so with this theme its windows don't show in screenshots, recordings or screen sharing.
+- **Three kinds of glass** for that theme (settings → Glass, or the menu's Theme entry): **frosted**, well blurred and easy to read; **balanced**; and **crystal**, nearly clear, with a thick bulging rim that bends what's behind it like a lens (the whole height of the resting capsule), splits its colors like a prism, a band of reflection along the edge and a sheen on its dome.
+- **Put the island anywhere**: along the top or the bottom of the screen, or on a side. Press and hold it, then drag it: it follows the cursor along the nearest edge (drawn to the middle as it passes it), and a click drops it there. Also from the menu (Dynamic Island → Move the island…) and the settings (Position, with a button to put it back in the middle of the top). On a side, it grows into the screen; it doesn't hide from the cursor there.
+- **Bounce when closing**, an option (settings, and the menu's Dynamic Island entry), on by default: turn it off and the island closes smoothly, without the boing. Opening keeps its spring.
+
 ## 0.6.2 — 2026-10-01
 
 - Fixed: opening the settings (from the island's gear, the menu...) could leave a blank window that wouldn't close, and Kysland stuck behind it. The settings window is now ready from the start, hidden, and only shown when you open it.
