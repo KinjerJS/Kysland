@@ -1245,6 +1245,7 @@ body.theme-glass .notch-light {
   transition: opacity .35s ease;
 }
 body.theme-glass .notch:hover .notch-light { opacity: 1; }
+body.theme-glass.glass-light-off .notch-light { display: none; } /* option "glass-light": false */
 /* The light on the rim, over everything (it only lights the edge), drawn by CSS so it follows the
    island's shape at every step of its animations. Lit from above and a bit from the left: a thin
    line along the edge, bright on top, softer on the far side, dim along the sides; a little glow

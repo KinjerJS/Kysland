@@ -894,7 +894,7 @@ fn set_setting(app: AppHandle, key: String, value: Value) -> Result<(), String> 
     match key.as_str() {
         "language" | "monitors" | "hide-on-fullscreen" => config::set_value(&[&key], value),
         "dodge" | "dodge-eyes" | "dodge-roam" | "dodge-roam-delay" | "dodge-speed" | "auto-hide" | "auto-hide-distance" | "peek" | "outline"
-        | "close-bounce" | "side-shape" | "theme" | "glass" | "visible-in-captures" | "claude" | "notifications" | "kys-brain" | "kys-grab"
+        | "close-bounce" | "side-shape" | "theme" | "glass" | "visible-in-captures" | "glass-light" | "claude" | "notifications" | "kys-brain" | "kys-grab"
         | "hide-windows-osd" | "expand-on-hover" => {
             config::set_value(&[&island, &key], value)
         }
@@ -1168,6 +1168,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         &CheckMenuItem::with_id(app, "glass:balanced", t("menu.glass_balanced"), glass, level == "balanced", None::<&str>)?,
         &CheckMenuItem::with_id(app, "glass:crystal", t("menu.glass_crystal"), glass, level == "crystal", None::<&str>)?,
         &PredefinedMenuItem::separator(app)?,
+        &CheckMenuItem::with_id(app, "glass-light", t("menu.glass_light"), glass, island["glass-light"] != false, None::<&str>)?,
         &CheckMenuItem::with_id(app, "visible-in-captures", t("menu.in_captures"), glass, island["visible-in-captures"] == true, None::<&str>)?,
     ])?;
     let island_menu = Submenu::with_items(app, t("menu.island"), true, &[
@@ -1223,7 +1224,7 @@ fn on_menu(app: &AppHandle, id: &str) {
         }
         "fullscreen" => config::set_value(&["hide-on-fullscreen"], json!(cfg["hide-on-fullscreen"] == false)),
         "claude" => config::set_value(&[&island, "claude"], json!(config::island_conf(&cfg)["claude"] != true)),
-        "dodge" | "dodge-eyes" | "dodge-roam" | "peek" | "close-bounce" => config::set_value(&[&island, id], json!(config::island_conf(&cfg)[id] == false)),
+        "dodge" | "dodge-eyes" | "dodge-roam" | "peek" | "close-bounce" | "glass-light" => config::set_value(&[&island, id], json!(config::island_conf(&cfg)[id] == false)),
         "auto-hide" | "visible-in-captures" => config::set_value(&[&island, id], json!(config::island_conf(&cfg)[id] != true)),
         "adjust-island" => {
             // On the screen the cursor is on (or the first one); the island waits there to be moved or resized.

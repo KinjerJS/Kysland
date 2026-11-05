@@ -15,7 +15,7 @@
   const ISLAND = {
     'expand-on-hover': true, 'side-shape': 'bubble', size: 100, width: null, outline: 'auto', theme: 'classic', glass: 'frosted', dodge: true, 'dodge-speed': 450, 'dodge-eyes': true,
     'dodge-roam': true, 'dodge-roam-delay': 20, 'auto-hide': false, 'auto-hide-distance': 300, peek: true,
-    'close-bounce': true, 'visible-in-captures': false, notifications: true, 'hide-windows-osd': true, claude: false, 'kys-brain': 'simple', 'kys-grab': false,
+    'close-bounce': true, 'visible-in-captures': false, 'glass-light': true, notifications: true, 'hide-windows-osd': true, claude: false, 'kys-brain': 'simple', 'kys-grab': false,
   };
   // Top-level options, as named in the state sent by the engine.
   const TOP = { language: 'language', monitors: 'monitors', 'hide-on-fullscreen': 'hideOnFullscreen', autostart: 'autostart' };
@@ -129,6 +129,7 @@
         row(t('set.theme'), t('set.theme_desc'), seg('theme', [['classic', t('set.theme_classic')], ['glass', 'Liquid Glass']])),
         row(t('set.glass'), t('set.glass_desc'), seg('glass', [['frosted', t('set.glass_frosted')], ['balanced', t('set.glass_balanced')], ['crystal', t('set.glass_crystal')]]),
           { disabled: I.theme !== 'glass', sub: true }),
+        row(t('set.glass_light'), t('set.glass_light_desc'), toggle('glass-light'), { disabled: I.theme !== 'glass', sub: true }),
         row(t('set.in_captures'), t('set.in_captures_desc'), toggle('visible-in-captures'), { disabled: I.theme !== 'glass', sub: true }),
         // The glass always has its rim: no outline to choose.
         row(t('set.outline'), t('set.outline_desc'), seg('outline', [['auto', t('set.outline_auto')], [true, t('set.outline_on')], [false, t('set.outline_off')]]), { disabled: I.theme === 'glass' }),

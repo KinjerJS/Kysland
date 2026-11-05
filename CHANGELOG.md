@@ -2,6 +2,10 @@
 
 What changed in each version. The section of a version is also the text of its GitHub release.
 
+## 0.6.11 — 2026-11-06
+
+- **Liquid Glass: the light following the mouse can be turned off**: settings → Island → Light following the mouse (or the menu's Theme entry, or `"glass-light": false`). On by default, as before.
+
 ## 0.6.10 — 2026-11-06
 
 - **Liquid Glass in screenshots**: a new option, settings → Island → Visible in screenshots (or the menu's Theme entry, or `"visible-in-captures"`), keeps the island in screenshots, recordings and screen sharing with the Liquid Glass theme. Its glass then no longer sees what's behind it (Windows would show it the island itself): while it's on, the island is a capsule of smoked glass, with its rim and its bubbles. Off (the default), it's as before: real glass, and left out of captures.

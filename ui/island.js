@@ -1628,6 +1628,7 @@
       theme: 'classic',              // 'classic' (black) | 'glass' (Liquid Glass, see Glass)
       glass: 'frosted',              // with the glass theme: 'frosted' | 'balanced' | 'crystal' (GLASS_LEVELS)
       'visible-in-captures': false,  // with the glass theme: in screenshots and recordings (its glass then sees nothing behind it)
+      'glass-light': true,           // with the glass theme: a light follows the cursor over the island
       dodge: true,                   // hides when the cursor approaches slowly (read by the engine)
       'dodge-eyes': true,            // two little eyes watch the cursor while it's hidden
       'dodge-roam': true,            // ...and roam around a grown island if the cursor stays close
@@ -1734,11 +1735,16 @@
         document.body.dataset.glass = m.conf.glass || 'frosted';
         S.notch.onResize = (w, h, size) => S.glass.target(w, h, size);
         api.on('glass', (f) => S.glass.frame(f));
-        notch.addEventListener('pointermove', (e) => {
-          const r = notch.getBoundingClientRect();
-          notch.style.setProperty('--glass-x', `${Math.round(e.clientX - r.left)}px`);
-          notch.style.setProperty('--glass-y', `${Math.round(e.clientY - r.top)}px`);
-        });
+        // The light that follows the cursor over it (option "glass-light"; notch.css hides it without).
+        const light = m.conf['glass-light'] !== false;
+        document.body.classList.toggle('glass-light-off', !light);
+        if (light) {
+          notch.addEventListener('pointermove', (e) => {
+            const r = notch.getBoundingClientRect();
+            notch.style.setProperty('--glass-x', `${Math.round(e.clientX - r.left)}px`);
+            notch.style.setProperty('--glass-y', `${Math.round(e.clientY - r.top)}px`);
+          });
+        }
       }
       // Whether the cursor is over the island (the engine reports the exits the page misses).
       notch.addEventListener('mouseenter', () => { S.hover = true; });
