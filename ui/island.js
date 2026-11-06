@@ -1843,7 +1843,7 @@
       } else if (topic === 'media') {
         if (prev?.playing && !data.playing) S.pausedAt = Date.now();
         if (data.thumb && data.key !== S.tintKey) updateTint(m, data);
-        if (t.media && data.has && data.playing && prev?.has && prev.key !== data.key) pushTransient(m, trackView(data), 3200);
+        if (t.media && data.has && data.playing && prev?.has && trackId(prev) !== trackId(data)) pushTransient(m, trackView(data), 3200);
       } else if (topic === 'battery' && prev && t.battery && data.present && prev.plugged !== data.plugged) {
         pushTransient(m, batteryView(data), 2600);
       } else if (topic === 'claude' && S.claudeOn && prev?.ok && data.ok) {
@@ -3350,24 +3350,37 @@
 
   // --- Track change: the art + title block slides ------------------------------------------
   // The old one leaves to the left, the new one comes from the right; the rest of the view stays.
+  // A track is the engine's "track" number: the same video told by KemHome then by Windows
+  // (another source, another title) is the same track, not a new one.
+  const trackId = (md) => String(md.track ?? md.key);
+
   function trackInfo(md, size, withMeta) {
     const meta = withMeta
       ? `<div class="n-meta"><div class="n-title" data-morph="title">${esc(md.title)}</div>`
         + `<div class="n-artist" data-morph="artist">${esc(md.artist || appName(md.app))}</div></div>`
       : '';
-    return `<div class="n-info" data-track="${esc(md.key)}" data-thumb="${md.thumb ? 1 : 0}">${cover(md, size)}${meta}</div>`;
+    return `<div class="n-info" data-track="${esc(trackId(md))}">${cover(md, size)}${meta}</div>`;
   }
 
   function updateTrack(el, md, size, withMeta) {
     const slot = el.querySelector('.n-slot');
     const cur = slot?.querySelector('.n-info:not(.leaving)');
     if (!slot || !cur) return;
-    if (cur.dataset.track !== md.key) return slideTrack(slot, cur, trackInfo(md, size, withMeta));
-    // Same track, album art arrived in the meantime: replaced in place, no slide.
-    if (md.thumb && cur.dataset.thumb === '0') {
-      cur.querySelector('.n-cover').outerHTML = cover(md, size);
-      cur.dataset.thumb = '1';
+    if (cur.dataset.track !== trackId(md)) return slideTrack(slot, cur, trackInfo(md, size, withMeta));
+    // Same track: the album art that arrived (or changed with the source) and the words are
+    // swapped in place, no slide.
+    const img = cur.querySelector('.n-cover');
+    if ((img.getAttribute('src') || '') !== (md.thumb || '')) img.outerHTML = cover(md, size);
+    if (withMeta) {
+      fadeText(cur.querySelector('.n-title'), md.title);
+      fadeText(cur.querySelector('.n-artist'), md.artist || appName(md.app));
     }
+  }
+
+  function fadeText(el, text) {
+    if (!el || el.textContent === text) return;
+    el.textContent = text;
+    if (shown(el) && !stillMotion()) el.animate([{ opacity: 0, filter: 'blur(2px)' }, { opacity: 1, filter: 'blur(0)' }], { duration: 260, easing: 'ease-out' });
   }
 
   function slideTrack(slot, old, html) {

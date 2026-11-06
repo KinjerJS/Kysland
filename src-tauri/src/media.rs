@@ -22,7 +22,15 @@ struct State {
     kem: Option<(Value, Instant)>,
     thumbs: HashMap<String, Option<String>>,
     published: Option<Value>,
+    /// Goes up on each new track; the island announces a track when it changes (not the key:
+    /// the same video seen by KemHome then by Windows has two keys).
+    track: u64,
 }
+
+/// How long KemHome's last word holds after it goes quiet or says "no session": it blinks
+/// (a "no_session" for a second in the middle of a Netflix episode), and each blink used to
+/// hand the island to Windows and back, announced twice as a new track.
+const KEM_HOLD: Duration = Duration::from_secs(5);
 
 static STATE: Mutex<Option<State>> = Mutex::new(None);
 static CONTROL: Mutex<Option<Sender<Control>>> = Mutex::new(None);
@@ -128,7 +136,11 @@ fn read_stream(r: &windows::Storage::Streams::IRandomAccessStreamReference) -> O
 fn kemhome_loop(epoch: u64, base: String) {
     let ws_url = format!("{}/media/ws", base.replacen("http", "ws", 1));
     while hub::alive(epoch) {
+        // KemHome not there: tried again in 10 s. Connection lost: right away (1 s), before
+        // its last word runs out (KEM_HOLD).
+        let mut wait = 10;
         if let Ok((mut ws, _)) = tungstenite::connect(&ws_url) {
+            wait = 1;
             if let MaybeTlsStream::Plain(tcp) = ws.get_mut() { let _ = TcpStream::set_read_timeout(tcp, Some(Duration::from_secs(2))); }
             while hub::alive(epoch) {
                 match ws.read() {
@@ -139,14 +151,15 @@ fn kemhome_loop(epoch: u64, base: String) {
                 }
             }
         }
-        for _ in 0..10 { if !hub::alive(epoch) { return; } std::thread::sleep(Duration::from_secs(1)); }
+        for _ in 0..wait { if !hub::alive(epoch) { return; } std::thread::sleep(Duration::from_secs(1)); }
     }
 }
 
 fn on_kemhome(base: &str, text: &str) {
     let Ok(d) = serde_json::from_str::<Value>(text) else { return };
     let title = d["title"].as_str().unwrap_or("");
-    if d["status"] == "no_session" || title.is_empty() { with_state(|s| s.kem = None); return publish(); }
+    // No session: its last word isn't renewed, and runs out after KEM_HOLD (a blink is ignored).
+    if d["status"] == "no_session" || title.is_empty() { return publish(); }
     let artist = d["artist"].as_str().unwrap_or("");
     let key = format!("kem|{title}|{artist}");
     let data = json!({
@@ -168,10 +181,18 @@ fn on_kemhome(base: &str, text: &str) {
     publish();
 }
 
-/// KemHome wins if it spoke less than 3 s ago (same rule as its MediaService).
+/// The same media for the island? Within one source, the same key. KemHome (Chrome) and Windows
+/// telling about a Chrome tab: the same, whatever their titles ("Netflix" / "Accueil - Netflix").
+fn same_media(a: &Value, b: &Value) -> bool {
+    if a["source"] == b["source"] { return a["key"] == b["key"]; }
+    let smtc = if a["source"] == "smtc" { a } else { b };
+    smtc["app"].as_str().unwrap_or("").to_ascii_lowercase().contains("chrome")
+}
+
+/// KemHome wins while its last word holds (KEM_HOLD), Windows otherwise.
 fn publish() {
     let data = with_state(|s| {
-        let kem = s.kem.as_ref().filter(|(_, at)| at.elapsed() < Duration::from_secs(3)).map(|(v, _)| v.clone());
+        let kem = s.kem.as_ref().filter(|(_, at)| at.elapsed() < KEM_HOLD).map(|(v, _)| v.clone());
         let Some(mut m) = kem.or_else(|| s.smtc.clone()) else {
             if s.published.as_ref().map(|p| p["has"] != false).unwrap_or(true) {
                 s.published = Some(json!({ "has": false }));
@@ -186,10 +207,12 @@ fn publish() {
             s.thumbs.iter().find(|(k, v)| v.is_some() && k.split('|').nth(1) == Some(title.as_str())).and_then(|(_, v)| v.clone())
         });
         let playing = m["status"] == "Playing";
+        if !s.published.as_ref().is_some_and(|p| p["has"] == true && same_media(p, &m)) { s.track += 1; }
         let obj = m.as_object_mut().unwrap();
         obj.insert("has".into(), json!(true));
         obj.insert("thumb".into(), json!(thumb));
         obj.insert("playing".into(), json!(playing));
+        obj.insert("track".into(), json!(s.track));
         // Nothing to send if only the position moved forward as expected.
         if let Some(p) = &s.published {
             let drift = p["position"].as_f64().unwrap_or(0.0)
@@ -201,4 +224,21 @@ fn publish() {
         Some(m)
     });
     if let Some(d) = data { hub::publish("media", d); }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn same_media_across_sources() {
+        let kem = json!({ "source": "kemhome", "app": "Chrome", "key": "kem|Netflix|" });
+        let chrome = json!({ "source": "smtc", "app": "Chrome", "key": "Chrome|Accueil - Netflix|" });
+        let spotify = json!({ "source": "smtc", "app": "Spotify.exe", "key": "Spotify.exe|Song|Band" });
+        let other = json!({ "source": "smtc", "app": "Spotify.exe", "key": "Spotify.exe|Other|Band" });
+        assert!(same_media(&kem, &chrome) && same_media(&chrome, &kem)); // KemHome blinks: Windows tells the same tab
+        assert!(!same_media(&kem, &spotify)); // another app took over
+        assert!(same_media(&spotify, &spotify.clone()));
+        assert!(!same_media(&spotify, &other)); // a new song
+    }
 }

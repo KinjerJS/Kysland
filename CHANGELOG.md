@@ -2,6 +2,10 @@
 
 What changed in each version. The section of a version is also the text of its GitHub release.
 
+## 0.6.13 — 2026-11-06
+
+- **Fixed: "new track" announced again and again on Netflix (and other Chrome videos) when nothing changed.** With KemHome on, a Chrome video is told by two sources with different titles (KemHome: "Netflix", Windows: "Accueil - Netflix"). KemHome sometimes says "no session" for a second, and each time the island handed over to Windows and back, announcing two new tracks. Now KemHome's last word holds for 5 s (its blinks go unseen), it reconnects at once after a dropped connection, and a source taking over the same Chrome tab is no longer a new track: the title is swapped in place, without the announcement or the slide.
+
 ## 0.6.12 — 2026-11-06
 
 - **Skins for Kys**: settings → Kys → Look (or `"kys-skin"`). Kys's body, wherever it shows (its button and its page in the island, running free on the screen, the settings' buddy), is black (**Classic**) or a capsule of smoked glass lit along its top (**Liquid Glass**). By default it's **Like the island**: of glass with the Liquid Glass theme, black otherwise.
