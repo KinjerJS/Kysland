@@ -1,0 +1,32 @@
+/* Kys's skin of glass (option "kys-skin": body.kys-skin-glass), shared by the island (notch.css)
+   and the settings' buddy (settings.css). Its glass is the island's kind (option "glass": the
+   page puts body[data-kys-glass]), as on the island (island.js, GLASS_LEVELS):
+   - frosted: milky, well blurred, a soft rim;
+   - balanced: clearer, brighter rims, a little sheen and color on its edges;
+   - crystal: nearly clear, bright rims, a glow inside its edge (Fresnel), a sheen on its dome,
+     its sides splitting the light (blue on the left, red on the right, like a prism).
+   Each body takes --kg-bg, --kg-rims (then adds its own shadow) and --kg-filter. */
+body.kys-skin-glass {
+  --kg-fill: .55; --kg-milk: .2; --kg-blur: 8px; --kg-sat: 1.6;
+  --kg-rim: .55; --kg-edge: .28; --kg-fresnel: 0; --kg-sheen: 0; --kg-prism: 0;
+  --kg-bg:
+    radial-gradient(120% 75% at 50% 0%, rgb(255 255 255 / var(--kg-sheen)), transparent 62%),
+    linear-gradient(180deg, rgb(255 255 255 / var(--kg-milk)), rgb(255 255 255 / calc(var(--kg-milk) * .25)) 45%, rgb(255 255 255 / calc(var(--kg-milk) * .5))),
+    rgb(22 22 30 / var(--kg-fill));
+  --kg-rims:
+    inset 0 1px 0 rgb(255 255 255 / var(--kg-rim)),
+    inset 0 -1px 1px rgb(0 0 0 / .25),
+    inset 0 0 0 .5px rgb(255 255 255 / var(--kg-edge)),
+    inset 1.5px 0 1.5px -.5px rgb(110 170 255 / var(--kg-prism)),
+    inset -1.5px 0 1.5px -.5px rgb(255 130 110 / var(--kg-prism)),
+    inset 0 0 7px rgb(255 255 255 / var(--kg-fresnel));
+  --kg-filter: blur(var(--kg-blur)) saturate(var(--kg-sat));
+}
+body.kys-skin-glass[data-kys-glass=balanced] {
+  --kg-fill: .42; --kg-milk: .13; --kg-blur: 4px; --kg-sat: 1.7;
+  --kg-rim: .68; --kg-edge: .34; --kg-fresnel: .1; --kg-sheen: .16; --kg-prism: .3;
+}
+body.kys-skin-glass[data-kys-glass=crystal] {
+  --kg-fill: .3; --kg-milk: .07; --kg-blur: 1.5px; --kg-sat: 1.8;
+  --kg-rim: .85; --kg-edge: .42; --kg-fresnel: .22; --kg-sheen: .3; --kg-prism: .55;
+}

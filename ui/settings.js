@@ -101,8 +101,11 @@
   // --- Page ----------------------------------------------------------------------------------------
   function render() {
     const I = S.island;
-    // Kys's skin (option "kys-skin"): the buddy's body too (settings.css).
-    document.body.classList.toggle('kys-skin-glass', I['kys-skin'] === 'glass' || (I['kys-skin'] !== 'classic' && I.theme === 'glass'));
+    // Kys's skin (option "kys-skin"): the buddy's body too (settings.css), of the island's kind of
+    // glass (kys-glass.css).
+    const kysGlass = I['kys-skin'] === 'glass' || (I['kys-skin'] !== 'classic' && I.theme === 'glass');
+    document.body.classList.toggle('kys-skin-glass', kysGlass);
+    document.body.dataset.kysGlass = I.glass || 'frosted';
     const dodgeOff = !I.dodge;
     const eyesOff = dodgeOff || !I['dodge-eyes'];
     const roamOff = eyesOff || !I['dodge-roam'];
@@ -130,7 +133,7 @@
         row(t('set.peek'), t('set.peek_desc'), toggle('peek')),
         row(t('set.theme'), t('set.theme_desc'), seg('theme', [['classic', t('set.theme_classic')], ['glass', 'Liquid Glass']])),
         row(t('set.glass'), t('set.glass_desc'), seg('glass', [['frosted', t('set.glass_frosted')], ['balanced', t('set.glass_balanced')], ['crystal', t('set.glass_crystal')]]),
-          { disabled: I.theme !== 'glass', sub: true }),
+          { disabled: !kysGlass && I.theme !== 'glass', sub: true }), // Kys in glass: its kind too
         row(t('set.glass_light'), t('set.glass_light_desc'), toggle('glass-light'), { disabled: I.theme !== 'glass', sub: true }),
         row(t('set.in_captures'), t('set.in_captures_desc'), toggle('visible-in-captures'), { disabled: I.theme !== 'glass', sub: true }),
         // The glass always has its rim: no outline to choose.

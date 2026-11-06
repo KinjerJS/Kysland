@@ -1734,6 +1734,7 @@
       // Kys's skin (option "kys-skin"): its body black, or of glass; "auto": like the island (notch.css).
       const skin = m.conf['kys-skin'];
       document.body.classList.toggle('kys-skin-glass', skin === 'glass' || (skin !== 'classic' && glass));
+      document.body.dataset.kysGlass = m.conf.glass || 'frosted'; // its glass: the island's kind (kys-glass.css)
       if (glass) {
         S.glass = new Glass(S.notch, m.conf.glass);
         document.body.dataset.glass = m.conf.glass || 'frosted';

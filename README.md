@@ -141,7 +141,7 @@ Island options (in the `"island"` section):
 | `media-linger` | `15` | Seconds a paused track stays displayed |
 | `outline` | `"auto"` | Thin outline when it's mostly black around the island; `true` / `false` to force it (color: `--notch-outline-color`) |
 | `theme` | `"classic"` | `"glass"`: Liquid Glass, inspired by iOS. The island floats off the edge as a capsule of glass: what is behind it is blurred, brightened and bent at its rim like through real glass, with a rim light and a light following the mouse. To see what is behind, Kysland copies that part of the screen (a few ms, only while it changes), so its windows stay out of screenshots, recordings and screen sharing with this theme (see `visible-in-captures`) |
-| `glass` | `"frosted"` | With the glass theme: `"frosted"` (well blurred, easy to read), `"balanced"`, or `"crystal"`: nearly clear glass with a thick bulging rim that bends what's behind it strongly (like a lens) and splits its colors like a prism, a band of reflection along the edge and a sheen on its dome |
+| `glass` | `"frosted"` | With the glass theme: `"frosted"` (well blurred, easy to read), `"balanced"`, or `"crystal"`: nearly clear glass with a thick bulging rim that bends what's behind it strongly (like a lens) and splits its colors like a prism, a band of reflection along the edge and a sheen on its dome. Kys in glass (`kys-skin`) is of the same kind |
 | `glass-light` | `true` | With `"glass"`: a soft light follows the mouse over the island, like a torch; `false`: none |
 | `visible-in-captures` | `false` | With `"glass"`: `true` keeps the island in screenshots, recordings and screen sharing. Its glass then no longer sees what is behind it (the copy would show the island itself): it stays a capsule of smoked glass, with its rim |
 | `dodge` / `dodge-speed` | `true` / `450` | Hide when the cursor approaches slower than this many px/s |
@@ -149,7 +149,7 @@ Island options (in the `"island"` section):
 | `dodge-roam` / `dodge-roam-delay` | `true` / `20` | Cursor still close after this many seconds: the island grows and the eyes roam |
 | `peek` | `true` | Kys peeking into the resting island now and then |
 | `kys-grab` | `false` | The hidden island's eyes can be grabbed and pulled out: Kys runs free on the screen until you catch it and bring it back |
-| `kys-skin` | `"auto"` | Kys's body (its button, its page, running free, the settings' buddy): `"classic"` (black), `"glass"` (a capsule of smoked glass), or `"auto"`: glass with the `"glass"` theme, black otherwise |
+| `kys-skin` | `"auto"` | Kys's body (its button, its page, running free, the settings' buddy): `"classic"` (black), `"glass"` (a capsule of glass, of the kind set by `glass`: milky when frosted, clear with bright rims when crystal), or `"auto"`: glass with the `"glass"` theme, black otherwise |
 | `kys-brain` | `"simple"` | What Kys understands: `"simple"` (commands and a few phrases), or a local AI downloaded from the settings: `"light"` (Qwen3 1.7B, about 1 s per answer) or `"smart"` (Qwen3 4B, about 3 s, much better company) |
 | `auto-hide` / `auto-hide-distance` | `false` / `300` | Hide while the mouse is farther than this many px or on another screen |
 | `hide-windows-osd` | `true` | Handle the volume keys and hide the Windows volume flyout |

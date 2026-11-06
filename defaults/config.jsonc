@@ -37,7 +37,7 @@
     "media-linger": 15,                  // seconds a paused track stays visible
     "outline": "auto",                   // thin outline when it's mostly black around the notch; true / false to force it
     "theme": "classic",                  // "classic" (black) | "glass" (Liquid Glass: a floating capsule of glass, like iOS)
-    "glass": "frosted",                  // with "glass": "frosted" (blurred) | "balanced" | "crystal" (clear, strong refraction and reflections at the rim)
+    "glass": "frosted",                  // with "glass" (and Kys in glass): "frosted" (blurred) | "balanced" | "crystal" (clear, strong refraction and reflections at the rim)
     "glass-light": true,                 // with "glass": a light follows the mouse over the island; false: none
     "visible-in-captures": false,        // with "glass": true to show the island in screenshots, recordings and screen sharing (its glass then no longer sees what's behind it)
     "dodge": true,                       // approach slowly and the notch tucks itself away (to reach what's behind); fast = hover as usual
@@ -47,7 +47,7 @@
     "dodge-roam-delay": 20,              // seconds
     "peek": true,                        // now and then, the eyes squeeze into the notch to check on the mouse; rush at them and they flee
     "kys-grab": false,                   // grab the eyes of the hidden island and pull: Kys runs free on the screen until caught and brought back
-    "kys-skin": "auto",                  // Kys's body: "auto" (glass with the "glass" theme, black otherwise) | "classic" (black) | "glass" (smoked glass)
+    "kys-skin": "auto",                  // Kys's body: "auto" (glass with the "glass" theme, black otherwise) | "classic" (black) | "glass" (glass of the "glass" kind)
     "kys-brain": "simple",               // talking to Kys: "simple" (commands and a few phrases), or a small AI on your PC, downloaded from the settings: "light" (fast) or "smart" (much better company)
     "auto-hide": false,                  // hides while the mouse is far away or on another screen; comes back as it gets near
     "auto-hide-distance": 300,           // px around the notch where it comes back
