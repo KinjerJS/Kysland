@@ -149,7 +149,7 @@ Island options (in the `"island"` section):
 | `dodge-roam` / `dodge-roam-delay` | `true` / `20` | Cursor still close after this many seconds: the island grows and the eyes roam |
 | `peek` | `true` | Kys peeking into the resting island now and then |
 | `kys-grab` | `false` | The hidden island's eyes can be grabbed and pulled out: Kys runs free on the screen until you catch it and bring it back |
-| `kys-skin` | `"auto"` | Kys's body (its button, its page, running free, the settings' buddy): `"classic"` (black), `"glass"` (a capsule of glass, of the kind set by `glass`: milky when frosted, clear with bright rims when crystal), or `"auto"`: glass with the `"glass"` theme, black otherwise |
+| `kys-skin` | `"auto"` | Kys's body (its button, its page, running free, the settings' buddy): `"classic"` (black), `"glass"` (a capsule of glass, of the kind set by `glass`: milky when frosted, clear with bright rims when crystal; it bends what is behind it like the island: the island around its face, the page behind the buddy, and with the `"glass"` theme the screen behind it as it runs free), or `"auto"`: glass with the `"glass"` theme, black otherwise |
 | `kys-brain` | `"simple"` | What Kys understands: `"simple"` (commands and a few phrases), or a local AI downloaded from the settings: `"light"` (Qwen3 1.7B, about 1 s per answer) or `"smart"` (Qwen3 4B, about 3 s, much better company) |
 | `auto-hide` / `auto-hide-distance` | `false` / `300` | Hide while the mouse is farther than this many px or on another screen |
 | `hide-windows-osd` | `true` | Handle the volume keys and hide the Windows volume flyout |

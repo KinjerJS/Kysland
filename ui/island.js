@@ -291,96 +291,9 @@
     document.documentElement.style.setProperty('--along', along.toFixed(4));
   }
 
-  const GLASS_PAD = 24; // .notch-glass reaches this far past the island (notch.css)
+  const { GLASS_PAD, GLASS_LEVELS, bezelShift, glassBezel, glassMaps, glassFilter, Lens } = window.GlassKit; // glass-kit.js
   const FIT = 1.15; // how far maps can be stretched over a bigger island before their rim shows inside it
   const glassRadius = (size, h) => (size === 'expanded' ? 34 : size === 'card' ? 28 : Math.min(20, h / 2)); // notch.css
-  // Option "glass": how much it looks like a real piece of glass. Frosted: well blurred, a thin
-  // bent rim. Crystal: nearly clear, a thick bulging rim (the whole height of the resting capsule)
-  // that bends what's behind it strongly and splits its colors like a prism (blue bends more than
-  // red), a band of reflection along the edge (Fresnel), a sheen on its dome, brighter rims.
-  // blur: px; bezel: share of the smaller side, and its most (px); thick: glass height / bezel;
-  // dispersion: extra bend of green, then blue; dim: tint over dark → light backgrounds.
-  const GLASS_LEVELS = {
-    frosted: { blur: 7, bezel: [0.42, 28], thick: 0.9, dispersion: 0, saturate: 1.6, rim: 1, fresnel: 0, sheen: 0, dim: [0.2, 0.42] },
-    balanced: { blur: 3.5, bezel: [0.46, 36], thick: 1.25, dispersion: 0.035, saturate: 1.7, rim: 1.3, fresnel: 0.1, sheen: 0.035, dim: [0.24, 0.42] },
-    crystal: { blur: 1.2, bezel: [0.5, 46], thick: 1.7, dispersion: 0.07, saturate: 1.8, rim: 1.6, fresnel: 0.2, sheen: 0.07, dim: [0.28, 0.44] },
-  };
-
-  /** Sideways shift of the view through the bezel, from its edge (0) to where the glass is flat (1),
-   *  for a bezel B px wide and a glass `thick` times as high. */
-  function bezelShift(B, thick) {
-    const T = B * thick, base = B * 0.35, n = 1.5;
-    return Float32Array.from({ length: 128 }, (_, i) => {
-      const u = 1 - Math.max(0.015, i / 127);
-      const height = Math.pow(1 - u ** 4, 0.25);
-      const slope = (T / B) * u ** 3 * Math.pow(1 - u ** 4, -0.75);
-      const tilt = Math.atan(slope), refracted = Math.asin(Math.sin(tilt) / n);
-      return (base + T * height) * Math.tan(tilt - refracted);
-    });
-  }
-
-  /** The bezel's width (px): the rim of glass that bends what's behind it. */
-  const glassBezel = (w, h, L) => Math.max(4, Math.min(L.bezel[1], Math.min(w, h) * L.bezel[0]));
-
-  /** Displacement map (R, G: x, y shift around 128, half resolution) for an island of w×h with
-   *  corner radii [tl, tr, br, bl], covering the glass layer (GLASS_PAD around it). `attached`:
-   *  'top' / 'bottom' / 'left' / 'right' when that side is the screen edge (no bezel there). `L`:
-   *  the level (GLASS_LEVELS). `make(w, h)`: a canvas that size. Self-contained (but for GLASS_PAD,
-   *  bezelShift and glassBezel): it also runs in a worker (GLASS_WORKER). The light on its rim is
-   *  drawn by CSS (notch.css), so it follows the island at any size. */
-  function glassMaps(w, h, radii, attached, L, make) {
-    const P = GLASS_PAD, W = w + 2 * P, H = h + 2 * P;
-    const B = glassBezel(w, h, L);
-    const shifts = bezelShift(B, L.thick);
-    const max = Math.max(...shifts);
-    const top = attached === 'top' ? -1e4 : 0, bottom = attached === 'bottom' ? h + 1e4 : h;
-    const left = attached === 'left' ? -1e4 : 0, right = attached === 'right' ? w + 1e4 : w;
-    const cx = (left + right) / 2, cy = (top + bottom) / 2, hw = (right - left) / 2, hh = (bottom - top) / 2;
-    // Signed distance to the edge (< 0 inside) and the outward normal.
-    const g = { d: 0, nx: 0, ny: 0 };
-    const at = (x, y) => {
-      const px = x - cx, py = y - cy, sx = px < 0 ? -1 : 1, sy = py < 0 ? -1 : 1;
-      const r = px < 0 ? (py < 0 ? radii[0] : radii[3]) : (py < 0 ? radii[1] : radii[2]);
-      const qx = Math.abs(px) - (hw - r), qy = Math.abs(py) - (hh - r);
-      if (qx > 0 && qy > 0) { const l = Math.hypot(qx, qy); g.d = l - r; g.nx = (sx * qx) / l; g.ny = (sy * qy) / l; }
-      else if (qx > qy) { g.d = qx - r; g.nx = sx; g.ny = 0; }
-      else { g.d = qy - r; g.nx = 0; g.ny = sy; }
-    };
-    const dw = Math.ceil(W / 2), dh = Math.ceil(H / 2);
-    const c = make(dw, dh), ctx = c.getContext('2d'), img = ctx.createImageData(dw, dh);
-    for (let j = 0, k = 0; j < dh; j++) {
-      for (let i = 0; i < dw; i++, k += 4) {
-        at(i * 2 + 1 - P, j * 2 + 1 - P);
-        let vx = 0, vy = 0;
-        if (g.d < 0 && -g.d < B) {
-          const s = shifts[Math.round((-g.d / B) * 127)] / max;
-          vx = -g.nx * s; vy = -g.ny * s; // looks further in
-        }
-        img.data.set([128 + vx * 127, 128 + vy * 127, 128, 255], k);
-      }
-    }
-    ctx.putImageData(img, 0, 0);
-    return { disp: c, scale: 2 * max };
-  }
-
-  /** #kys-glass for a level: blur, then the bend (once per color when the glass splits them),
-   *  then saturation. */
-  function glassFilter(L) {
-    const bend = (id, result) => `<feDisplacementMap id="${id}" in="blur" in2="map" scale="0" xChannelSelector="R" yChannelSelector="G" result="${result}"/>`;
-    // Keeps one color channel (and the alpha).
-    const only = (c) => [0, 1, 2, 3].map((row) => [0, 1, 2, 3, 4].map((col) => (row === col && (row === c || row === 3) ? 1 : 0)).join(' ')).join('  ');
-    return '<svg width="0" height="0" style="position:absolute" aria-hidden="true">'
-      + '<filter id="kys-glass" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">'
-      + `<feGaussianBlur in="SourceGraphic" stdDeviation="${L.blur}" result="blur"/>`
-      + '<feImage id="kys-glass-map" x="0" y="0" width="1" height="1" preserveAspectRatio="none" result="map"/>'
-      + (L.dispersion
-        ? bend('kys-glass-r', 'r0') + bend('kys-glass-g', 'g0') + bend('kys-glass-b', 'b0')
-          + `<feColorMatrix in="r0" values="${only(0)}" result="r"/><feColorMatrix in="g0" values="${only(1)}" result="g"/>`
-          + `<feColorMatrix in="b0" values="${only(2)}" result="b"/>`
-          + '<feBlend in="r" in2="g" mode="screen" result="rg"/><feBlend in="rg" in2="b" mode="screen" result="bent"/>'
-        : bend('kys-glass-r', 'bent'))
-      + `<feColorMatrix in="bent" type="saturate" values="${L.saturate}"/></filter></svg>`;
-  }
 
   // The maps are drawn in a worker: a new shape's take a few ms each, and the island asks for a
   // dozen of them as it starts opening (glassPath): that would stall its animation.
@@ -473,6 +386,18 @@
     }
     path.push(b);
     return path;
+  }
+
+  /** A copy of the screen sent by the engine (base64 RGBA, pw×ph) drawn into a canvas; false if
+   *  it's broken. */
+  function drawCopy(c, ctx, f) {
+    const bin = atob(f.data);
+    if (bin.length !== f.pw * f.ph * 4) return false;
+    const px = new Uint8ClampedArray(bin.length);
+    for (let i = 0; i < bin.length; i++) px[i] = bin.charCodeAt(i);
+    if (c.width !== f.pw || c.height !== f.ph) { c.width = f.pw; c.height = f.ph; }
+    ctx.putImageData(new ImageData(px, f.pw, f.ph), 0, 0);
+    return true;
   }
 
   class Glass {
@@ -629,13 +554,8 @@
     /** What's under the island (engine): RGBA, pw×ph pixels for x, y, w, h (CSS pixels of the window),
      *  and its average lightness. */
     frame(f) {
-      const bin = atob(f.data);
-      if (bin.length !== f.pw * f.ph * 4) return;
-      const px = new Uint8ClampedArray(bin.length);
-      for (let i = 0; i < bin.length; i++) px[i] = bin.charCodeAt(i);
       const c = this.canvas;
-      if (c.width !== f.pw || c.height !== f.ph) { c.width = f.pw; c.height = f.ph; }
-      this.ctx.putImageData(new ImageData(px, f.pw, f.ph), 0, 0);
+      if (!drawCopy(c, this.ctx, f)) return;
       // Placed from the island's fixed point: its edge on one axis; along the edge, the point at
       // "along" of its length, which stays put while it changes size (notch.css). So the copy stays
       // in place between two copies while the island grows or shrinks.
@@ -1089,6 +1009,31 @@
       d.setProperty('--dangle', `${angle.toFixed(1)}deg`);
       d.setProperty('--dsx', ((1 + stretch) * (1 + jiggle)).toFixed(3));
       d.setProperty('--dsy', ((1 - jiggle) / (1 + stretch)).toFixed(3));
+    }
+
+    /** Kys of glass running free (option "kys-skin", Liquid Glass theme): its pill bends the screen
+     *  behind it. The engine copies the screen around it (lensFrame); the copy is laid where it was
+     *  taken, in a scene that undoes the flyer's move and spin (notch.css), and seen through the
+     *  pill's glass (Lens). */
+    useLens(lens) {
+      const holder = document.createElement('div');
+      holder.className = 'kys-lens';
+      holder.innerHTML = '<div class="kys-lens-scene"><canvas></canvas></div><div class="kys-lens-glass"></div>';
+      this.flyer.prepend(holder);
+      this.flyer.classList.add('has-lens');
+      this.lensCanvas = holder.querySelector('canvas');
+      this.lensCtx = this.lensCanvas.getContext('2d');
+      lens.attach(holder.querySelector('.kys-lens-glass'));
+    }
+
+    /** The screen around Kys running free (engine): as Glass.frame, in CSS pixels of the window
+     *  (which covers the screen meanwhile). null: forgotten (it's back home). */
+    lensFrame(f) {
+      const c = this.lensCanvas;
+      if (!c) return;
+      if (!f) { c.width = 0; return; }
+      if (!drawCopy(c, this.lensCtx, f)) return;
+      Object.assign(c.style, { left: `${f.x}px`, top: `${f.y}px`, width: `${f.w}px`, height: `${f.h}px` });
     }
 
     /** A ripple through the island (a drop leaving or coming back). */
@@ -1739,7 +1684,8 @@
         S.glass = new Glass(S.notch, m.conf.glass);
         document.body.dataset.glass = m.conf.glass || 'frosted';
         S.notch.onResize = (w, h, size) => S.glass.target(w, h, size);
-        api.on('glass', (f) => S.glass.frame(f));
+        // The screen under the island, or around Kys running free (its pill's glass, Eyes.lensFrame).
+        api.on('glass', (f) => (f.kys ? S.eyes.lensFrame(f) : S.glass.frame(f)));
         // The light that follows the cursor over it (option "glass-light"; notch.css hides it without).
         const light = m.conf['glass-light'] !== false;
         document.body.classList.toggle('glass-light-off', !light);
@@ -1755,6 +1701,13 @@
       notch.addEventListener('mouseenter', () => { S.hover = true; });
       notch.addEventListener('mouseleave', () => { S.hover = false; });
       S.eyes = new Eyes(notch);
+      // Kys of glass bends what's behind it, as the island does (glass-kit.js, Lens): its face on its
+      // page (kysView); running free, its pill, through the copy of the screen around it that the
+      // engine sends with the island's glass (none without: just its CSS glass).
+      if (document.body.classList.contains('kys-skin-glass')) {
+        S.kysLens = { face: new Lens('kys-lens-face', m.conf.glass) };
+        if (glass) S.eyes.useLens(new Lens('kys-lens-pill', m.conf.glass));
+      }
       notch.classList.toggle('eyes', m.conf['dodge-eyes'] !== false);
       applyWidth(m, confWidth(m));
       S.near = state.near !== false;
@@ -2607,6 +2560,7 @@
     S.kysFree = false;
     S.notch.el.classList.remove('kys-away', 'pulling');
     S.eyes.stop();
+    S.eyes.lensFrame(null); // next time out, not the screen as it was this time
     updateDodgeable(S);
     api.kys.free(false);
     if (F.caught) api.kys.earn('catch');
@@ -2731,6 +2685,7 @@
         el.querySelector('.n-kys-body').addEventListener('pointerdown', (e) => kysDrag(m, el, e));
         el.addEventListener('mousemove', (e) => faceAim(el, e.clientX, e.clientY));
         faceBlink(el.querySelector('.n-kys-face'));
+        S.kysLens?.face.attach(el.querySelector('.n-kys-face'));
         mountTalk(m, el);
       },
       update(el) {

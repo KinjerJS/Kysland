@@ -66,6 +66,9 @@ struct Bar {
     /// Kys pulled out of the island and running free (option "kys-grab"): the window covers the
     /// whole screen, the island neither dodges nor auto-hides, and the page follows the cursor.
     free: bool,
+    /// Kys of glass running free, with the Liquid Glass theme: where it is (the glass loop copies
+    /// the screen around it, for its pill to bend it).
+    lens: Option<Rect>,
     /// The island being moved (island.js): the window covers the whole screen meanwhile.
     moving: bool,
 }
@@ -182,7 +185,7 @@ fn create_bars(app: &AppHandle, cfg: &Value) {
             monitor: (p.x, p.y, s.width as i32, s.height as i32), dpi: m.scale_factor(), scale: m.scale_factor() * zoom,
             appbar: (cfg["reserve"] == true && matches!(edge_of(cfg), "top" | "bottom")).then(|| win32::AppBar::register(hwnd)),
             rects: vec![], notch: None, interactive: false, fullscreen: false, dark: false,
-            dodgeable: false, dodge: None, dodge_armed: false, grab: false, press_inside: false, watch: false, watch_seen: false, near: true, far_since: None, free: false, moving: false,
+            dodgeable: false, dodge: None, dodge_armed: false, grab: false, press_inside: false, watch: false, watch_seen: false, near: true, far_since: None, free: false, lens: None, moving: false,
         };
         position_bar(&mut bar, cfg);
         let _ = win.set_ignore_cursor_events(true);
@@ -567,6 +570,10 @@ fn glass_loop(app: AppHandle) {
     const MARGIN: f64 = 32.0;
     /// Room for the expanded island, copied as soon as the cursor is over the island.
     const OPEN: (f64, f64) = (700.0, 580.0);
+    /// Kys running free: copied this far around it, the same copy kept while it stays KYS_KEEP
+    /// inside it (it moves on a copy already there; a new one only when it nears its side).
+    const KYS_MARGIN: f64 = 150.0;
+    const KYS_KEEP: f64 = 50.0;
     std::thread::spawn(move || {
         let mut excluded: std::collections::HashMap<isize, bool> = std::collections::HashMap::new();
         let mut last: std::collections::HashMap<String, (i32, i32, i32, i32, Vec<u8>)> = std::collections::HashMap::new();
@@ -583,11 +590,11 @@ fn glass_loop(app: AppHandle) {
             let (glass, edge, along, bars) = with(|s| {
                 let island = config::island_conf(&s.cfg);
                 let glass = island["theme"] == "glass" && island["visible-in-captures"] != true;
-                let bars: Vec<(String, isize, f64, Option<Rect>, bool, bool)> = s.bars.iter()
-                    .map(|b| (b.label.clone(), b.hwnd, b.scale, b.notch, b.interactive, b.fullscreen || b.free || b.moving)).collect();
+                let bars: Vec<(String, isize, f64, Option<Rect>, bool, bool, Option<Rect>)> = s.bars.iter()
+                    .map(|b| (b.label.clone(), b.hwnd, b.scale, b.notch, b.interactive, b.fullscreen || b.moving, b.free.then_some(b.lens).flatten())).collect();
                 (glass, edge_of(&s.cfg).to_owned(), along_of(&s.cfg), bars)
             });
-            let hover = bars.iter().any(|b| b.4);
+            let hover = bars.iter().any(|b| b.4 || b.6.is_some());
             nap = Duration::from_millis(if !glass { 500 } else if still > 25 && !hover { 250 } else { 80 });
             excluded.retain(|h, _| bars.iter().any(|b| b.1 == *h));
             for b in &bars {
@@ -598,29 +605,46 @@ fn glass_loop(app: AppHandle) {
             }
             if !glass { last.clear(); continue; }
             let mut changed = false;
-            for (label, hwnd, scale, notch, interactive, hidden) in bars {
-                let (Some(n), false, Some(true)) = (notch, hidden, excluded.get(&hwnd).copied()) else { continue };
+            for (label, hwnd, scale, notch, interactive, hidden, lens) in bars {
+                if lens.is_none() { last.remove(&format!("{label}#kys")); } // back home: a new copy next time out
+                let (false, Some(true)) = (hidden, excluded.get(&hwnd).copied()) else { continue };
                 let Some(rc) = win32::window_rect(hwnd) else { continue };
                 let (ww, wh) = ((rc.right - rc.left) as f64 / scale, (rc.bottom - rc.top) as f64 / scale);
-                if n.y + n.h <= 0.0 || n.y >= wh || n.x + n.w <= 0.0 || n.x >= ww { continue; } // tucked away past the edge
-                // Around the island, from the screen edge; while it's hovered, the room it opens
-                // into too (it grows around its point at "along" of its length, notch.css).
-                let (mut x0, mut y0, mut x1, mut y1) = (n.x - MARGIN, n.y - MARGIN, n.x + n.w + MARGIN, n.y + n.h + MARGIN);
-                match edge.as_str() { "bottom" => y1 = wh, "left" => x0 = 0.0, "right" => x1 = ww, _ => y0 = 0.0 }
-                if interactive {
-                    if edge == "left" || edge == "right" {
-                        let ay = along * wh;
-                        y0 = y0.min(ay - along * OPEN.0);
-                        y1 = y1.max(ay + (1.0 - along) * OPEN.0);
-                        if edge == "left" { x1 = x1.max(OPEN.1) } else { x0 = x0.min(ww - OPEN.1) }
-                    } else {
-                        let ax = along * ww;
-                        x0 = x0.min(ax - along * OPEN.0);
-                        x1 = x1.max(ax + (1.0 - along) * OPEN.0);
-                        if edge == "bottom" { y0 = y0.min(wh - OPEN.1) } else { y1 = y1.max(OPEN.1) }
+                // Kys running free (the window covers the screen, the island is gone): around it,
+                // sent apart (its pill's glass, island.js Eyes.lensFrame).
+                let kys = lens.is_some();
+                let key = if kys { format!("{label}#kys") } else { label.clone() };
+                let (x0, y0, x1, y1) = if let Some(k) = lens {
+                    let kept = last.get(&key).filter(|l| k.x - KYS_KEEP >= l.0 as f64 && k.y - KYS_KEEP >= l.1 as f64
+                        && k.x + k.w + KYS_KEEP <= l.2 as f64 && k.y + k.h + KYS_KEEP <= l.3 as f64);
+                    match kept {
+                        Some(l) => (l.0 as f64, l.1 as f64, l.2 as f64, l.3 as f64),
+                        None => (k.x - KYS_MARGIN, k.y - KYS_MARGIN, k.x + k.w + KYS_MARGIN, k.y + k.h + KYS_MARGIN),
                     }
-                }
+                } else {
+                    let Some(n) = notch else { continue };
+                    if n.y + n.h <= 0.0 || n.y >= wh || n.x + n.w <= 0.0 || n.x >= ww { continue; } // tucked away past the edge
+                    // Around the island, from the screen edge; while it's hovered, the room it opens
+                    // into too (it grows around its point at "along" of its length, notch.css).
+                    let (mut x0, mut y0, mut x1, mut y1) = (n.x - MARGIN, n.y - MARGIN, n.x + n.w + MARGIN, n.y + n.h + MARGIN);
+                    match edge.as_str() { "bottom" => y1 = wh, "left" => x0 = 0.0, "right" => x1 = ww, _ => y0 = 0.0 }
+                    if interactive {
+                        if edge == "left" || edge == "right" {
+                            let ay = along * wh;
+                            y0 = y0.min(ay - along * OPEN.0);
+                            y1 = y1.max(ay + (1.0 - along) * OPEN.0);
+                            if edge == "left" { x1 = x1.max(OPEN.1) } else { x0 = x0.min(ww - OPEN.1) }
+                        } else {
+                            let ax = along * ww;
+                            x0 = x0.min(ax - along * OPEN.0);
+                            x1 = x1.max(ax + (1.0 - along) * OPEN.0);
+                            if edge == "bottom" { y0 = y0.min(wh - OPEN.1) } else { y1 = y1.max(OPEN.1) }
+                        }
+                    }
+                    (x0, y0, x1, y1)
+                };
                 let (x0, y0, x1, y1) = (x0.max(0.0).floor(), y0.max(0.0).floor(), x1.min(ww).ceil(), y1.min(wh).ceil());
+                if x1 - x0 < 2.0 || y1 - y0 < 2.0 { continue; }
                 let (pw, ph) = (((x1 - x0) / 2.0).ceil() as i32, ((y1 - y0) / 2.0).ceil() as i32);
                 let src = windows::Win32::Foundation::RECT {
                     left: rc.left + (x0 * scale).round() as i32, top: rc.top + (y0 * scale).round() as i32,
@@ -633,12 +657,12 @@ fn glass_loop(app: AppHandle) {
                         src.right - src.left, src.bottom - src.top, took.elapsed().as_millis()));
                 }
                 let area = (x0 as i32, y0 as i32, x1 as i32, y1 as i32);
-                if last.get(&label).is_some_and(|l| (l.0, l.1, l.2, l.3) == area && l.4 == px) { continue; }
+                if last.get(&key).is_some_and(|l| (l.0, l.1, l.2, l.3) == area && l.4 == px) { continue; }
                 changed = true;
                 let data = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &px);
-                last.insert(label.clone(), (area.0, area.1, area.2, area.3, px));
+                last.insert(key, (area.0, area.1, area.2, area.3, px));
                 let _ = app.emit_to(label.as_str(), "glass", json!({
-                    "label": label, "x": x0, "y": y0, "w": x1 - x0, "h": y1 - y0, "pw": pw, "ph": ph, "luma": luma, "data": data,
+                    "label": label, "x": x0, "y": y0, "w": x1 - x0, "h": y1 - y0, "pw": pw, "ph": ph, "luma": luma, "data": data, "kys": kys,
                 }));
             }
             still = if changed { 0 } else { still.saturating_add(1) };
@@ -794,11 +818,12 @@ async fn notifications() -> Vec<Value> {
 }
 
 #[tauri::command]
-fn set_hit_rects(window: WebviewWindow, rects: Vec<Rect>, notch: Option<Rect>, dodgeable: bool, grab: bool, watch: bool) {
+fn set_hit_rects(window: WebviewWindow, rects: Vec<Rect>, notch: Option<Rect>, dodgeable: bool, grab: bool, watch: bool, lens: Option<Rect>) {
     with(|s| if let Some(b) = s.bars.iter_mut().find(|b| b.label == window.label()) {
-        if b.notch != notch { GLASS_WAKE.store(true, Ordering::Relaxed); }
+        if b.notch != notch || b.lens != lens { GLASS_WAKE.store(true, Ordering::Relaxed); }
         b.rects = rects;
         b.notch = notch;
+        b.lens = lens;
         b.dodgeable = dodgeable;
         b.grab = grab;
         b.watch = watch;

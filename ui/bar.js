@@ -161,8 +161,11 @@ function reportHitRects() {
   const dodgeable = notchEl?.dataset.dodgeable === '1';
   const grab = (notchEl?.classList.contains('roaming') || notchEl?.dataset.grab === '1') ?? false; // eyes that can be clicked, or grabbed
   const watch = notchEl?.classList.contains('peek') ?? false; // peeking eyes want the cursor
-  const json = JSON.stringify([rects, notch, dodgeable, grab, watch]);
-  if (json !== lastHitRects) { lastHitRects = json; api.setHitRects(rects, notch, dodgeable, grab, watch); }
+  // Kys of glass running free: where it is, for the engine to copy the screen around it (island.js, Eyes.useLens).
+  const lensEl = document.querySelector('.eye-flyer.free.has-lens');
+  const lens = lensEl ? box(lensEl.getBoundingClientRect()) : null;
+  const json = JSON.stringify([rects, notch, dodgeable, grab, watch, lens]);
+  if (json !== lastHitRects) { lastHitRects = json; api.setHitRects(rects, notch, dodgeable, grab, watch, lens); }
 }
 setInterval(reportHitRects, 100); // also follows animations (notch expanding, popups)
 window.reportHitRects = reportHitRects; // right away when the island starts changing size (island.js, Notch.resize)

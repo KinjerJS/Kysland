@@ -2,6 +2,10 @@
 
 What changed in each version. The section of a version is also the text of its GitHub release.
 
+## 0.6.15 — 2026-11-06
+
+- **Kys in glass bends what's behind it, like the island**: the same glass (blur, thick bulging rim, colors split by Crystal), not just its look. On its page, its face bends the island behind it; in the settings, the buddy bends the page behind it; running free on the screen with the Liquid Glass theme, its pill bends the screen behind it (Kysland copies the screen around it as it runs, as it does under the island).
+
 ## 0.6.14 — 2026-11-06
 
 - **Kys in glass follows the island's kind of glass** (settings → Island → Glass, or `"glass"`): **Frosted**, milky and well blurred; **Balanced**, clearer with brighter rims; **Crystal**, nearly clear, a bright rim, a glow inside its edge, a sheen on its top and sides splitting the light like a prism. Everywhere Kys shows: its button and its page in the island, running free on the screen, the settings' buddy. With Kys in glass and the classic theme, the Glass setting stays available, for Kys.

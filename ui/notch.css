@@ -629,6 +629,31 @@ body.kys-skin-glass .eye-flyer.pill::before {
   box-shadow: var(--kg-rims), 0 8px 24px rgb(0 0 0 / .45);
 }
 body.kys-skin-glass .eye-goo { opacity: .6; }
+/* With the Liquid Glass theme, its pill bends the screen behind it like the island (island.js,
+   Eyes.useLens): the copy of the screen around it (canvas), laid where it was taken by a scene
+   that undoes the flyer's move and spin, under a glass that bends it (Lens). Near the island (the
+   drop, not a pill), none. */
+.kys-lens {
+  position: absolute;
+  inset: -2px;
+  border-radius: 22px;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+  box-shadow: 0 8px 24px rgb(0 0 0 / .45);
+}
+.eye-flyer.has-lens.pill .kys-lens { visibility: visible; }
+.eye-flyer.has-lens.pill::before { display: none; }
+.kys-lens-scene {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  transform: rotate(calc(-1 * var(--fspin))) translate(calc(-1 * var(--fx)), calc(-1 * var(--fy)));
+}
+.kys-lens-scene canvas { position: absolute; }
+.kys-lens-glass { position: absolute; inset: 0; border-radius: inherit; background: var(--kg-bg); box-shadow: var(--kg-rims); backdrop-filter: var(--kg-filter); /* until its maps are ready */ }
 .goo-island { transform-origin: 50% 0; transition: scale .45s cubic-bezier(.5, 0, .5, 1); }
 .goo-island.gone { scale: .3 0; }
 .notch-eyes[data-mood=panic] { --brow: 1; --bl-y: -5px; --br-y: -5px; --bl-r: -22deg; --br-r: 22deg; --lid-l: 1.2; --lid-r: 1.2; }

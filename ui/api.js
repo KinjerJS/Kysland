@@ -32,8 +32,8 @@
       typing: (on) => invoke('kys_typing', { on }),
       free: (on) => invoke('kys_free', { on }), // pulled out of the island (option "kys-grab")
     },
-    setHitRects: (rects, notch, dodgeable, grab, watch) => invoke('set_hit_rects', {
-      rects, notch: notch ?? null, dodgeable: !!dodgeable, grab: !!grab, watch: !!watch,
+    setHitRects: (rects, notch, dodgeable, grab, watch, lens) => invoke('set_hit_rects', {
+      rects, notch: notch ?? null, dodgeable: !!dodgeable, grab: !!grab, watch: !!watch, lens: lens ?? null,
     }),
     fileUrl: (file) => convertFileSrc(file),
     // Events meant for a single window carry its label ("pointer-left").

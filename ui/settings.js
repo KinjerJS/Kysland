@@ -27,6 +27,14 @@
     try { return localStorage.getItem('tab') || 'settings'; } catch { return 'settings'; }
   })();
 
+  // Kys of glass: the buddy bends the page behind it, as the island bends the screen (glass-kit.js,
+  // Lens), with the island's kind of glass (one filter per kind, made the first time).
+  const lenses = {};
+  function lensBuddy(on, kind) {
+    for (const l of Object.values(lenses)) l.detach(buddy.el);
+    if (on) (lenses[kind] ||= new GlassKit.Lens(`kys-lens-buddy-${kind}`, kind)).attach(buddy.el);
+  }
+
   async function load() {
     [S, K] = await Promise.all([invoke('settings_state'), invoke('kys_state')]);
     buddy.setKys(K);
@@ -106,6 +114,7 @@
     const kysGlass = I['kys-skin'] === 'glass' || (I['kys-skin'] !== 'classic' && I.theme === 'glass');
     document.body.classList.toggle('kys-skin-glass', kysGlass);
     document.body.dataset.kysGlass = I.glass || 'frosted';
+    lensBuddy(kysGlass, I.glass || 'frosted');
     const dodgeOff = !I.dodge;
     const eyesOff = dodgeOff || !I['dodge-eyes'];
     const roamOff = eyesOff || !I['dodge-roam'];
